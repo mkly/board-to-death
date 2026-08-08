@@ -1,8 +1,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { PrismaClient } from "@/generated/prisma/client";
 
+import { getAllowedAdminEmails, isAllowedAdminEmail, isAuthorizedAdminSession } from "./admin-access";
 import { createAuth } from "./auth-factory";
 
 const baseURL = "http://localhost:3000";
@@ -13,6 +15,26 @@ const deliveredLinks: string[] = [];
 let activeCookie = "";
 let auth: ReturnType<typeof createAuth>;
 let database: PrismaClient;
+
+test("uses the runtime-config allowlist for dashboard session authorization", () => {
+  const originalAllowedEmails = process.env.AUTH_ALLOWED_EMAILS;
+
+  try {
+    delete process.env.AUTH_ALLOWED_EMAILS;
+
+    const runtimeAllowedEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
+    const session = { user: { email: testEmail } };
+
+    expect(isAllowedAdminEmail(session.user.email, runtimeAllowedEmails)).toBe(true);
+    expect(isAuthorizedAdminSession(session)).toBe(true);
+  } finally {
+    if (originalAllowedEmails === undefined) {
+      delete process.env.AUTH_ALLOWED_EMAILS;
+    } else {
+      process.env.AUTH_ALLOWED_EMAILS = originalAllowedEmails;
+    }
+  }
+});
 
 function request(path: string, init?: RequestInit): Request {
   return new Request(new URL(path, baseURL), {
@@ -99,6 +121,17 @@ databaseDescribe("admin magic-link authentication", () => {
     expect(session?.user.email).toBe(testEmail);
     expect(replay.headers.get("location")).toContain("error=INVALID_TOKEN");
     expect(forged).toBeNull();
+
+    const originalAllowedEmails = process.env.AUTH_ALLOWED_EMAILS;
+    try {
+      process.env.AUTH_ALLOWED_EMAILS = `  ${testEmail.toUpperCase()}  `;
+      expect(isAuthorizedAdminSession(session)).toBe(true);
+
+      process.env.AUTH_ALLOWED_EMAILS = "another-admin@example.test";
+      expect(isAuthorizedAdminSession(session)).toBe(false);
+    } finally {
+      process.env.AUTH_ALLOWED_EMAILS = originalAllowedEmails;
+    }
   });
 
   test("refreshes aged sessions, expires old sessions, and revokes on logout", async () => {

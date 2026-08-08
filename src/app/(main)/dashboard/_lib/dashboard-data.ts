@@ -5,6 +5,7 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -24,7 +25,7 @@ export const getDashboardShellData = cache(async (): Promise<DashboardShellData>
   const [requestHeaders, cookieStore] = await Promise.all([headers(), cookies()]);
   const session = await auth.api.getSession({ headers: requestHeaders });
 
-  if (!session) {
+  if (!isAuthorizedAdminSession(session)) {
     redirect("/auth/v1/login");
   }
 
