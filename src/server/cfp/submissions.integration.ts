@@ -301,4 +301,97 @@ describe("CFP submission persistence", () => {
     assert.equal(await submissions.getDetailByEventSlug("other-detail-event", abstract.id), null);
     assert.equal(await submissions.getDetailByEventSlug("detail-event", "00000000-0000-0000-0000-000000000000"), null);
   });
+
+  test("composes event-scoped submission filters and paginates deterministic results", async () => {
+    const first = await createEventAndForm("submission-list");
+    const second = await createEventAndForm("other-submission-list");
+    const category = await categories.create({ eventId: first.eventId, key: "strategy", label: "Strategy" });
+    const target = await submissions.createDraft({
+      eventId: first.eventId,
+      formVersionId: first.formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      categoryIds: [category.id],
+      answers: [{ questionId: "abstract", value: "A searchable proposal" }],
+    });
+    await submissions.finalize(first.eventId, target.id);
+    await submissions.transition(first.eventId, target.id, CfpSubmissionStatus.UNDER_REVIEW);
+    const applicant = await speakers.create({
+      eventId: first.eventId,
+      email: "lex@example.test",
+      givenName: "Alex",
+      familyName: "Rivera",
+      preferredName: "Lex",
+    });
+    await speakers.replaceSubmissionParticipants(first.eventId, target.id, [applicant.id]);
+
+    const reviewer = await client.evaluationReviewer.create({
+      data: {
+        eventId: first.eventId,
+        identityId: "casey-reviewer",
+        email: "casey@example.test",
+        displayName: "Casey Reviewer",
+      },
+    });
+    const plan = await client.evaluationPlan.create({
+      data: {
+        eventId: first.eventId,
+        key: "main-plan",
+        versions: {
+          create: {
+            versionNumber: 1,
+            title: "Main plan",
+            rounds: { create: { key: "screening", title: "Screening", sortOrder: 0 } },
+          },
+        },
+      },
+      include: { versions: { include: { rounds: true } } },
+    });
+    const round = plan.versions[0]?.rounds[0];
+    assert.ok(round);
+    await client.evaluationAssignment.create({
+      data: { roundId: round.id, submissionId: target.id, reviewerId: reviewer.id },
+    });
+
+    await client.cfpSubmission.createMany({
+      data: Array.from({ length: 21 }, () => ({
+        eventId: first.eventId,
+        formVersionId: first.formVersionId,
+        kind: CfpSubmissionKind.GUARANTEED_SESSION,
+      })),
+    });
+    await client.cfpSubmission.create({
+      data: {
+        eventId: second.eventId,
+        formVersionId: second.formVersionId,
+        kind: CfpSubmissionKind.ABSTRACT,
+      },
+    });
+
+    const combined = await submissions.listForEvent(first.eventId, {
+      search: "lex",
+      status: CfpSubmissionStatus.UNDER_REVIEW,
+      kind: CfpSubmissionKind.ABSTRACT,
+      categoryId: category.id,
+      assigneeId: reviewer.id,
+    });
+    assert.equal(combined.total, 1);
+    assert.equal(combined.items[0]?.id, target.id);
+    assert.equal(combined.items[0]?.applicants[0]?.name, "Lex");
+    assert.equal(combined.items[0]?.assignees[0]?.displayName, "Casey Reviewer");
+    assert.equal(combined.metrics.UNDER_REVIEW, 1);
+    assert.equal(
+      Object.values(combined.metrics).reduce((sum, count) => sum + count, 0),
+      22,
+    );
+
+    const secondPage = await submissions.listForEvent(first.eventId, { page: 2, pageSize: 20 });
+    assert.equal(secondPage.total, 22);
+    assert.equal(secondPage.page, 2);
+    assert.equal(secondPage.pageCount, 2);
+    assert.equal(secondPage.items.length, 2);
+
+    const options = await submissions.getFilterOptions(first.eventId);
+    assert.deepEqual(options.categories, [{ id: category.id, label: "Strategy" }]);
+    assert.deepEqual(options.assignees, [{ id: reviewer.id, displayName: "Casey Reviewer" }]);
+  });
 });

@@ -106,6 +106,49 @@ export interface CfpSubmissionDetail {
   readonly revision: CfpSubmissionRevisionSnapshot | null;
 }
 
+export interface CfpSubmissionListQuery {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly search?: string;
+  readonly status?: CfpSubmissionStatus;
+  readonly kind?: CfpSubmissionKind;
+  readonly categoryId?: string;
+  readonly assigneeId?: string;
+}
+
+export interface CfpSubmissionListItem {
+  readonly id: string;
+  readonly kind: CfpSubmissionKind;
+  readonly status: CfpSubmissionStatus;
+  readonly submittedAt: Date | null;
+  readonly updatedAt: Date;
+  readonly formTitle: string;
+  readonly categories: readonly { readonly id: string; readonly label: string }[];
+  readonly applicants: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly email: string;
+  }[];
+  readonly assignees: readonly {
+    readonly id: string;
+    readonly displayName: string;
+  }[];
+}
+
+export interface CfpSubmissionListResult {
+  readonly items: readonly CfpSubmissionListItem[];
+  readonly total: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly pageCount: number;
+  readonly metrics: Readonly<Record<CfpSubmissionStatus, number>>;
+}
+
+export interface CfpSubmissionFilterOptions {
+  readonly categories: readonly { readonly id: string; readonly label: string }[];
+  readonly assignees: readonly { readonly id: string; readonly displayName: string }[];
+}
+
 const formVersionInclude = {
   form: true,
   steps: {
@@ -150,9 +193,73 @@ const submissionDetailInclude = {
   },
 } as const satisfies Prisma.CfpSubmissionInclude;
 
+const submissionListInclude = {
+  formVersion: { select: { title: true } },
+  categories: {
+    orderBy: { sortOrder: "asc" },
+    include: { category: { select: { id: true, label: true } } },
+  },
+  participants: {
+    orderBy: { sortOrder: "asc" },
+    include: {
+      speaker: {
+        select: {
+          id: true,
+          profileVersions: {
+            orderBy: { versionNumber: "desc" },
+            take: 1,
+            select: { email: true, givenName: true, familyName: true, preferredName: true },
+          },
+        },
+      },
+    },
+  },
+  evaluationAssignments: {
+    where: { revokedAt: null },
+    orderBy: { assignedAt: "asc" },
+    include: { reviewer: { select: { id: true, displayName: true } } },
+  },
+} as const satisfies Prisma.CfpSubmissionInclude;
+
 type StoredFormVersion = Prisma.CfpFormVersionGetPayload<{ include: typeof formVersionInclude }>;
 type StoredSubmission = Prisma.CfpSubmissionGetPayload<{ include: typeof submissionInclude }>;
 type StoredSubmissionDetail = Prisma.CfpSubmissionGetPayload<{ include: typeof submissionDetailInclude }>;
+type StoredSubmissionListItem = Prisma.CfpSubmissionGetPayload<{ include: typeof submissionListInclude }>;
+
+const submissionStatuses = Object.values(CfpSubmissionStatus);
+
+function emptyStatusMetrics(): Record<CfpSubmissionStatus, number> {
+  return Object.fromEntries(submissionStatuses.map((status) => [status, 0])) as Record<CfpSubmissionStatus, number>;
+}
+
+function listItemFromStored(submission: StoredSubmissionListItem): CfpSubmissionListItem {
+  return {
+    id: submission.id,
+    kind: submission.kind,
+    status: submission.status,
+    submittedAt: submission.submittedAt,
+    updatedAt: submission.updatedAt,
+    formTitle: submission.formVersion.title,
+    categories: submission.categories.map(({ category }) => category),
+    applicants: submission.participants.map(({ speaker }) => {
+      const profile = speaker.profileVersions[0];
+      if (!profile) throw new Error(`Speaker ${speaker.id} has no profile version.`);
+      return {
+        id: speaker.id,
+        name: profile.preferredName ?? `${profile.givenName} ${profile.familyName}`,
+        email: profile.email,
+      };
+    }),
+    assignees: Array.from(
+      new Map(
+        submission.evaluationAssignments.map(({ reviewer }) => [
+          reviewer.id,
+          { id: reviewer.id, displayName: reviewer.displayName },
+        ]),
+      ).values(),
+    ),
+  };
+}
 
 const adminTransitions: Readonly<Record<CfpSubmissionStatus, readonly CfpSubmissionStatus[]>> = {
   [CfpSubmissionStatus.DRAFT]: [],
@@ -188,6 +295,10 @@ function optionalText(value: string | null | undefined): string | null | undefin
   if (value === null || value === undefined) return value;
   const normalized = value.trim();
   return normalized === "" ? null : normalized;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function normalizeKey(value: string): string {
@@ -624,6 +735,92 @@ export class CfpSubmissionRepository {
       include: submissionDetailInclude,
     });
     return submission ? detailFromStored(submission) : null;
+  }
+
+  async getFilterOptions(eventId: string): Promise<CfpSubmissionFilterOptions> {
+    const [categories, assignees] = await Promise.all([
+      this.client.cfpCategory.findMany({
+        where: { eventId },
+        orderBy: [{ label: "asc" }, { key: "asc" }],
+        select: { id: true, label: true },
+      }),
+      this.client.evaluationReviewer.findMany({
+        where: { eventId },
+        orderBy: [{ displayName: "asc" }, { email: "asc" }],
+        select: { id: true, displayName: true },
+      }),
+    ]);
+    return { categories, assignees };
+  }
+
+  async listForEvent(eventId: string, query: CfpSubmissionListQuery = {}): Promise<CfpSubmissionListResult> {
+    const search = query.search?.trim() ?? "";
+    const searchRelations: Prisma.CfpSubmissionWhereInput[] =
+      search === ""
+        ? []
+        : [
+            { formVersion: { title: { contains: search, mode: "insensitive" } } },
+            { categories: { some: { category: { label: { contains: search, mode: "insensitive" } } } } },
+            {
+              participants: {
+                some: {
+                  speaker: {
+                    profileVersions: {
+                      some: {
+                        OR: [
+                          { email: { contains: search, mode: "insensitive" } },
+                          { givenName: { contains: search, mode: "insensitive" } },
+                          { familyName: { contains: search, mode: "insensitive" } },
+                          { preferredName: { contains: search, mode: "insensitive" } },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            {
+              evaluationAssignments: {
+                some: { reviewer: { displayName: { contains: search, mode: "insensitive" } } },
+              },
+            },
+            ...(isUuid(search) ? [{ id: search }] : []),
+          ];
+    const where = {
+      eventId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.kind ? { kind: query.kind } : {}),
+      ...(query.categoryId ? { categories: { some: { categoryId: query.categoryId } } } : {}),
+      ...(query.assigneeId
+        ? { evaluationAssignments: { some: { reviewerId: query.assigneeId, revokedAt: null } } }
+        : {}),
+      ...(searchRelations.length > 0 ? { OR: searchRelations } : {}),
+    } satisfies Prisma.CfpSubmissionWhereInput;
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize ?? 20)));
+    const requestedPage = Math.max(1, Math.trunc(query.page ?? 1));
+    const [total, groupedStatuses] = await Promise.all([
+      this.client.cfpSubmission.count({ where }),
+      this.client.cfpSubmission.groupBy({ by: ["status"], where: { eventId }, _count: { _all: true } }),
+    ]);
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, pageCount);
+    const storedItems = await this.client.cfpSubmission.findMany({
+      where,
+      include: submissionListInclude,
+      orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+    const metrics = emptyStatusMetrics();
+    for (const group of groupedStatuses) metrics[group.status] = group._count._all;
+    return {
+      items: storedItems.map(listItemFromStored),
+      total,
+      page,
+      pageSize,
+      pageCount,
+      metrics,
+    };
   }
 
   private async require(eventId: string, submissionId: string): Promise<PersistedCfpSubmission> {
