@@ -163,12 +163,16 @@ export class SpeakerOnboardingRepository {
           select: { id: true },
         });
         if (!speaker) throw new RepositoryError("not-found", "The event-owned speaker was not found.");
-        const dueAt =
-          input.dueAt === undefined
-            ? version.defaultDueOffsetDays === null
-              ? null
-              : new Date(assignedAt.getTime() + version.defaultDueOffsetDays * 86_400_000)
-            : input.dueAt;
+        // An explicit null due date is distinct from an absent one: it opts out of the
+        // definition's default offset rather than falling back to it.
+        let dueAt: Date | null;
+        if (input.dueAt !== undefined) {
+          dueAt = input.dueAt;
+        } else if (version.defaultDueOffsetDays === null) {
+          dueAt = null;
+        } else {
+          dueAt = new Date(assignedAt.getTime() + version.defaultDueOffsetDays * 86_400_000);
+        }
         if (dueAt !== null && (!Number.isFinite(dueAt.getTime()) || dueAt < assignedAt)) {
           invalid("dueAt must be a valid date on or after assignedAt.");
         }
