@@ -114,7 +114,12 @@ export interface CfpSubmissionListQuery {
   readonly kind?: CfpSubmissionKind;
   readonly categoryId?: string;
   readonly assigneeId?: string;
+  readonly sortBy?: CfpSubmissionSortKey;
+  readonly sortDirection?: "asc" | "desc";
+  readonly all?: boolean;
 }
+
+export type CfpSubmissionSortKey = "submittedAt" | "updatedAt" | "status" | "formTitle";
 
 export interface CfpSubmissionListItem {
   readonly id: string;
@@ -133,6 +138,10 @@ export interface CfpSubmissionListItem {
     readonly id: string;
     readonly displayName: string;
   }[];
+  readonly answers: Readonly<Record<string, string>>;
+  readonly averageScore: number | null;
+  readonly completedReviews: number;
+  readonly totalReviews: number;
 }
 
 export interface CfpSubmissionListResult {
@@ -147,6 +156,7 @@ export interface CfpSubmissionListResult {
 export interface CfpSubmissionFilterOptions {
   readonly categories: readonly { readonly id: string; readonly label: string }[];
   readonly assignees: readonly { readonly id: string; readonly displayName: string }[];
+  readonly customColumns: readonly { readonly id: string; readonly label: string; readonly type: string }[];
 }
 
 const formVersionInclude = {
@@ -217,7 +227,15 @@ const submissionListInclude = {
   evaluationAssignments: {
     where: { revokedAt: null },
     orderBy: { assignedAt: "asc" },
-    include: { reviewer: { select: { id: true, displayName: true } } },
+    include: {
+      reviewer: { select: { id: true, displayName: true } },
+      evaluation: { select: { status: true, results: { select: { score: true } } } },
+    },
+  },
+  revisions: {
+    orderBy: { versionNumber: "desc" },
+    take: 1,
+    select: { answers: { orderBy: { sortOrder: "asc" }, select: { questionId: true, value: true } } },
   },
 } as const satisfies Prisma.CfpSubmissionInclude;
 
@@ -233,6 +251,9 @@ function emptyStatusMetrics(): Record<CfpSubmissionStatus, number> {
 }
 
 function listItemFromStored(submission: StoredSubmissionListItem): CfpSubmissionListItem {
+  const scores = submission.evaluationAssignments.flatMap(({ evaluation }) =>
+    evaluation?.status === "FINAL" ? evaluation.results.map(({ score }) => Number(score)) : [],
+  );
   return {
     id: submission.id,
     kind: submission.kind,
@@ -258,7 +279,21 @@ function listItemFromStored(submission: StoredSubmissionListItem): CfpSubmission
         ]),
       ).values(),
     ),
+    answers: Object.fromEntries(
+      (submission.revisions[0]?.answers ?? []).map(({ questionId, value }) => [questionId, displayAnswer(value)]),
+    ),
+    averageScore: scores.length > 0 ? scores.reduce((total, score) => total + score, 0) / scores.length : null,
+    completedReviews: submission.evaluationAssignments.filter(({ evaluation }) => evaluation?.status === "FINAL")
+      .length,
+    totalReviews: submission.evaluationAssignments.length,
   };
+}
+
+function displayAnswer(value: Prisma.JsonValue): string {
+  if (value === null) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(displayAnswer).filter(Boolean).join(", ");
+  return JSON.stringify(value);
 }
 
 const adminTransitions: Readonly<Record<CfpSubmissionStatus, readonly CfpSubmissionStatus[]>> = {
@@ -738,7 +773,7 @@ export class CfpSubmissionRepository {
   }
 
   async getFilterOptions(eventId: string): Promise<CfpSubmissionFilterOptions> {
-    const [categories, assignees] = await Promise.all([
+    const [categories, assignees, questions] = await Promise.all([
       this.client.cfpCategory.findMany({
         where: { eventId },
         orderBy: [{ label: "asc" }, { key: "asc" }],
@@ -749,8 +784,19 @@ export class CfpSubmissionRepository {
         orderBy: [{ displayName: "asc" }, { email: "asc" }],
         select: { id: true, displayName: true },
       }),
+      this.client.cfpFormQuestion.findMany({
+        where: { step: { version: { form: { eventId } } } },
+        orderBy: [{ step: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+        select: { key: true, label: true, type: true },
+      }),
     ]);
-    return { categories, assignees };
+    return {
+      categories,
+      assignees,
+      customColumns: Array.from(
+        new Map(questions.map((question) => [question.key, { id: question.key, ...question }])).values(),
+      ),
+    };
   }
 
   async listForEvent(eventId: string, query: CfpSubmissionListQuery = {}): Promise<CfpSubmissionListResult> {
@@ -807,9 +853,8 @@ export class CfpSubmissionRepository {
     const storedItems = await this.client.cfpSubmission.findMany({
       where,
       include: submissionListInclude,
-      orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      orderBy: submissionOrderBy(query.sortBy, query.sortDirection),
+      ...(query.all ? {} : { skip: (page - 1) * pageSize, take: pageSize }),
     });
     const metrics = emptyStatusMetrics();
     for (const group of groupedStatuses) metrics[group.status] = group._count._all;
@@ -817,8 +862,8 @@ export class CfpSubmissionRepository {
       items: storedItems.map(listItemFromStored),
       total,
       page,
-      pageSize,
-      pageCount,
+      pageSize: query.all ? total : pageSize,
+      pageCount: query.all ? 1 : pageCount,
       metrics,
     };
   }
@@ -828,4 +873,16 @@ export class CfpSubmissionRepository {
     if (!submission) throw new RepositoryError("not-found", "The event-owned submission was not found.");
     return submission;
   }
+}
+
+function submissionOrderBy(
+  sortBy: CfpSubmissionSortKey | undefined,
+  direction: "asc" | "desc" | undefined,
+): Prisma.CfpSubmissionOrderByWithRelationInput[] {
+  const order = direction ?? "desc";
+  let primary: Prisma.CfpSubmissionOrderByWithRelationInput = { submittedAt: order };
+  if (sortBy === "updatedAt") primary = { updatedAt: order };
+  if (sortBy === "status") primary = { status: order };
+  if (sortBy === "formTitle") primary = { formVersion: { title: order } };
+  return [primary, { createdAt: "desc" }, { id: "asc" }];
 }

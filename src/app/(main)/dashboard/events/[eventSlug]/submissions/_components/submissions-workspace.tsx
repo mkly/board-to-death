@@ -1,10 +1,32 @@
+"use client";
+
+import { useActionState, useState } from "react";
+
 import Link from "next/link";
 
-import { FileSearchIcon, SearchIcon, UsersIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, Columns3Icon, DownloadIcon, FileSearchIcon, SearchIcon } from "lucide-react";
 
 import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -19,18 +41,29 @@ import {
 } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/client";
+import {
+  columnLabel,
+  defaultSubmissionColumns,
+  type SubmissionColumnId,
+  submissionBuiltInColumns,
+} from "@/lib/cfp/submission-table";
 import { cn } from "@/lib/utils";
 import type {
   CfpSubmissionFilterOptions,
+  CfpSubmissionListItem,
   CfpSubmissionListQuery,
   CfpSubmissionListResult,
 } from "@/server/cfp/submissions";
+
+import { resetSubmissionView, saveSubmissionView } from "../actions";
 
 interface SubmissionsWorkspaceProps {
   readonly event: { readonly name: string; readonly slug: string; readonly timezone: string };
   readonly filters: CfpSubmissionListQuery;
   readonly options: CfpSubmissionFilterOptions;
   readonly result: CfpSubmissionListResult;
+  readonly initialColumns?: readonly SubmissionColumnId[];
+  readonly hasSavedView?: boolean;
 }
 
 type BadgeVariant = NonNullable<Parameters<typeof badgeVariants>[0]>["variant"];
@@ -60,16 +93,34 @@ const statusVariants: Readonly<Record<CfpSubmissionStatus, BadgeVariant>> = {
   CONFIRMED: "secondary",
 };
 
-function filterHref(eventSlug: string, filters: CfpSubmissionListQuery, page: number): string {
+function filterParams(filters: CfpSubmissionListQuery, page?: number): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.search) params.set("q", filters.search);
   if (filters.status) params.set("status", filters.status);
   if (filters.kind) params.set("type", filters.kind);
   if (filters.categoryId) params.set("category", filters.categoryId);
   if (filters.assigneeId) params.set("assignee", filters.assigneeId);
-  if (page > 1) params.set("page", String(page));
-  const query = params.toString();
+  if (filters.sortBy) params.set("sort", filters.sortBy);
+  if (filters.sortDirection) params.set("direction", filters.sortDirection);
+  if (page && page > 1) params.set("page", String(page));
+  return params;
+}
+
+function filterHref(eventSlug: string, filters: CfpSubmissionListQuery, page?: number): string {
+  const query = filterParams(filters, page).toString();
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/submissions${query ? `?${query}` : ""}`;
+}
+
+function exportHref(
+  eventSlug: string,
+  filters: CfpSubmissionListQuery,
+  columns: readonly SubmissionColumnId[],
+  format: "csv" | "xlsx" | "files",
+): string {
+  const params = filterParams(filters);
+  params.set("format", format);
+  for (const column of columns) params.append("column", column);
+  return `/dashboard/events/${encodeURIComponent(eventSlug)}/submissions/export?${params.toString()}`;
 }
 
 function MetricCard({
@@ -102,7 +153,7 @@ function FilterBar({
       action={`/dashboard/events/${encodeURIComponent(eventSlug)}/submissions`}
       className="rounded-xl border bg-card p-4"
     >
-      <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-[minmax(14rem,1fr)_repeat(4,minmax(8rem,0.45fr))_auto]">
+      <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(14rem,1fr)_repeat(4,minmax(8rem,0.45fr))_minmax(9rem,0.5fr)_auto]">
         <Field>
           <FieldLabel className="sr-only" htmlFor="submission-search">
             Search submissions
@@ -115,7 +166,7 @@ function FilterBar({
               id="submission-search"
               name="q"
               defaultValue={filters.search}
-              placeholder="Search applicants, forms, or reviewers"
+              placeholder="Search submissions"
             />
           </InputGroup>
         </Field>
@@ -181,12 +232,39 @@ function FilterBar({
             ))}
           </NativeSelect>
         </Field>
-        <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-1 2xl:col-span-1">
+        <Field>
+          <FieldLabel className="sr-only" htmlFor="submission-sort">
+            Sort submissions
+          </FieldLabel>
+          <div className="flex gap-2">
+            <NativeSelect
+              id="submission-sort"
+              name="sort"
+              defaultValue={filters.sortBy ?? "submittedAt"}
+              className="min-w-0 flex-1"
+            >
+              <NativeSelectOption value="submittedAt">Submitted</NativeSelectOption>
+              <NativeSelectOption value="updatedAt">Updated</NativeSelectOption>
+              <NativeSelectOption value="status">Status</NativeSelectOption>
+              <NativeSelectOption value="formTitle">Submission</NativeSelectOption>
+            </NativeSelect>
+            <NativeSelect
+              aria-label="Sort direction"
+              name="direction"
+              defaultValue={filters.sortDirection ?? "desc"}
+              className="w-24"
+            >
+              <NativeSelectOption value="desc">Newest</NativeSelectOption>
+              <NativeSelectOption value="asc">Oldest</NativeSelectOption>
+            </NativeSelect>
+          </div>
+        </Field>
+        <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-1">
           <Button type="submit" className="flex-1 2xl:flex-none">
             Apply
           </Button>
           <Button variant="outline" asChild>
-            <Link href={`/dashboard/events/${encodeURIComponent(eventSlug)}/submissions`}>Reset</Link>
+            <Link href={`/dashboard/events/${encodeURIComponent(eventSlug)}/submissions?clear=1`}>Clear</Link>
           </Button>
         </div>
       </FieldGroup>
@@ -194,12 +272,218 @@ function FilterBar({
   );
 }
 
-export function SubmissionsWorkspace({ event, filters, options, result }: SubmissionsWorkspaceProps) {
+function displayCell(
+  item: CfpSubmissionListItem,
+  column: SubmissionColumnId,
+  eventSlug: string,
+  dateFormatter: Intl.DateTimeFormat,
+) {
+  switch (column) {
+    case "formTitle":
+      return (
+        <Link
+          className="block max-w-64 truncate font-medium hover:underline"
+          href={`/dashboard/events/${encodeURIComponent(eventSlug)}/submissions/${item.id}`}
+        >
+          {item.formTitle}
+        </Link>
+      );
+    case "applicant":
+      return item.applicants.map(({ name }) => name).join(", ") || "Not assigned";
+    case "email":
+      return item.applicants.map(({ email }) => email).join(", ") || "—";
+    case "kind":
+      return kindLabels[item.kind];
+    case "categories":
+      return item.categories.length > 0 ? (
+        <div className="flex max-w-56 flex-wrap gap-1">
+          {item.categories.map((category) => (
+            <Badge key={category.id} variant="outline">
+              {category.label}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        "—"
+      );
+    case "assignees":
+      return item.assignees.map(({ displayName }) => displayName).join(", ") || "Unassigned";
+    case "status":
+      return <Badge variant={statusVariants[item.status]}>{statusLabels[item.status]}</Badge>;
+    case "submittedAt":
+      return item.submittedAt ? dateFormatter.format(item.submittedAt) : "Draft";
+    case "updatedAt":
+      return dateFormatter.format(item.updatedAt);
+    case "averageScore":
+      return item.averageScore === null ? "—" : item.averageScore.toFixed(2);
+    case "reviewProgress":
+      return `${item.completedReviews}/${item.totalReviews}`;
+    default:
+      return item.answers[column.slice(7)] || "—";
+  }
+}
+
+function ColumnDialog({
+  eventSlug,
+  filters,
+  options,
+  columns,
+  setColumns,
+  hasSavedView,
+}: {
+  readonly eventSlug: string;
+  readonly filters: CfpSubmissionListQuery;
+  readonly options: CfpSubmissionFilterOptions;
+  readonly columns: readonly SubmissionColumnId[];
+  readonly setColumns: (columns: readonly SubmissionColumnId[]) => void;
+  readonly hasSavedView: boolean;
+}) {
+  const [state, formAction, pending] = useActionState(saveSubmissionView, { status: "idle" });
+  const customLabels = Object.fromEntries(options.customColumns.map(({ id, label }) => [id, label]));
+  const available = [
+    ...submissionBuiltInColumns.map((column) => ({ ...column, id: column.id as SubmissionColumnId })),
+    ...options.customColumns.map((column) => ({
+      ...column,
+      id: `answer:${column.id}` as SubmissionColumnId,
+      group: "custom",
+    })),
+  ];
+  const toggle = (id: SubmissionColumnId, checked: boolean) => {
+    if (checked) setColumns([...columns, id]);
+    else if (columns.length > 1) setColumns(columns.filter((column) => column !== id));
+  };
+  const move = (index: number, offset: -1 | 1) => {
+    const destination = index + offset;
+    if (destination < 0 || destination >= columns.length) return;
+    const next = [...columns];
+    const current = next[index];
+    const target = next[destination];
+    if (!current || !target) return;
+    next[index] = target;
+    next[destination] = current;
+    setColumns(next);
+  };
+  const view = JSON.stringify({
+    columns,
+    filters: {
+      search: filters.search,
+      status: filters.status,
+      kind: filters.kind,
+      categoryId: filters.categoryId,
+      assigneeId: filters.assigneeId,
+    },
+    sorting: { id: filters.sortBy ?? "submittedAt", direction: filters.sortDirection ?? "desc" },
+  });
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Columns3Icon data-icon="inline-start" />
+          Columns
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Configure submission table</DialogTitle>
+          <DialogDescription>
+            Choose columns, set their order, and save the current filters for this event.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid max-h-96 gap-5 overflow-y-auto pr-1 sm:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            <p className="font-medium text-sm">Available columns</p>
+            {(["built-in", "custom", "reporting"] as const).map((group) => (
+              <div className="flex flex-col gap-2" key={group}>
+                <p className="text-muted-foreground text-xs capitalize">{group.replace("-", " ")}</p>
+                {available
+                  .filter((column) => column.group === group)
+                  .map((column) => (
+                    <label className="flex items-center gap-2 text-sm" htmlFor={`column-${column.id}`} key={column.id}>
+                      <Checkbox
+                        id={`column-${column.id}`}
+                        checked={columns.includes(column.id)}
+                        onCheckedChange={(checked) => toggle(column.id, checked === true)}
+                      />
+                      {column.label}
+                    </label>
+                  ))}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="font-medium text-sm">Column order</p>
+            {columns.map((column, index) => (
+              <div className="flex items-center gap-1 rounded-lg border p-1.5" key={column}>
+                <span className="min-w-0 flex-1 truncate px-1 text-sm">{columnLabel(column, customLabels)}</span>
+                <Button
+                  aria-label={`Move ${columnLabel(column, customLabels)} up`}
+                  disabled={index === 0}
+                  onClick={() => move(index, -1)}
+                  size="icon-xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <ArrowUpIcon />
+                </Button>
+                <Button
+                  aria-label={`Move ${columnLabel(column, customLabels)} down`}
+                  disabled={index === columns.length - 1}
+                  onClick={() => move(index, 1)}
+                  size="icon-xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <ArrowDownIcon />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {state.message ? (
+          <p
+            aria-live="polite"
+            className={cn("text-sm", state.status === "error" ? "text-destructive" : "text-muted-foreground")}
+          >
+            {state.message}
+          </p>
+        ) : null}
+        <DialogFooter>
+          {hasSavedView ? (
+            <form action={resetSubmissionView.bind(null, eventSlug)}>
+              <Button type="submit" variant="ghost">
+                Reset saved view
+              </Button>
+            </form>
+          ) : null}
+          <form action={formAction}>
+            <input type="hidden" name="eventSlug" value={eventSlug} />
+            <input type="hidden" name="view" value={view} />
+            <Button disabled={pending} type="submit">
+              {pending ? "Saving…" : "Save view"}
+            </Button>
+          </form>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function SubmissionsWorkspace({
+  event,
+  filters,
+  options,
+  result,
+  initialColumns = defaultSubmissionColumns,
+  hasSavedView = false,
+}: SubmissionsWorkspaceProps) {
+  const [columns, setColumns] = useState<readonly SubmissionColumnId[]>(initialColumns);
   const dateFormatter = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: event.timezone,
   });
+  const customLabels = Object.fromEntries(options.customColumns.map(({ id, label }) => [id, label]));
   const decided =
     result.metrics.WAITLISTED + result.metrics.ACCEPTED + result.metrics.REJECTED + result.metrics.CONFIRMED;
   const firstVisible = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
@@ -212,7 +496,6 @@ export function SubmissionsWorkspace({ event, filters, options, result }: Submis
         <h1 className="font-heading font-semibold text-2xl tracking-tight">Submissions</h1>
         <p className="text-muted-foreground text-sm">Track proposal intake, review progress, and decisions.</p>
       </header>
-
       <section aria-label="Submission lifecycle metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total submissions"
@@ -227,17 +510,62 @@ export function SubmissionsWorkspace({ event, filters, options, result }: Submis
         <MetricCard label="In review" value={result.metrics.UNDER_REVIEW} description="Actively under evaluation" />
         <MetricCard label="Decisions" value={decided} description="Waitlisted, accepted, rejected, or confirmed" />
       </section>
-
+      <nav aria-label="Submission status" className="flex flex-wrap gap-2">
+        <Button size="sm" variant={filters.status ? "ghost" : "secondary"} asChild>
+          <Link href={filterHref(event.slug, { ...filters, status: undefined }, 1)}>All</Link>
+        </Button>
+        {Object.values(CfpSubmissionStatus).map((status) => (
+          <Button key={status} size="sm" variant={filters.status === status ? "secondary" : "ghost"} asChild>
+            <Link href={filterHref(event.slug, { ...filters, status }, 1)}>
+              {statusLabels[status]}{" "}
+              <span className="text-muted-foreground tabular-nums">{result.metrics[status]}</span>
+            </Link>
+          </Button>
+        ))}
+      </nav>
       <FilterBar eventSlug={event.slug} filters={filters} options={options} />
-
       <Card>
-        <CardHeader>
-          <CardTitle>Submission queue</CardTitle>
-          <CardDescription>
-            {result.total === 0
-              ? "No matching submissions"
-              : `Showing ${firstVisible}–${lastVisible} of ${result.total}`}
-          </CardDescription>
+        <CardHeader className="flex-row items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <CardTitle>Submission queue</CardTitle>
+            <CardDescription>
+              {result.total === 0
+                ? "No matching submissions"
+                : `Showing ${firstVisible}–${lastVisible} of ${result.total}`}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <ColumnDialog
+              eventSlug={event.slug}
+              filters={filters}
+              options={options}
+              columns={columns}
+              setColumns={setColumns}
+              hasSavedView={hasSavedView}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <DownloadIcon data-icon="inline-start" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Filtered result set</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <a href={exportHref(event.slug, filters, columns, "csv")}>CSV spreadsheet</a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href={exportHref(event.slug, filters, columns, "xlsx")}>Excel workbook</a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href={exportHref(event.slug, filters, columns, "files")}>Attachment bundle</a>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </CardHeader>
         <CardContent className="px-0">
           {result.items.length === 0 ? (
@@ -251,78 +579,33 @@ export function SubmissionsWorkspace({ event, filters, options, result }: Submis
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Submission</TableHead>
-                  <TableHead>Applicant</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Assignee</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="pr-4 text-right">Submitted</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {result.items.map((submission) => (
-                  <TableRow key={submission.id}>
-                    <TableCell className="max-w-64 pl-4">
-                      <Link
-                        className="block truncate font-medium hover:underline"
-                        href={`/dashboard/events/${encodeURIComponent(event.slug)}/submissions/${submission.id}`}
-                      >
-                        {submission.formTitle}
-                      </Link>
-                      <span className="text-muted-foreground text-xs">{kindLabels[submission.kind]}</span>
-                    </TableCell>
-                    <TableCell>
-                      {submission.applicants[0] ? (
-                        <div className="flex max-w-52 flex-col">
-                          <span className="truncate">{submission.applicants[0].name}</span>
-                          <span className="truncate text-muted-foreground text-xs">
-                            {submission.applicants[0].email}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">Not assigned</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex max-w-56 flex-wrap gap-1">
-                        {submission.categories.length > 0 ? (
-                          submission.categories.map((category) => (
-                            <Badge key={category.id} variant="outline">
-                              {category.label}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {submission.assignees.length > 0 ? (
-                        <div className="flex items-center gap-1.5">
-                          <UsersIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-                          <span>{submission.assignees.map(({ displayName }) => displayName).join(", ")}</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">Unassigned</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariants[submission.status]}>{statusLabels[submission.status]}</Badge>
-                    </TableCell>
-                    <TableCell className="pr-4 text-right text-muted-foreground tabular-nums">
-                      {submission.submittedAt ? dateFormatter.format(submission.submittedAt) : "Draft"}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableHead key={column} className="whitespace-nowrap first:pl-4 last:pr-4">
+                        {columnLabel(column, customLabels)}
+                      </TableHead>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {result.items.map((item) => (
+                    <TableRow key={item.id}>
+                      {columns.map((column) => (
+                        <TableCell key={column} className="max-w-72 align-top first:pl-4 last:pr-4">
+                          {displayCell(item, column, event.slug, dateFormatter)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
-
       {result.pageCount > 1 ? (
         <Pagination className="justify-end">
           <PaginationContent>

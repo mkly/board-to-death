@@ -13,6 +13,7 @@ import { ACTIVE_EVENT_COOKIE, type DashboardEvent, resolveActiveEvent } from "./
 
 export interface DashboardShellData {
   readonly user: {
+    readonly id: string;
     readonly name: string;
     readonly email: string;
     readonly avatar: string;
@@ -33,6 +34,7 @@ export const getDashboardShellData = cache(async (): Promise<DashboardShellData>
 
   return {
     user: {
+      id: session.user.id,
       name: session.user.name,
       email: session.user.email,
       avatar: session.user.image ?? "",
