@@ -201,6 +201,26 @@ time, so a commit can change files after you stage them.
 Biome does not typecheck. Use `npm run typecheck` for that; it runs `tsc` against the root `tsconfig.json`,
 which already sets `noEmit`.
 
+### Prefer established libraries over bespoke code
+
+When a problem is already solved by a popular, well-maintained open source library, use the library
+instead of writing your own. Hand-rolled date math, validation, slugs, retries, CSV/ICS generation,
+diffing, deep-equality, pagination cursors, and similar utilities are the usual offenders: they look
+small in the first commit and accumulate edge cases forever after.
+
+- Before implementing a general-purpose utility, check whether something in `package.json` already
+  covers it, then whether a widely adopted library does. Say which you chose and why in your summary.
+- Judge a candidate on adoption, recent releases, open issue health, types shipped or available,
+  license, and install size — not on stars alone. Prefer the one the ecosystem already converged on.
+- Prefer libraries that are already transitive dependencies here, and prefer the smallest library that
+  covers the actual need over a framework you would use ten percent of.
+- Write it yourself when the requirement is genuinely project-specific (domain rules, our data model,
+  our UI conventions), when the library is unmaintained or a poor fit, or when the whole thing is a few
+  lines with no edge cases. "I could build this" is not a reason; "this encodes our rules" is.
+- Do not fork or vendor a library to make a small change. Configure it, wrap it, or pick a different one.
+- Adding a dependency is a real change: it needs a lockfile regeneration under the rules below, and it
+  should be called out in the pull request per "Contributions".
+
 ### Dependencies and the lockfile
 
 `package-lock.json` has been the single largest source of rework in this repository. Treat it as a build
@@ -285,7 +305,8 @@ Keep a component inside its route until it is reused by another feature. Do not 
 - TypeScript strict mode is enabled. Use precise types and avoid `any`.
 - Use the existing `@/` import aliases.
 - Follow the Biome configuration; see "Formatting and linting" above. Let `npm run check:fix` apply it rather than hand-formatting.
-- Avoid unnecessary dependencies.
+- Reach for an established open source library before writing a bespoke utility; see "Prefer established
+  libraries over bespoke code" above. Avoid dependencies that earn nothing.
 - Keep changes focused and do not refactor unrelated files.
 
 ### Contributions
