@@ -1,0 +1,211 @@
+image:
+  name: board-to-death
+  distribution: ubuntu
+  release: noble
+  variant: cloud
+  description: |-
+    board-to-death dev-loop box: Node.js 24 LTS + npm, Git, build tooling,
+    and a local PostgreSQL server preinstalled so the Next.js admin starter
+    and its Prisma-backed persistence layer can be imported, installed,
+    built, and tested without production credentials.
+  expiry: 30d
+
+source:
+  downloader: debootstrap
+  url: http://archive.ubuntu.com/ubuntu
+
+mappings:
+  architecture_map: debian
+
+files:
+- path: /etc/hostname
+  generator: hostname
+
+- path: /etc/hosts
+  generator: hosts
+
+- name: meta-data
+  generator: cloud-init
+
+- name: network-config
+  generator: cloud-init
+
+- name: user-data
+  generator: cloud-init
+
+- name: vendor-data
+  generator: cloud-init
+
+- path: /usr/local/sbin/board-to-death-pg-bootstrap
+  generator: dump
+  mode: 0755
+  content: |-
+    #!/bin/sh
+    # Bring the box's local PostgreSQL server to the state the app's Prisma
+    # schema and tests expect. Idempotent: every step is a no-op on a box
+    # that has already booted once.
+    set -eu
+
+    # The package postinst usually creates the "main" cluster at build time, but
+    # a chroot install can skip it. Create it here rather than assuming.
+    if ! pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx '16 main'; then
+      pg_createcluster -p 5432 16 main
+    fi
+
+    # pg_createcluster assigns the next free port, so a build host with anything
+    # already on 5432 (a local `docker compose up -d db`, say) bakes a cluster
+    # listening on 5433 into the image. The app's default DATABASE_URL and this
+    # script's own readiness check below expect 5432, and inside the box 5432
+    # is always free. Pin it rather than inherit whatever the machine that
+    # built the image happened to be running.
+    if [ "$(pg_conftool -s 16 main show port)" != 5432 ]; then
+      pg_ctlcluster 16 main stop || true
+      pg_conftool 16 main set port 5432
+    fi
+
+    pg_ctlcluster 16 main start || true
+
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      pg_isready -h 127.0.0.1 -p 5432 -q && break
+      sleep 1
+    done
+    pg_isready -h 127.0.0.1 -p 5432 -q
+
+    # A throwaway dev box: one superuser role and a dev/test database pair
+    # matching the app's expected Prisma DATABASE_URL convention.
+    runuser -u postgres -- psql -tAc \
+      "SELECT 1 FROM pg_roles WHERE rolname = 'board_to_death'" | grep -q 1 || \
+      runuser -u postgres -- psql -c \
+        "CREATE ROLE board_to_death LOGIN SUPERUSER CREATEDB PASSWORD 'board_to_death'"
+
+    for db in board_to_death board_to_death_test; do
+      runuser -u postgres -- psql -tAc \
+        "SELECT 1 FROM pg_database WHERE datname = '${db}'" | grep -q 1 || \
+        runuser -u postgres -- createdb -O board_to_death "${db}"
+    done
+
+- path: /etc/systemd/system/board-to-death-pg-bootstrap.service
+  generator: dump
+  mode: 0644
+  content: |-
+    [Unit]
+    Description=Provision the dev-loop box's local PostgreSQL database
+    Wants=network.target
+    After=network.target
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    ExecStart=/usr/local/sbin/board-to-death-pg-bootstrap
+
+    [Install]
+    WantedBy=multi-user.target
+
+packages:
+  manager: apt
+  update: true
+  cleanup: true
+  repositories:
+  - name: sources.list
+    url: |-
+      deb http://archive.ubuntu.com/ubuntu noble main universe
+      deb http://archive.ubuntu.com/ubuntu noble-updates main universe
+      deb http://archive.ubuntu.com/ubuntu noble-security main universe
+  sets:
+  - packages:
+    - build-essential
+    - ca-certificates
+    - curl
+    - gnupg
+    - git
+    - python3
+    - cloud-init
+    - libpq5
+    - libpq-dev
+    - postgresql-client-16
+    # A local PostgreSQL server so the Prisma-backed persistence layer and its
+    # tests work inside the box. Crabbox boxes have no route to the host's
+    # Docker-published 127.0.0.1:5432, and exposing that port to the Incus
+    # bridge would share one database across every concurrent box.
+    - postgresql-16
+    # Crabbox's first-boot readiness check requires these before it can accept
+    # a synced command. Baking them in avoids a network-dependent bootstrap.
+    - openssh-server
+    - rsync
+    - jq
+    - unzip
+    action: install
+
+actions:
+# Enable the DHCPv4 renderer before files/cloud-init templating. This mirrors
+# the upstream Ubuntu image definition and must leave a persistent boot link in
+# the image; otherwise the first boot gets SLAAC IPv6 but has no DHCPv4 client.
+- trigger: post-packages
+  action: |-
+    #!/bin/sh
+    set -eux
+    systemctl enable systemd-networkd.service
+    test -L /etc/systemd/system/multi-user.target.wants/systemd-networkd.service
+
+- trigger: post-packages
+  action: |-
+    #!/bin/sh
+    set -eux
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+# The chroot shares the build host's network namespace, so the postgresql-16
+# postinst's pg_createcluster skips 5432 whenever the build host has something
+# listening there and silently settles on 5433. Pin the port in the image so it
+# is a property of the image rather than of the machine that built it.
+# board-to-death-pg-bootstrap re-checks this at boot as a backstop.
+- trigger: post-packages
+  action: |-
+    #!/bin/sh
+    set -eux
+    if pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx '16 main'; then
+      pg_conftool 16 main set port 5432
+      test "$(pg_conftool -s 16 main show port)" = 5432
+    fi
+
+# post-files: the unit and its script are dumped by file generators, which run
+# after the package stage.
+- trigger: post-files
+  action: |-
+    #!/bin/sh
+    set -eux
+    systemctl enable postgresql.service
+    systemctl enable board-to-death-pg-bootstrap.service
+    test -L /etc/systemd/system/multi-user.target.wants/board-to-death-pg-bootstrap.service
+
+# post-files, not post-packages: node needs curl/ca-certificates from the
+# package stage and a non-root smoke user is created and torn down here.
+- trigger: post-files
+  action: |-
+    #!/bin/sh
+    set -eux
+
+    # Install a pinned Node.js LTS release system-wide (bundles npm) so the
+    # runtime is independent of Ubuntu noble's outdated apt nodejs package
+    # (18.x, too old for Next.js 16's >=20.9 requirement). Verify the release
+    # artifact before extracting it.
+    NODE_VERSION=24.19.0
+    NODE_SHA256=14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647
+    NODE_TMP="$(mktemp -d)"
+    curl -fsSL --retry 3 \
+      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+      -o "${NODE_TMP}/node.tar.xz"
+    printf '%s  %s\n' "${NODE_SHA256}" "${NODE_TMP}/node.tar.xz" | sha256sum -c -
+    tar -xJf "${NODE_TMP}/node.tar.xz" -C /usr/local --strip-components=1 \
+      --no-same-owner
+    rm -rf "${NODE_TMP}"
+    test "$(node --version)" = "v${NODE_VERSION}"
+    test -x /usr/local/bin/npm
+
+    # Create a temporary non-root user for the runtime contract checks below,
+    # mirroring the future Crabbox user, which is unprivileged and has no
+    # root-owned npm cache to fall back on.
+    useradd --create-home --shell /bin/sh dev-loop-smoke
+    runuser -u dev-loop-smoke -- env PATH=/usr/local/bin:/usr/bin:/bin sh -c \
+      'node --version && npm --version && git --version && cc --version'
+    userdel --remove dev-loop-smoke
