@@ -50,6 +50,12 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
+function resolveDueAt(dueAt: Date | null | undefined, defaultDueOffsetDays: number | null, assignedAt: Date) {
+  if (dueAt !== undefined) return dueAt;
+  if (defaultDueOffsetDays === null) return null;
+  return new Date(assignedAt.getTime() + defaultDueOffsetDays * 86_400_000);
+}
+
 function validateDefinition(input: SpeakerTaskDefinitionInput) {
   if (!Number.isInteger(input.sortOrder) || input.sortOrder < 0) invalid("sortOrder must be a nonnegative integer.");
   if (
@@ -163,12 +169,7 @@ export class SpeakerOnboardingRepository {
           select: { id: true },
         });
         if (!speaker) throw new RepositoryError("not-found", "The event-owned speaker was not found.");
-        const dueAt =
-          input.dueAt === undefined
-            ? version.defaultDueOffsetDays === null
-              ? null
-              : new Date(assignedAt.getTime() + version.defaultDueOffsetDays * 86_400_000)
-            : input.dueAt;
+        const dueAt = resolveDueAt(input.dueAt, version.defaultDueOffsetDays, assignedAt);
         if (dueAt !== null && (!Number.isFinite(dueAt.getTime()) || dueAt < assignedAt)) {
           invalid("dueAt must be a valid date on or after assignedAt.");
         }
