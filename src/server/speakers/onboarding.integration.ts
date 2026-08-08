@@ -1,6 +1,11 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { EventType, PrismaClient, SpeakerTaskAssignmentStatus } from "../../generated/prisma/client.ts";
+import {
+  CfpSubmissionStatus,
+  EventType,
+  PrismaClient,
+  SpeakerTaskAssignmentStatus,
+} from "../../generated/prisma/client.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
 import { SpeakerOnboardingRepository } from "./onboarding.ts";
 import { SpeakerRepository } from "./repositories.ts";
@@ -43,6 +48,38 @@ async function createDefinition(eventId: string, key = "headshot", sortOrder = 0
     defaultDueOffsetDays: 5,
     responseRequired: true,
     responseSchema: { type: "object", required: ["objectKey"] },
+  });
+}
+
+async function addEligibleSubmission(
+  eventId: string,
+  speakerId: string,
+  status: Extract<CfpSubmissionStatus, "ACCEPTED" | "CONFIRMED"> = CfpSubmissionStatus.ACCEPTED,
+) {
+  const form = await client.cfpForm.create({
+    data: {
+      eventId,
+      key: `form-${speakerId}`,
+      versions: {
+        create: { versionNumber: 1, schemaVersion: 1, title: "Speaker form", customTypes: {} },
+      },
+    },
+    include: { versions: true },
+  });
+  const formVersion = form.versions[0];
+  assert.ok(formVersion);
+  return client.cfpSubmission.create({
+    data: {
+      eventId,
+      formVersionId: formVersion.id,
+      kind: "ABSTRACT",
+      status,
+      submittedAt: currentTime,
+      reviewStartedAt: currentTime,
+      decidedAt: currentTime,
+      confirmedAt: status === CfpSubmissionStatus.CONFIRMED ? currentTime : null,
+      participants: { create: { speakerId, sortOrder: 0 } },
+    },
   });
 }
 
@@ -95,6 +132,7 @@ describe("speaker onboarding persistence", () => {
     const eventId = await createEvent("assignments");
     const otherEventId = await createEvent("other-assignments");
     const speaker = await createSpeaker(eventId);
+    await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
     const outsider = await createSpeaker(otherEventId, "outsider@example.test");
     const definition = await createDefinition(eventId);
     const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
@@ -120,6 +158,7 @@ describe("speaker onboarding persistence", () => {
   test("preserves response attempts through revision and completes only on approval", async () => {
     const eventId = await createEvent("response-history");
     const speaker = await createSpeaker(eventId);
+    await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
     const definition = await createDefinition(eventId);
     const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
 
@@ -165,6 +204,7 @@ describe("speaker onboarding persistence", () => {
   test("records withdrawal and protects assignment history until the event is deleted", async () => {
     const eventId = await createEvent("withdrawal-deletion");
     const speaker = await createSpeaker(eventId);
+    await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
     const definition = await createDefinition(eventId);
     const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
     currentTime = new Date("2027-01-02T12:00:00.000Z");
@@ -177,5 +217,57 @@ describe("speaker onboarding persistence", () => {
     await client.event.delete({ where: { id: eventId } });
     assert.equal(await client.speakerTaskAssignment.count({ where: { id: assignment.id } }), 0);
     assert.equal(await client.speakerTaskAssignmentTransition.count({ where: { assignmentId: assignment.id } }), 0);
+  });
+
+  test("assigns accepted-speaker cohorts idempotently and rejects ineligible members", async () => {
+    const eventId = await createEvent("cohort-assignment");
+    const ada = await createSpeaker(eventId, "ada@example.test");
+    const grace = await createSpeaker(eventId, "grace@example.test");
+    const rejected = await createSpeaker(eventId, "rejected@example.test");
+    await addEligibleSubmission(eventId, ada.id, CfpSubmissionStatus.CONFIRMED);
+    await addEligibleSubmission(eventId, grace.id, CfpSubmissionStatus.CONFIRMED);
+    const definition = await createDefinition(eventId);
+
+    const first = await onboarding.assignCohort({
+      eventId,
+      definitionId: definition.id,
+      speakerIds: [ada.id, grace.id, ada.id],
+    });
+    assert.equal(first.assignments.length, 2);
+    assert.deepEqual(first.skippedActiveSpeakerIds, []);
+
+    const repeated = await onboarding.assignCohort({
+      eventId,
+      definitionId: definition.id,
+      speakerIds: [ada.id, grace.id],
+    });
+    assert.equal(repeated.assignments.length, 0);
+    assert.deepEqual(new Set(repeated.skippedActiveSpeakerIds), new Set([ada.id, grace.id]));
+    await expectRepositoryError(
+      onboarding.assignCohort({ eventId, definitionId: definition.id, speakerIds: [ada.id, rejected.id] }),
+      "invalid-input",
+    );
+  });
+
+  test("changes due dates only for incomplete assignments and permits reassignment after withdrawal", async () => {
+    const eventId = await createEvent("assignment-administration");
+    const speaker = await createSpeaker(eventId);
+    await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
+    const definition = await createDefinition(eventId);
+    const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
+    const changedDueAt = new Date("2027-01-10T12:00:00.000Z");
+
+    const updated = await onboarding.updateDueDate(eventId, assignment.id, changedDueAt);
+    assert.deepEqual(updated.dueAt, changedDueAt);
+    await expectRepositoryError(
+      onboarding.updateDueDate(eventId, assignment.id, new Date("2026-12-31T12:00:00.000Z")),
+      "invalid-input",
+    );
+
+    await onboarding.withdraw(eventId, assignment.id, "Deadline no longer applies.");
+    await expectRepositoryError(onboarding.updateDueDate(eventId, assignment.id, changedDueAt), "invalid-input");
+    const reassigned = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
+    assert.notEqual(reassigned.id, assignment.id);
+    assert.equal(reassigned.status, SpeakerTaskAssignmentStatus.PENDING);
   });
 });
