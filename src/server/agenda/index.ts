@@ -6,6 +6,9 @@ export {
   validateAgendaConflicts,
 } from "./conflicts.ts";
 export {
+  AgendaConflictError,
+  type AgendaConflictOptions,
+  type AgendaConflictPolicy,
   type AgendaPlacementDetails,
   AgendaPlacementRepository,
   type PersistedAgendaPlacement,

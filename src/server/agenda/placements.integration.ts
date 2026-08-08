@@ -4,7 +4,7 @@ import { EventType, PrismaClient } from "../../generated/prisma/client.ts";
 import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "../events/repositories.ts";
 import { ProgramSessionRepository } from "../sessions/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
-import { AgendaPlacementRepository } from "./placements.ts";
+import { AgendaConflictError, AgendaPlacementRepository } from "./placements.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -187,6 +187,56 @@ describe("agenda placement persistence", () => {
     await expectRepositoryError(placements.remove(fixture.event.id, placed.id, moved.version), "conflict");
     await placements.remove(fixture.event.id, placed.id, resized.version);
     assert.equal(await placements.get(fixture.event.id, placed.id), null);
+  });
+
+  test("prevents conflicts or requires explicit confirmation before persisting them", async () => {
+    const fixture = await createFixture("conflict-policy");
+    await placements.place({
+      eventId: fixture.event.id,
+      sessionId: fixture.session.id,
+      startsAt: new Date("2027-03-13T18:00:00.000Z"),
+      durationMinutes: 60,
+      roomId: fixture.room.id,
+      trackIds: [fixture.track.id],
+      speakerIds: [fixture.speaker.id],
+    });
+    const overlappingSession = await sessions.createManual({
+      eventId: fixture.event.id,
+      title: "Overlapping session",
+      durationMinutes: 45,
+      trackId: fixture.track.id,
+      speakerIds: [fixture.speaker.id],
+    });
+    const input = {
+      eventId: fixture.event.id,
+      sessionId: overlappingSession.id,
+      startsAt: new Date("2027-03-13T18:30:00.000Z"),
+      durationMinutes: 45,
+      roomId: fixture.room.id,
+      trackIds: [fixture.track.id],
+      speakerIds: [fixture.speaker.id],
+    };
+
+    await assert.rejects(placements.place(input), (error: unknown) => {
+      assert.ok(error instanceof AgendaConflictError);
+      assert.equal(error.confirmationRequired, false);
+      assert.deepEqual(
+        error.conflicts.map(({ type }) => type),
+        ["room", "track", "speaker"],
+      );
+      return true;
+    });
+    await assert.rejects(placements.place(input, { policy: "explicit-confirm" }), (error: unknown) => {
+      assert.ok(error instanceof AgendaConflictError);
+      assert.equal(error.confirmationRequired, true);
+      return true;
+    });
+
+    const confirmed = await placements.place(input, {
+      policy: "explicit-confirm",
+      conflictsConfirmed: true,
+    });
+    assert.equal(confirmed.sessionId, overlappingSession.id);
   });
 
   test("rejects archived sessions and room, track, speaker, and placement references from another event", async () => {

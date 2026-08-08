@@ -2,6 +2,7 @@ import { addMinutes, differenceInMinutes } from "date-fns";
 
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { type AgendaConflict, validateAgendaConflicts } from "./conflicts.ts";
 
 export interface AgendaPlacementDetails {
   readonly startsAt: Date;
@@ -39,6 +40,30 @@ export interface PersistedAgendaPlacement {
   readonly version: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+export type AgendaConflictPolicy = "prevent" | "explicit-confirm";
+
+export interface AgendaConflictOptions {
+  readonly policy?: AgendaConflictPolicy;
+  readonly conflictsConfirmed?: boolean;
+}
+
+export class AgendaConflictError extends RepositoryError {
+  readonly conflicts: readonly AgendaConflict[];
+  readonly confirmationRequired: boolean;
+
+  constructor(conflicts: readonly AgendaConflict[], policy: AgendaConflictPolicy) {
+    super(
+      "conflict",
+      policy === "explicit-confirm"
+        ? "Review and confirm the agenda conflicts before saving."
+        : "Resolve the agenda conflicts before saving.",
+    );
+    this.name = "AgendaConflictError";
+    this.conflicts = conflicts;
+    this.confirmationRequired = policy === "explicit-confirm";
+  }
 }
 
 const placementInclude = {
@@ -90,10 +115,10 @@ async function requirePlacementReferences(
   eventId: string,
   sessionId: string,
   placement: ValidatedPlacement,
-): Promise<void> {
+): Promise<{ readonly startsAt: Date; readonly endsAt: Date; readonly timezone: string }> {
   const event = await transaction.event.findUnique({
     where: { id: eventId },
-    select: { startsAt: true, endsAt: true },
+    select: { startsAt: true, endsAt: true, timezone: true },
   });
   const session = await transaction.programSession.findFirst({
     where: { eventId, id: sessionId, archivedAt: null },
@@ -120,6 +145,40 @@ async function requirePlacementReferences(
   }
   if (placement.startsAt < event.startsAt || placement.endsAt > event.endsAt) {
     invalid("The agenda placement must stay within the event bounds.");
+  }
+  return event;
+}
+
+async function enforceConflictPolicy(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  event: { readonly startsAt: Date; readonly endsAt: Date; readonly timezone: string },
+  candidate: { readonly id: string } & ValidatedPlacement,
+  excludedPlacementId: string | null,
+  options: AgendaConflictOptions,
+): Promise<void> {
+  const policy = options.policy ?? "prevent";
+  const current = await transaction.agendaPlacement.findMany({
+    where: { eventId, ...(excludedPlacementId ? { id: { not: excludedPlacementId } } : {}) },
+    include: {
+      tracks: { orderBy: { sortOrder: "asc" } },
+      speakers: { orderBy: { sortOrder: "asc" } },
+    },
+  });
+  const conflicts = validateAgendaConflicts(event, [
+    ...current.map((placement) => ({
+      id: placement.id,
+      startsAt: placement.startsAt,
+      endsAt: placement.endsAt,
+      roomId: placement.roomId,
+      trackIds: placement.tracks.map(({ trackId }) => trackId),
+      speakerIds: placement.speakers.map(({ speakerId }) => speakerId),
+    })),
+    candidate,
+  ]).filter(({ placementIds }) => placementIds.includes(candidate.id));
+
+  if (conflicts.length > 0 && !(policy === "explicit-confirm" && options.conflictsConfirmed === true)) {
+    throw new AgendaConflictError(conflicts, policy);
   }
 }
 
@@ -160,11 +219,20 @@ export class AgendaPlacementRepository {
     this.client = client;
   }
 
-  async place(input: PlaceAgendaSessionInput): Promise<PersistedAgendaPlacement> {
+  async place(input: PlaceAgendaSessionInput, options: AgendaConflictOptions = {}): Promise<PersistedAgendaPlacement> {
     try {
       const placement = validatePlacement(input);
       const id = await this.client.$transaction(async (transaction) => {
-        await requirePlacementReferences(transaction, input.eventId, input.sessionId, placement);
+        const event = await requirePlacementReferences(transaction, input.eventId, input.sessionId, placement);
+        const candidateId = `new:${input.sessionId}`;
+        await enforceConflictPolicy(
+          transaction,
+          input.eventId,
+          event,
+          { id: candidateId, ...placement },
+          null,
+          options,
+        );
         const created = await transaction.agendaPlacement.create({
           data: {
             eventId: input.eventId,
@@ -188,6 +256,7 @@ export class AgendaPlacementRepository {
     eventId: string,
     placementId: string,
     input: UpdateAgendaPlacementInput,
+    options: AgendaConflictOptions = {},
   ): Promise<PersistedAgendaPlacement> {
     if (!Number.isInteger(input.expectedVersion) || input.expectedVersion <= 0) {
       invalid("expectedVersion must be a positive integer.");
@@ -206,7 +275,15 @@ export class AgendaPlacementRepository {
           trackIds: input.trackIds ?? current.tracks.map(({ trackId }) => trackId),
           speakerIds: input.speakerIds ?? current.speakers.map(({ speakerId }) => speakerId),
         });
-        await requirePlacementReferences(transaction, eventId, current.sessionId, placement);
+        const event = await requirePlacementReferences(transaction, eventId, current.sessionId, placement);
+        await enforceConflictPolicy(
+          transaction,
+          eventId,
+          event,
+          { id: placementId, ...placement },
+          placementId,
+          options,
+        );
         const updated = await transaction.agendaPlacement.updateMany({
           where: { eventId, id: placementId, version: input.expectedVersion },
           data: {
