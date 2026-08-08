@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import { CfpPolicyStatus, type Prisma, type PrismaClient } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
@@ -14,6 +14,18 @@ export interface PersistedCfpFormDefinition {
   readonly key: string;
   readonly versionNumber: number;
   readonly definition: CfpFormDefinition;
+}
+
+export interface CfpFormSummary {
+  readonly id: string;
+  readonly eventId: string;
+  readonly key: string;
+  readonly title: string;
+  readonly versionNumber: number;
+  readonly status: CfpPolicyStatus;
+  readonly submissionClosesAt: Date | null;
+  readonly responseCount: number;
+  readonly assignedAdministrators: readonly string[];
 }
 
 const versionInclude = {
@@ -161,6 +173,57 @@ export class CfpFormRepository {
     } catch (error) {
       return mapDatabaseError(error);
     }
+  }
+
+  async list(eventId: string): Promise<CfpFormSummary[]> {
+    const forms = await this.client.cfpForm.findMany({
+      where: { eventId },
+      orderBy: [{ updatedAt: "desc" }, { key: "asc" }],
+      include: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          include: { _count: { select: { submissions: true } } },
+        },
+      },
+    });
+    const policies = await this.client.cfpPolicy.findMany({
+      where: { eventId, key: { in: forms.map(({ key }) => key) } },
+      include: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          take: 1,
+          include: {
+            adminAssignments: {
+              orderBy: [{ role: "asc" }, { administratorId: "asc" }],
+              include: { administrator: true },
+            },
+          },
+        },
+      },
+    });
+    const policiesByKey = new Map(policies.map((policy) => [policy.key, policy]));
+
+    return forms.flatMap((form) => {
+      const latestVersion = form.versions[0];
+      if (!latestVersion) return [];
+      const policy = policiesByKey.get(form.key);
+      const policyVersion = policy?.versions[0];
+
+      return [
+        {
+          id: form.id,
+          eventId: form.eventId,
+          key: form.key,
+          title: latestVersion.title,
+          versionNumber: latestVersion.versionNumber,
+          status: policy?.status ?? CfpPolicyStatus.DRAFT,
+          submissionClosesAt: policyVersion?.submissionClosesAt ?? null,
+          responseCount: form.versions.reduce((total, version) => total + version._count.submissions, 0),
+          assignedAdministrators:
+            policyVersion?.adminAssignments.map(({ administrator }) => administrator.displayName) ?? [],
+        },
+      ];
+    });
   }
 
   async createVersion(eventId: string, formId: string, input: CfpFormDefinition): Promise<PersistedCfpFormDefinition> {
