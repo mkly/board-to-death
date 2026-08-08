@@ -1,0 +1,2 @@
+-- Establish the versioned PostgreSQL migration history. Domain tables are
+-- introduced by the feature migrations that own their lifecycle.

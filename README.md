@@ -124,6 +124,28 @@ _Deploy your own copy with one click._
 
 Your app will be running at [http://localhost:3000](http://localhost:3000)
 
+### PostgreSQL persistence
+
+The application uses PostgreSQL 16 through Prisma. Copy `.env.example` to `.env` and keep `DATABASE_URL` for local
+application data separate from `TEST_DATABASE_URL`, which must name a database ending in `_test`.
+
+```bash
+npm run db:generate                # regenerate the typed Prisma client
+npm run db:migrate -- --name NAME  # create and apply a development migration
+npm run db:deploy                  # apply committed migrations without generating new ones
+npm run db:status                  # compare committed and applied migration history
+npm run db:test:reset              # destructively reset only the guarded *_test database
+npm run db:test:smoke              # rebuild the test schema and verify every migration
+```
+
+Prisma records applied migrations in `_prisma_migrations`. Commit `prisma/schema.prisma` and every generated migration
+directory together. `db:migrate` is for development only; deployments use `db:deploy`.
+
+To recover from a failed deployment migration, fix or revert the migration SQL, use `prisma migrate diff` to prepare any
+required compensating SQL, apply it with `prisma db execute`, and mark the failed migration with
+`prisma migrate resolve --rolled-back MIGRATION_NAME` before redeploying. Do not edit or mark a successfully applied
+migration as rolled back; revert the Prisma schema and create a new forward migration instead.
+
 ### Formatting and Linting
 
 Format, lint, and organize imports
