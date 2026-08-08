@@ -45,6 +45,41 @@ The PostgreSQL server is provisioned at boot by
 creates a `board_to_death` superuser role (password `board_to_death`) with
 `board_to_death` and `board_to_death_test` databases.
 
+### `TEST_DATABASE_URL` is not set in a box — set it yourself
+
+The databases exist in the box; the environment variable that names them does
+not. `DATABASE_URL` and `TEST_DATABASE_URL` live in `.env`, `.env` is
+gitignored, and crabbox syncs only git-**tracked** files — so `.env` never
+arrives, and nothing that reads it works out of the box:
+
+```
+TEST_DATABASE_URL is required for test database commands
+```
+
+That is `npm run test:repositories`, `test:auth`, `db:test:reset`,
+`db:test:deploy`, and anything else routed through
+`scripts/run-test-database-command.mjs`. Copying `.env.example` to `.env` fixes
+it on the host only; the copy stays untracked and still does not sync.
+
+Supply the variable in the box yourself. The bootstrapped cluster matches
+`.env.example` exactly, so the tracked defaults are the correct in-box values:
+
+```sh
+dl-run.sh "$uuid" -- bash -lc '
+  export DATABASE_URL="postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death?schema=public"
+  export TEST_DATABASE_URL="postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public"
+  npm run db:test:reset && npm run test:repositories
+'
+```
+
+Or write `.env` in the box first (`cp .env.example .env`) and let
+`dotenv/config` pick it up for every later command in that box.
+
+Do not work around the guard in `scripts/test-database.mjs`: it refuses a
+database whose name does not end in `_test`, and refuses a `TEST_DATABASE_URL`
+that resolves to the same database as `DATABASE_URL`. Both rules exist because
+these commands drop and recreate the `public` schema.
+
 Build, smoke-test, and (re)publish the local `board-to-death` alias with:
 
 ```sh
@@ -171,6 +206,10 @@ npm run test              # vitest run
 npm run test:infrastructure
 npm run test:repositories # repository integration tests against TEST_DATABASE_URL
 ```
+
+`TEST_DATABASE_URL` comes from `.env`, which is gitignored and therefore absent
+in an Incus box — see "`TEST_DATABASE_URL` is not set in a box" above before
+running any `test:repositories`, `test:auth`, or `db:test:*` command there.
 
 #### Never run the production build
 
