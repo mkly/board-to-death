@@ -1,0 +1,237 @@
+import { PrismaPg } from "@prisma/adapter-pg";
+
+import {
+  CfpSubmissionKind,
+  CfpSubmissionRevisionKind,
+  CfpSubmissionStatus,
+  CfpSubmissionTransitionActor,
+  EventType,
+  PrismaClient,
+} from "../../generated/prisma/client.ts";
+import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
+import { EventRepository, RepositoryError } from "../events/repositories.ts";
+import { CfpFormRepository } from "./repositories.ts";
+import { CfpCategoryRepository, CfpSubmissionRepository } from "./submissions.ts";
+import assert from "node:assert/strict";
+import { after, before, beforeEach, describe, test } from "node:test";
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is required for CFP submission integration tests.");
+
+const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+const events = new EventRepository(client);
+const forms = new CfpFormRepository(client);
+const categories = new CfpCategoryRepository(client);
+const submissions = new CfpSubmissionRepository(client);
+
+const eventInput = {
+  name: "Board to Death 2027",
+  slug: "board-to-death-2027",
+  type: EventType.CONFERENCE,
+  timezone: "America/Los_Angeles",
+  startsAt: new Date("2027-03-13T17:00:00.000Z"),
+  endsAt: new Date("2027-03-15T00:00:00.000Z"),
+} as const;
+
+function definition(title = "Board Game Design CFP"): CfpFormDefinition {
+  return {
+    version: 1,
+    title,
+    categories: [
+      { id: "design", label: "Game design" },
+      { id: "strategy", label: "Strategy" },
+    ],
+    sections: [
+      {
+        id: "proposal",
+        kind: "questions",
+        title: "Proposal",
+        questions: [
+          { id: "abstract", type: "long_text", label: "Abstract", required: true },
+          { id: "duration", type: "number", label: "Duration", required: true },
+        ],
+      },
+    ],
+  };
+}
+
+async function createEventAndForm(slug: string = eventInput.slug): Promise<{ eventId: string; formVersionId: string }> {
+  const event = await events.create({ ...eventInput, slug, name: slug });
+  const form = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition() });
+  const version = await client.cfpFormVersion.findUniqueOrThrow({
+    where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
+  });
+  return { eventId: event.id, formVersionId: version.id };
+}
+
+async function expectRepositoryError(promise: Promise<unknown>, code: RepositoryError["code"]): Promise<void> {
+  await assert.rejects(promise, (error: unknown) => error instanceof RepositoryError && error.code === code);
+}
+
+describe("CFP submission persistence", () => {
+  before(async () => {
+    await client.$connect();
+  });
+
+  beforeEach(async () => {
+    await client.event.deleteMany();
+  });
+
+  after(async () => {
+    await client.$disconnect();
+  });
+
+  test("versions an abstract draft and freezes its definition and ordered answers at finalization", async () => {
+    const { eventId, formVersionId } = await createEventAndForm();
+    const design = await categories.create({ eventId, key: "design", label: "Game design" });
+    const strategy = await categories.create({ eventId, key: "strategy", label: "Strategy" });
+    const draft = await submissions.createDraft({
+      eventId,
+      formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      categoryIds: [design.id],
+      answers: [
+        { questionId: "abstract", value: "An early abstract" },
+        { questionId: "duration", value: 45 },
+      ],
+    });
+
+    const edited = await submissions.saveDraft(eventId, draft.id, {
+      categoryIds: [strategy.id, design.id],
+      answers: [
+        { questionId: "duration", value: 60 },
+        { questionId: "abstract", value: "The final abstract" },
+      ],
+    });
+    await forms.createVersion(
+      eventId,
+      (await client.cfpFormVersion.findUniqueOrThrow({ where: { id: formVersionId } })).formId,
+      definition("A later form definition"),
+    );
+    const finalized = await submissions.finalize(eventId, draft.id);
+
+    assert.equal(edited.revisions.length, 2);
+    assert.deepEqual(finalized.categoryIds, [strategy.id, design.id]);
+    assert.equal(finalized.status, CfpSubmissionStatus.SUBMITTED);
+    assert.ok(finalized.submittedAt);
+    assert.deepEqual(
+      finalized.revisions.map(({ versionNumber, kind }) => [versionNumber, kind]),
+      [
+        [1, CfpSubmissionRevisionKind.DRAFT],
+        [2, CfpSubmissionRevisionKind.DRAFT],
+        [3, CfpSubmissionRevisionKind.FINAL],
+      ],
+    );
+    const finalRevision = finalized.revisions[2];
+    assert.equal(finalRevision?.definition.title, "Board Game Design CFP");
+    assert.deepEqual(finalRevision?.answers, [
+      { questionId: "duration", value: 60 },
+      { questionId: "abstract", value: "The final abstract" },
+    ]);
+  });
+
+  test("finalizes a guaranteed session exactly once", async () => {
+    const { eventId, formVersionId } = await createEventAndForm();
+    const guaranteed = await submissions.createDraft({
+      eventId,
+      formVersionId,
+      kind: CfpSubmissionKind.GUARANTEED_SESSION,
+      answers: [
+        { questionId: "abstract", value: "Invited keynote" },
+        { questionId: "duration", value: 60 },
+      ],
+    });
+
+    const finalized = await submissions.finalize(eventId, guaranteed.id);
+
+    assert.equal(finalized.kind, CfpSubmissionKind.GUARANTEED_SESSION);
+    assert.equal(finalized.revisions.filter(({ kind }) => kind === CfpSubmissionRevisionKind.FINAL).length, 1);
+    await expectRepositoryError(submissions.finalize(eventId, guaranteed.id), "invalid-input");
+    assert.equal(
+      await client.cfpSubmissionRevision.count({
+        where: { submissionId: guaranteed.id, kind: CfpSubmissionRevisionKind.FINAL },
+      }),
+      1,
+    );
+  });
+
+  test("audits the allowed review outcomes and reserves confirmation for the speaker path", async () => {
+    const { eventId, formVersionId } = await createEventAndForm();
+    const draft = await submissions.createDraft({
+      eventId,
+      formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      answers: [{ questionId: "abstract", value: "A cooperative design talk" }],
+    });
+    await submissions.finalize(eventId, draft.id);
+
+    await expectRepositoryError(
+      submissions.transition(eventId, draft.id, CfpSubmissionStatus.ACCEPTED, { actorId: "admin-1" }),
+      "invalid-input",
+    );
+    await submissions.transition(eventId, draft.id, CfpSubmissionStatus.UNDER_REVIEW, { actorId: "admin-1" });
+    await submissions.transition(eventId, draft.id, CfpSubmissionStatus.WAITLISTED, { actorId: "admin-2" });
+    const accepted = await submissions.transition(eventId, draft.id, CfpSubmissionStatus.ACCEPTED, {
+      actorId: "admin-2",
+      note: "A slot opened",
+    });
+
+    assert.ok(accepted.reviewStartedAt);
+    assert.ok(accepted.decidedAt);
+    await expectRepositoryError(
+      submissions.transition(eventId, draft.id, CfpSubmissionStatus.CONFIRMED, { actorId: "admin-2" }),
+      "invalid-input",
+    );
+    const confirmed = await submissions.confirm(eventId, draft.id, "speaker-1");
+    assert.equal(confirmed.status, CfpSubmissionStatus.CONFIRMED);
+    assert.ok(confirmed.confirmedAt);
+    assert.deepEqual(
+      confirmed.transitions.map(({ fromStatus, toStatus, actor }) => [fromStatus, toStatus, actor]),
+      [
+        [null, CfpSubmissionStatus.DRAFT, CfpSubmissionTransitionActor.SYSTEM],
+        [CfpSubmissionStatus.DRAFT, CfpSubmissionStatus.SUBMITTED, CfpSubmissionTransitionActor.SYSTEM],
+        [CfpSubmissionStatus.SUBMITTED, CfpSubmissionStatus.UNDER_REVIEW, CfpSubmissionTransitionActor.ADMIN],
+        [CfpSubmissionStatus.UNDER_REVIEW, CfpSubmissionStatus.WAITLISTED, CfpSubmissionTransitionActor.ADMIN],
+        [CfpSubmissionStatus.WAITLISTED, CfpSubmissionStatus.ACCEPTED, CfpSubmissionTransitionActor.ADMIN],
+        [
+          CfpSubmissionStatus.ACCEPTED,
+          CfpSubmissionStatus.CONFIRMED,
+          CfpSubmissionTransitionActor.SPEAKER_CONFIRMATION,
+        ],
+      ],
+    );
+  });
+
+  test("rejects cross-event form and category references and scopes reads by event", async () => {
+    const first = await createEventAndForm("first-event");
+    const second = await createEventAndForm("second-event");
+    const secondCategory = await categories.create({ eventId: second.eventId, key: "other", label: "Other" });
+
+    await expectRepositoryError(
+      submissions.createDraft({
+        eventId: first.eventId,
+        formVersionId: second.formVersionId,
+        kind: CfpSubmissionKind.ABSTRACT,
+        answers: [],
+      }),
+      "not-found",
+    );
+    await expectRepositoryError(
+      submissions.createDraft({
+        eventId: first.eventId,
+        formVersionId: first.formVersionId,
+        kind: CfpSubmissionKind.ABSTRACT,
+        categoryIds: [secondCategory.id],
+        answers: [],
+      }),
+      "not-found",
+    );
+    const firstSubmission = await submissions.createDraft({
+      eventId: first.eventId,
+      formVersionId: first.formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      answers: [],
+    });
+    assert.equal(await submissions.get(second.eventId, firstSubmission.id), null);
+  });
+});
