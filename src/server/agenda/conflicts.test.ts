@@ -1,6 +1,7 @@
+import { describe, test } from "vitest";
+
 import { type AgendaBounds, type AgendaPlacement, validateAgendaConflicts } from "./conflicts.ts";
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
 
 const bounds: AgendaBounds = {
   startsAt: new Date("2027-03-14T16:00:00.000Z"),
