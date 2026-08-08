@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { users } from "@/data/users";
 import { cn } from "@/lib/utils";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getPreference } from "@/server/server-actions";
 
@@ -20,7 +21,7 @@ import { ThemeSwitcher } from "./_components/header/theme-switcher";
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
   const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
   const session = await auth.api.getSession({ headers: requestHeaders });
-  if (!session) {
+  if (!isAuthorizedAdminSession(session)) {
     redirect("/auth/v1/login");
   }
 

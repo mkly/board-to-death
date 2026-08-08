@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { PrismaClient } from "@/generated/prisma/client";
 
+import { isAuthorizedAdminSession } from "./admin-access";
 import { createAuth } from "./auth-factory";
 
 const baseURL = "http://localhost:3000";
@@ -98,6 +99,17 @@ describe("admin magic-link authentication", () => {
     expect(session?.user.email).toBe(testEmail);
     expect(replay.headers.get("location")).toContain("error=INVALID_TOKEN");
     expect(forged).toBeNull();
+
+    const originalAllowedEmails = process.env.AUTH_ALLOWED_EMAILS;
+    try {
+      process.env.AUTH_ALLOWED_EMAILS = `  ${testEmail.toUpperCase()}  `;
+      expect(isAuthorizedAdminSession(session)).toBe(true);
+
+      process.env.AUTH_ALLOWED_EMAILS = "another-admin@example.test";
+      expect(isAuthorizedAdminSession(session)).toBe(false);
+    } finally {
+      process.env.AUTH_ALLOWED_EMAILS = originalAllowedEmails;
+    }
   });
 
   test("refreshes aged sessions, expires old sessions, and revokes on logout", async () => {

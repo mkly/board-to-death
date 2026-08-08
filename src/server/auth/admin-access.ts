@@ -9,3 +9,13 @@ export function getAllowedAdminEmails(value = process.env.AUTH_ALLOWED_EMAILS): 
 export function isAllowedAdminEmail(email: string, allowedEmails = getAllowedAdminEmails()): boolean {
   return allowedEmails.has(normalizeEmail(email));
 }
+
+interface AdminSession {
+  readonly user: {
+    readonly email: string;
+  };
+}
+
+export function isAuthorizedAdminSession<T extends AdminSession>(session: T | null | undefined): session is T {
+  return session !== null && session !== undefined && isAllowedAdminEmail(session.user.email);
+}
