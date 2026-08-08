@@ -68,9 +68,13 @@ Do not modify files inside `src/components/ui/` or `src/components/calendar/`. K
 
 ### Setup
 
-This project uses npm.
+This project uses npm on a pinned toolchain: **Node 24.19.0 with the bundled npm 11.17.0**. The version is
+recorded in `.nvmrc` and enforced by the `engines` field in `package.json`. Run `nvm use` (or the equivalent for
+your version manager) before installing or running anything. Do not regenerate `package-lock.json` on any other
+Node or npm version — see "Dependencies and the lockfile" below for why.
 
 ```bash
+nvm use
 npm install
 npm run dev
 ```
@@ -78,16 +82,97 @@ npm run dev
 Available commands:
 
 ```bash
-npm run build
-npm run lint
-npm run format
-npm run check
-npm run check:fix
-npm run generate:presets
-npm run test
+npm run build             # production build
+npm run lint              # biome lint
+npm run format            # biome format --write
+npm run check             # biome check (lint + format + import sorting, read-only)
+npm run check:fix         # biome check --write (applies safe fixes)
+npm run typecheck         # tsc (no emit)
+npm run generate:presets  # regenerate theme presets
+npm run test              # vitest run
+npm run test:infrastructure
 ```
 
 Run build, lint, check, test, or other validation commands only when the user explicitly requests that validation.
+Do not run a production build (`npm run build`) merely to verify a change; run the relevant tests instead so work can complete quickly.
+This is a prototype, and development speed is a priority.
+
+### Formatting and linting
+
+[Biome](https://biomejs.dev) is the only formatter and linter here. There is no ESLint and no Prettier;
+do not add either. Everything is configured in `biome.json`.
+
+- `npm run check` reports formatting, lint, and import-order problems without changing files.
+- `npm run check:fix` is the one command to reach for after editing: it formats, sorts imports, and
+  applies safe lint fixes in a single pass. Prefer it over running `format` and `lint` separately.
+- Formatting is not a matter of taste: two-space indent, 120-character lines, LF endings, double quotes
+  (including JSX), always semicolons, trailing commas everywhere, always-parenthesized arrows.
+- Imports are grouped and blank-line separated in this order: `react` → `next/**` → third-party packages →
+  `@/` aliases → relative paths. Biome's `organizeImports` assist enforces it, so let `check:fix` sort them
+  rather than hand-ordering.
+- Beyond Biome's recommended preset, the Next.js and React domains are on and several rules are errors:
+  `noFloatingPromises`, `noMisusedPromises`, `noUndeclaredDependencies`, `noUndeclaredVariables`,
+  `useNullishCoalescing`, `useFilenamingConvention`, `noImportCycles`. Tailwind class order is enforced by
+  `useSortedClasses`.
+- `src/components/ui/` and `src/components/calendar/` are excluded from Biome, as are `.next`, `dist`, `out`,
+  `.github`, and `.husky`. Biome also honors `.gitignore`. Running `check:fix` will not touch or report on the
+  vendored component directories.
+
+A Husky `pre-commit` hook regenerates theme presets and then runs `lint-staged`, which applies
+`biome check --write` to staged `.js/.ts/.jsx/.tsx` files. Staged code is formatted and auto-fixed at commit
+time, so a commit can change files after you stage them.
+
+Biome does not typecheck. Use `npm run typecheck` for that; it runs `tsc` against the root `tsconfig.json`,
+which already sets `noEmit`.
+
+### Dependencies and the lockfile
+
+`package-lock.json` has been the single largest source of rework in this repository. Treat it as a build
+artifact with strict rules.
+
+- Whenever you change any dependency in `package.json`, regenerate the lockfile and commit both in the same
+  change. A `package.json` dependency edit without a matching lockfile update breaks `npm ci` for everyone.
+- Regenerate only on the pinned toolchain (Node 24.19.0 / npm 11.17.0). Other versions resolve optional and
+  transitive entries differently, which has repeatedly dropped platform-specific packages and broken clean
+  installs.
+- Never hand-edit `package-lock.json`, and never reinstate entries by hand. Let npm produce it and verify the
+  resolved tree instead.
+- Verify with a clean install, not an incremental one: remove `node_modules`, run `npm ci`, and confirm it
+  exits without a "package.json and package-lock.json are not in sync" error.
+- A successful `npm ci` is necessary but not sufficient. Also confirm the regeneration did not strip metadata:
+  every non-bundled entry should keep both `resolved` and `integrity`, and npm's `"peer": true` markers should
+  survive. Losing these silently disables hash verification.
+- State every dependency version change the regeneration introduces, along with any source changes it forces.
+
+Because several agents work in parallel worktrees, `package.json` diverges semantically and not just
+textually — two branches have pinned different majors of the same test runner, producing lockfiles that could
+not merge. Before regenerating a lockfile, rebase onto current `main` and regenerate against the reconciled
+`package.json`. A lockfile regenerated against a stale base will not merge.
+
+### Changes justified by dependencies
+
+Do not edit source to accommodate a dependency version until you have confirmed that version is what
+`package-lock.json` actually installs. Check the lockfile, not the `package.json` range and not the release
+notes — a caret range and an upstream changelog say nothing about what `npm ci` will resolve.
+
+If a change exists to fix a type error, `npm run typecheck` must fail without it. Verify that by reverting the
+change and re-running, then quote the specific error in your summary. A change you cannot make the checker
+fail without does not belong in the diff.
+
+Never bundle a rendering or behavior change into a dependency, lockfile, or tooling fix. Moving a prop between
+components, re-aligning layout, and "while I'm here" cleanups each belong in their own change, where they can
+be reviewed as the visual changes they are.
+
+### Reporting your own work
+
+Every claim in a handoff summary must be one you actually verified on the delivered branch, not one you
+expected to be true when you started. Summaries here have claimed a dependency upgrade that the delivered
+lockfile did not contain, and claimed retained lockfile entries that were not present. Both cost a full review
+round.
+
+Before handing off, re-read your summary line by line and confirm each factual claim against the branch as it
+now stands. If you asserted a version, read it out of the lockfile. If you asserted a check passes, run it. If
+something changed course mid-task, say what actually landed rather than what you set out to do.
 
 ### Co-location-based structure
 
@@ -123,12 +208,13 @@ Keep a component inside its route until it is reused by another feature. Do not 
 
 - TypeScript strict mode is enabled. Use precise types and avoid `any`.
 - Use the existing `@/` import aliases.
-- Follow the Biome configuration: double quotes, semicolons, two-space indentation, sorted imports, and a 120-character line width.
+- Follow the Biome configuration; see "Formatting and linting" above. Let `npm run check:fix` apply it rather than hand-formatting.
 - Avoid unnecessary dependencies.
 - Keep changes focused and do not refactor unrelated files.
 
 ### Contributions
 
+- In reviews, prioritize defects in code that runs; do not require perfect coding practices.
 - Use conventional commit prefixes such as `feat:`, `fix:`, `refactor:`, `docs:`, and `chore:`.
 - Include screenshots for new screens and material visual changes. Include mobile and dark-theme states when relevant.
 - Explain new reusable patterns or dependencies in the pull request.
