@@ -27,6 +27,18 @@ export interface ListSpeakerTaskDefinitionsOptions {
   readonly includeArchived?: boolean;
 }
 
+export interface AssignSpeakerTaskCohortInput {
+  readonly eventId: string;
+  readonly definitionId: string;
+  readonly speakerIds: readonly string[];
+  readonly dueAt?: Date | null;
+}
+
+export interface SpeakerTaskCohortResult {
+  readonly assignments: readonly PersistedSpeakerTaskAssignment[];
+  readonly skippedActiveSpeakerIds: readonly string[];
+}
+
 const definitionInclude = {
   versions: { orderBy: { versionNumber: "asc" } },
 } as const satisfies Prisma.SpeakerTaskDefinitionInclude;
@@ -84,6 +96,53 @@ function validateDefinition(input: SpeakerTaskDefinitionInput) {
     responseRequired,
     responseSchema: input.responseSchema,
   };
+}
+
+function requiresConfirmedSpeaker(applicability: Prisma.JsonValue): boolean {
+  return (
+    typeof applicability === "object" &&
+    applicability !== null &&
+    !Array.isArray(applicability) &&
+    applicability.confirmedOnly === true
+  );
+}
+
+async function requireEligibleSpeakers(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  speakerIds: readonly string[],
+  applicability: Prisma.JsonValue,
+): Promise<void> {
+  const uniqueSpeakerIds = [...new Set(speakerIds)];
+  if (uniqueSpeakerIds.length === 0) invalid("At least one speaker is required.");
+
+  const eligibleStatuses = requiresConfirmedSpeaker(applicability)
+    ? ["CONFIRMED" as const]
+    : ["ACCEPTED" as const, "CONFIRMED" as const];
+  const speakers = await transaction.speaker.findMany({
+    where: {
+      eventId,
+      id: { in: uniqueSpeakerIds },
+    },
+    select: {
+      id: true,
+      submissions: {
+        where: { submission: { eventId, status: { in: eligibleStatuses } } },
+        select: { speakerId: true },
+        take: 1,
+      },
+    },
+  });
+  if (speakers.length !== uniqueSpeakerIds.length) {
+    throw new RepositoryError("not-found", "An event-owned speaker was not found.");
+  }
+  if (speakers.some(({ submissions }) => submissions.length === 0)) {
+    invalid(
+      requiresConfirmedSpeaker(applicability)
+        ? "Every selected speaker must have a confirmed submission for this task."
+        : "Every selected speaker must have an accepted submission for this task.",
+    );
+  }
 }
 
 function mapDatabaseError(error: unknown): never {
@@ -259,11 +318,7 @@ export class SpeakerOnboardingRepository {
         });
         const version = definition?.versions[0];
         if (!version) throw new RepositoryError("not-found", "The event-owned task definition was not found.");
-        const speaker = await transaction.speaker.findFirst({
-          where: { eventId: input.eventId, id: input.speakerId },
-          select: { id: true },
-        });
-        if (!speaker) throw new RepositoryError("not-found", "The event-owned speaker was not found.");
+        await requireEligibleSpeakers(transaction, input.eventId, [input.speakerId], version.applicability);
         const dueAt = resolveDueAt(input.dueAt, version.defaultDueOffsetDays, assignedAt);
         if (dueAt !== null && (!Number.isFinite(dueAt.getTime()) || dueAt < assignedAt)) {
           invalid("dueAt must be a valid date on or after assignedAt.");
@@ -281,6 +336,86 @@ export class SpeakerOnboardingRepository {
         });
       });
       return await this.requireAssignment(input.eventId, assignment.id);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async assignCohort(input: AssignSpeakerTaskCohortInput): Promise<SpeakerTaskCohortResult> {
+    const assignedAt = this.now();
+    const speakerIds = [...new Set(input.speakerIds)];
+    try {
+      const result = await this.client.$transaction(async (transaction) => {
+        const definition = await transaction.speakerTaskDefinition.findFirst({
+          where: { eventId: input.eventId, id: input.definitionId },
+          include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+        });
+        const version = definition?.versions[0];
+        if (!version) throw new RepositoryError("not-found", "The event-owned task definition was not found.");
+        await requireEligibleSpeakers(transaction, input.eventId, speakerIds, version.applicability);
+
+        const dueAt = resolveDueAt(input.dueAt, version.defaultDueOffsetDays, assignedAt);
+        if (dueAt !== null && (!Number.isFinite(dueAt.getTime()) || dueAt < assignedAt)) {
+          invalid("dueAt must be a valid date on or after assignedAt.");
+        }
+
+        const active = await transaction.speakerTaskAssignment.findMany({
+          where: {
+            eventId: input.eventId,
+            definitionId: input.definitionId,
+            speakerId: { in: speakerIds },
+            status: { not: "WITHDRAWN" },
+          },
+          select: { speakerId: true },
+        });
+        const skippedActiveSpeakerIds = active.map(({ speakerId }) => speakerId);
+        const skipped = new Set(skippedActiveSpeakerIds);
+        const createdIds: string[] = [];
+        for (const speakerId of speakerIds) {
+          if (skipped.has(speakerId)) continue;
+          const assignment = await transaction.speakerTaskAssignment.create({
+            data: {
+              eventId: input.eventId,
+              definitionId: input.definitionId,
+              definitionVersionId: version.id,
+              speakerId,
+              assignedAt,
+              dueAt,
+              transitions: { create: { toStatus: "PENDING", occurredAt: assignedAt } },
+            },
+            select: { id: true },
+          });
+          createdIds.push(assignment.id);
+        }
+        return { createdIds, skippedActiveSpeakerIds };
+      });
+      const assignments = await this.client.speakerTaskAssignment.findMany({
+        where: { eventId: input.eventId, id: { in: result.createdIds } },
+        include: assignmentInclude,
+        orderBy: [{ assignedAt: "asc" }, { id: "asc" }],
+      });
+      return { assignments, skippedActiveSpeakerIds: result.skippedActiveSpeakerIds };
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async updateDueDate(
+    eventId: string,
+    assignmentId: string,
+    dueAt: Date | null,
+  ): Promise<PersistedSpeakerTaskAssignment> {
+    try {
+      const assignment = await this.client.speakerTaskAssignment.findFirst({ where: { eventId, id: assignmentId } });
+      if (!assignment) throw new RepositoryError("not-found", "The event-owned task assignment was not found.");
+      if (assignment.status === "APPROVED" || assignment.status === "WITHDRAWN") {
+        invalid("Completed or withdrawn assignments cannot have their due date changed.");
+      }
+      if (dueAt !== null && (!Number.isFinite(dueAt.getTime()) || dueAt < assignment.assignedAt)) {
+        invalid("dueAt must be a valid date on or after assignedAt.");
+      }
+      await this.client.speakerTaskAssignment.update({ where: { id: assignmentId }, data: { dueAt } });
+      return await this.requireAssignment(eventId, assignmentId);
     } catch (error) {
       return mapDatabaseError(error);
     }

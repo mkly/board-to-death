@@ -9,6 +9,7 @@ import { dashboardEventHref, dashboardWorkspaceTitle, isDashboardWorkspace } fro
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
+import { OnboardingWorkspace } from "./_components/onboarding-workspace";
 
 export default async function EventWorkspacePage({
   params,
@@ -31,6 +32,10 @@ export default async function EventWorkspacePage({
   }
 
   const title = dashboardWorkspaceTitle(workspace);
+
+  if (workspace === "onboarding") {
+    return <OnboardingWorkspace event={event} />;
+  }
 
   if (workspace !== "overview") {
     return (

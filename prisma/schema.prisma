@@ -545,7 +545,7 @@ model SpeakerTaskAssignment {
   submissions         SpeakerTaskSubmission[]
   transitions         SpeakerTaskAssignmentTransition[]
 
-  @@unique([definitionId, speakerId])
+  @@index([definitionId, speakerId])
   @@unique([eventId, id])
   @@index([eventId, speakerId, status])
   @@map("speaker_task_assignments")
