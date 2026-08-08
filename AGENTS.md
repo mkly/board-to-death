@@ -160,7 +160,7 @@ npm run typecheck         # tsc (no emit)
 npm run generate:presets  # regenerate theme presets
 npm run test              # vitest run
 npm run test:infrastructure
-npm run test:repositories # event repository integration tests against TEST_DATABASE_URL
+npm run test:repositories # event, CFP, and speaker repository integration tests against TEST_DATABASE_URL
 ```
 
 #### Never run the production build
