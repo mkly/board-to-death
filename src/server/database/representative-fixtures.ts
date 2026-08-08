@@ -7,6 +7,10 @@ import {
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
   EventType,
+  IntegrationProvider,
+  IntegrationRemoteRecordStatus,
+  IntegrationSyncRecordStatus,
+  IntegrationSyncRunStatus,
   type PrismaClient,
   ProgramSessionKind,
   SpeakerTaskAssignmentStatus,
@@ -17,8 +21,10 @@ const id = (suffix: number): string => `00000000-0000-4000-8000-${suffix.toStrin
 export const representativeFixture = {
   eventId: id(1),
   eventSlug: "board-to-death-demo",
+  roomId: id(2),
   formId: id(4),
   formVersionId: id(5),
+  trackId: id(6),
   categoryId: id(8),
   speakerId: id(9),
   submissionId: id(11),
@@ -26,6 +32,8 @@ export const representativeFixture = {
   evaluationPlanId: id(17),
   reviewerId: id(21),
   taskDefinitionId: id(23),
+  agendaPlacementId: id(31),
+  integrationConfigurationId: id(32),
 } as const;
 
 export interface RepresentativeFixtureResult {
@@ -34,13 +42,22 @@ export interface RepresentativeFixtureResult {
   readonly submissionId: string;
   readonly speakerId: string;
   readonly sessionId: string;
+  readonly agendaPlacementId: string;
+  readonly integrationConfigurationId: string;
 }
 
 export async function createRepresentativeFixtures(client: PrismaClient): Promise<RepresentativeFixtureResult> {
   const fixture = representativeFixture;
 
   await client.$transaction(async (transaction) => {
-    await transaction.event.deleteMany({ where: { slug: fixture.eventSlug } });
+    const existingEvent = await transaction.event.findUnique({
+      where: { slug: fixture.eventSlug },
+      select: { id: true },
+    });
+    if (existingEvent) {
+      await transaction.integrationSyncRecord.deleteMany({ where: { eventId: existingEvent.id } });
+      await transaction.event.delete({ where: { id: existingEvent.id } });
+    }
 
     await transaction.event.create({
       data: {
@@ -307,6 +324,19 @@ export async function createRepresentativeFixtures(client: PrismaClient): Promis
       },
     });
 
+    await transaction.agendaPlacement.create({
+      data: {
+        id: fixture.agendaPlacementId,
+        eventId: fixture.eventId,
+        sessionId: fixture.sessionId,
+        roomId: fixture.roomId,
+        startsAt: new Date("2027-03-13T18:00:00.000Z"),
+        endsAt: new Date("2027-03-13T18:45:00.000Z"),
+        tracks: { create: { trackId: fixture.trackId, sortOrder: 0 } },
+        speakers: { create: { speakerId: fixture.speakerId, sortOrder: 0 } },
+      },
+    });
+
     await transaction.speakerTaskAssignment.create({
       data: {
         id: id(29),
@@ -327,6 +357,83 @@ export async function createRepresentativeFixtures(client: PrismaClient): Promis
         },
       },
     });
+
+    await transaction.integrationConfiguration.create({
+      data: {
+        id: fixture.integrationConfigurationId,
+        eventId: fixture.eventId,
+        provider: IntegrationProvider.ACCELEVENTS,
+        versions: {
+          create: {
+            id: id(33),
+            versionNumber: 1,
+            remoteEventId: "demo-event",
+            credentialReference: "local://adapters/accelevents/board-to-death-demo",
+            settings: { adapter: "deterministic", seed: fixture.eventSlug },
+          },
+        },
+        fieldMappings: {
+          create: {
+            id: id(34),
+            resourceType: "speaker",
+            key: "public-profile",
+            versions: {
+              create: {
+                id: id(35),
+                versionNumber: 1,
+                definition: {
+                  email: "profile.email",
+                  firstName: "profile.givenName",
+                  lastName: "profile.familyName",
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await transaction.integrationRemoteRecord.create({
+      data: {
+        id: id(36),
+        eventId: fixture.eventId,
+        configurationId: fixture.integrationConfigurationId,
+        mappingVersionId: id(35),
+        resourceType: "speaker",
+        localId: fixture.speakerId,
+        remoteId: "speaker-demo-ada",
+        status: IntegrationRemoteRecordStatus.ACTIVE,
+        comparisonHash: "demo-speaker-v1",
+        lastSyncedAt: new Date("2027-02-22T18:00:00.000Z"),
+      },
+    });
+
+    await transaction.integrationSyncRun.create({
+      data: {
+        id: id(37),
+        eventId: fixture.eventId,
+        configurationId: fixture.integrationConfigurationId,
+        configurationVersionId: id(33),
+        mappingVersionId: id(35),
+        idempotencyKey: "demo-speaker-push-v1",
+        status: IntegrationSyncRunStatus.SUCCEEDED,
+        startedAt: new Date("2027-02-22T17:59:00.000Z"),
+        completedAt: new Date("2027-02-22T18:00:00.000Z"),
+        records: {
+          create: {
+            id: id(38),
+            remoteRecordId: id(36),
+            resourceType: "speaker",
+            localId: fixture.speakerId,
+            remoteId: "speaker-demo-ada",
+            inputHash: "demo-speaker-v1",
+            status: IntegrationSyncRecordStatus.SUCCEEDED,
+            redactedRequestContext: { fields: ["email", "firstName", "lastName"], credential: "[REDACTED]" },
+            completedAt: new Date("2027-02-22T18:00:00.000Z"),
+          },
+        },
+      },
+    });
   });
 
   return {
@@ -335,5 +442,7 @@ export async function createRepresentativeFixtures(client: PrismaClient): Promis
     submissionId: fixture.submissionId,
     speakerId: fixture.speakerId,
     sessionId: fixture.sessionId,
+    agendaPlacementId: fixture.agendaPlacementId,
+    integrationConfigurationId: fixture.integrationConfigurationId,
   };
 }
