@@ -74,6 +74,7 @@ const TRACK_COLOR_CLASSES: Record<(typeof TRACK_COLORS)[number], string> = {
 
 interface EventSettingsWorkspaceProps {
   readonly eventOptions: readonly EventOption[];
+  readonly eventScoped?: boolean;
   readonly initialSnapshot: EventSettingsSnapshot | null;
 }
 
@@ -344,6 +345,7 @@ function OrderButtons({
 
 export function EventSettingsWorkspace({
   eventOptions: initialEventOptions,
+  eventScoped = false,
   initialSnapshot,
 }: EventSettingsWorkspaceProps) {
   const router = useRouter();
@@ -352,6 +354,11 @@ export function EventSettingsWorkspace({
   const [pending, setPending] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>();
   const [createOpen, setCreateOpen] = useState(initialSnapshot === null);
+
+  const settingsHref = (eventId: string): string =>
+    eventScoped
+      ? `/dashboard/switch-event?eventId=${encodeURIComponent(eventId)}&workspace=settings`
+      : `/dashboard/event-settings?event=${encodeURIComponent(eventId)}`;
 
   async function mutate(key: string, task: () => Promise<MutationResult>): Promise<MutationResult> {
     setPending(key);
@@ -378,7 +385,7 @@ export function EventSettingsWorkspace({
     const result = await mutate("create-event", () => createEvent(formData));
     if (result.ok && result.snapshot) {
       setCreateOpen(false);
-      router.push(`/dashboard/event-settings?event=${result.snapshot.event.id}`);
+      router.push(settingsHref(result.snapshot.event.id));
     }
   }
 
@@ -420,7 +427,7 @@ export function EventSettingsWorkspace({
           <p className="text-muted-foreground text-sm">Manage event identity, schedule, rooms, and program tracks.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Select value={eventId} onValueChange={(value) => router.push(`/dashboard/event-settings?event=${value}`)}>
+          <Select value={eventId} onValueChange={(value) => router.push(settingsHref(value))}>
             <SelectTrigger aria-label="Select event">
               <SelectValue />
             </SelectTrigger>
