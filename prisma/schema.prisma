@@ -77,6 +77,14 @@ enum CfpAdminRole {
   REVIEWER
 }
 
+enum SpeakerTaskAssignmentStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REVISION_REQUESTED
+  WITHDRAWN
+}
+
 model Event {
   id                  String             @id @default(uuid()) @db.Uuid
   name                String
@@ -103,6 +111,9 @@ model Event {
   cfpSubmissions      CfpSubmission[]
   cfpPolicies         CfpPolicy[]
   cfpAdministrators   CfpAdministrator[]
+  speakers            Speaker[]
+  speakerTaskDefinitions SpeakerTaskDefinition[]
+  speakerTaskAssignments SpeakerTaskAssignment[]
 
   @@map("events")
 }
@@ -279,11 +290,159 @@ model CfpSubmission {
   revisions       CfpSubmissionRevision[]
   categories      CfpSubmissionCategory[]
   transitions     CfpSubmissionTransition[]
+  participants    CfpSubmissionParticipant[]
 
   @@unique([eventId, id])
   @@index([eventId, status])
   @@index([formVersionId])
   @@map("cfp_submissions")
+}
+
+model Speaker {
+  id              String                     @id @default(uuid()) @db.Uuid
+  eventId         String                     @db.Uuid
+  normalizedEmail String
+  createdAt       DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                   @updatedAt @db.Timestamptz(3)
+  event           Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  profileVersions SpeakerProfileVersion[]
+  submissions     CfpSubmissionParticipant[]
+  taskAssignments SpeakerTaskAssignment[]
+
+  @@unique([eventId, normalizedEmail])
+  @@unique([eventId, id])
+  @@index([eventId])
+  @@map("speakers")
+}
+
+model SpeakerTaskDefinition {
+  id          String                         @id @default(uuid()) @db.Uuid
+  eventId     String                         @db.Uuid
+  key         String
+  createdAt   DateTime                       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                       @updatedAt @db.Timestamptz(3)
+  event       Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions    SpeakerTaskDefinitionVersion[]
+  assignments SpeakerTaskAssignment[]
+
+  @@unique([eventId, key])
+  @@unique([eventId, id])
+  @@index([eventId])
+  @@map("speaker_task_definitions")
+}
+
+model SpeakerTaskDefinitionVersion {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  eventId              String                  @db.Uuid
+  definitionId         String                  @db.Uuid
+  versionNumber        Int
+  sortOrder            Int
+  title                String
+  description          String?
+  applicability        Json
+  defaultDueOffsetDays Int?
+  responseRequired     Boolean                 @default(false)
+  responseSchema       Json?
+  createdAt            DateTime                @default(now()) @db.Timestamptz(3)
+  definition           SpeakerTaskDefinition   @relation(fields: [eventId, definitionId], references: [eventId, id], onDelete: Cascade)
+  assignments          SpeakerTaskAssignment[]
+
+  @@unique([definitionId, versionNumber])
+  @@unique([eventId, definitionId, id])
+  @@index([eventId, sortOrder])
+  @@map("speaker_task_definition_versions")
+}
+
+model SpeakerTaskAssignment {
+  id                  String                      @id @default(uuid()) @db.Uuid
+  eventId             String                      @db.Uuid
+  definitionId        String                      @db.Uuid
+  definitionVersionId String                      @db.Uuid
+  speakerId           String                      @db.Uuid
+  status              SpeakerTaskAssignmentStatus @default(PENDING)
+  assignedAt          DateTime                    @default(now()) @db.Timestamptz(3)
+  dueAt               DateTime?                   @db.Timestamptz(3)
+  submittedAt         DateTime?                   @db.Timestamptz(3)
+  completedAt         DateTime?                   @db.Timestamptz(3)
+  withdrawnAt         DateTime?                   @db.Timestamptz(3)
+  updatedAt           DateTime                    @updatedAt @db.Timestamptz(3)
+  event               Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  definition          SpeakerTaskDefinition       @relation(fields: [eventId, definitionId], references: [eventId, id], onDelete: Restrict)
+  definitionVersion   SpeakerTaskDefinitionVersion @relation(fields: [eventId, definitionId, definitionVersionId], references: [eventId, definitionId, id], onDelete: Restrict)
+  speaker             Speaker                     @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
+  submissions         SpeakerTaskSubmission[]
+  transitions         SpeakerTaskAssignmentTransition[]
+
+  @@unique([definitionId, speakerId])
+  @@unique([eventId, id])
+  @@index([eventId, speakerId, status])
+  @@map("speaker_task_assignments")
+}
+
+model SpeakerTaskSubmission {
+  id            String                @id @default(uuid()) @db.Uuid
+  assignmentId  String                @db.Uuid
+  attemptNumber Int
+  response      Json?
+  submittedAt   DateTime              @default(now()) @db.Timestamptz(3)
+  assignment    SpeakerTaskAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, attemptNumber])
+  @@index([assignmentId, submittedAt])
+  @@map("speaker_task_submissions")
+}
+
+model SpeakerTaskAssignmentTransition {
+  id           String                       @id @default(uuid()) @db.Uuid
+  assignmentId String                       @db.Uuid
+  fromStatus   SpeakerTaskAssignmentStatus?
+  toStatus     SpeakerTaskAssignmentStatus
+  note         String?
+  occurredAt   DateTime                     @default(now()) @db.Timestamptz(3)
+  assignment   SpeakerTaskAssignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId, occurredAt])
+  @@map("speaker_task_assignment_transitions")
+}
+
+model SpeakerProfileVersion {
+  id                      String   @id @default(uuid()) @db.Uuid
+  speakerId               String   @db.Uuid
+  versionNumber           Int
+  email                   String
+  givenName               String
+  familyName              String
+  preferredName           String?
+  pronouns                String?
+  phone                    String?
+  organization            String?
+  jobTitle                String?
+  biography               String?
+  websiteUrl              String?
+  photoObjectKey          String?
+  consentToPublishProfile Boolean  @default(false)
+  consentToReceiveEmail   Boolean  @default(false)
+  consentedAt             DateTime? @db.Timestamptz(3)
+  createdAt               DateTime @default(now()) @db.Timestamptz(3)
+  speaker                 Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+
+  @@unique([speakerId, versionNumber])
+  @@index([speakerId])
+  @@map("speaker_profile_versions")
+}
+
+model CfpSubmissionParticipant {
+  eventId      String        @db.Uuid
+  submissionId String        @db.Uuid
+  speakerId    String        @db.Uuid
+  sortOrder    Int
+  submission   CfpSubmission @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Cascade)
+  speaker      Speaker       @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
+
+  @@id([submissionId, speakerId])
+  @@unique([submissionId, sortOrder])
+  @@index([eventId, speakerId])
+  @@map("cfp_submission_participants")
 }
 
 model CfpSubmissionRevision {
