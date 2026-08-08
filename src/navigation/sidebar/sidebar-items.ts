@@ -18,6 +18,7 @@ import {
   MessageSquare,
   ReceiptText,
   Server,
+  Settings2,
   ShoppingBag,
   SquareArrowUpRight,
   Users,
@@ -151,6 +152,12 @@ export const sidebarItems: NavGroup[] = [
         title: "Chat",
         url: "/dashboard/chat",
         icon: MessageSquare,
+      },
+      {
+        id: "event-settings",
+        title: "Event Settings",
+        url: "/dashboard/event-settings",
+        icon: Settings2,
       },
       {
         id: "calendar",
