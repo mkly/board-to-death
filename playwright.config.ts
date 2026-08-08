@@ -36,6 +36,7 @@ export default defineConfig({
       BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "quality-gate-better-auth-secret-at-least-32-characters",
       BETTER_AUTH_URL: baseURL,
       AUTH_ALLOWED_EMAILS: process.env.AUTH_ALLOWED_EMAILS ?? "admin@example.test",
+      AUTH_MAGIC_LINK_WEBHOOK_URL: process.env.AUTH_MAGIC_LINK_WEBHOOK_URL ?? "http://127.0.0.1:3199",
       NEXT_PUBLIC_APP_URL: baseURL,
     },
   },
