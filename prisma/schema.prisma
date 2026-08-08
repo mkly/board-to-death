@@ -148,6 +148,12 @@ enum SpeakerTaskAssignmentStatus {
   WITHDRAWN
 }
 
+enum ProgramSessionKind {
+  GUARANTEED
+  MANUAL
+  PROMOTED
+}
+
 model Event {
   id                  String             @id @default(uuid()) @db.Uuid
   name                String
@@ -177,6 +183,8 @@ model Event {
   speakers            Speaker[]
   speakerTaskDefinitions SpeakerTaskDefinition[]
   speakerTaskAssignments SpeakerTaskAssignment[]
+  programSessions     ProgramSession[]
+  programSessionVersions ProgramSessionVersion[]
 
   @@map("events")
 }
@@ -354,6 +362,7 @@ model CfpSubmission {
   categories      CfpSubmissionCategory[]
   transitions     CfpSubmissionTransition[]
   participants    CfpSubmissionParticipant[]
+  promotedSession ProgramSession?              @relation("ProgramSessionSourceSubmission")
 
   @@unique([eventId, id])
   @@index([eventId, status])
@@ -373,6 +382,7 @@ model Speaker {
   taskAssignments SpeakerTaskAssignment[]
   magicLinks      SpeakerMagicLink[]
   sessions        SpeakerSession[]
+  programSessionParticipants ProgramSessionParticipant[]
 
   @@unique([eventId, normalizedEmail])
   @@unique([eventId, id])
@@ -537,6 +547,59 @@ model CfpSubmissionParticipant {
   @@map("cfp_submission_participants")
 }
 
+model ProgramSession {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  eventId            String                  @db.Uuid
+  kind               ProgramSessionKind
+  sourceSubmissionId String?                 @unique @db.Uuid
+  archivedAt         DateTime?               @db.Timestamptz(3)
+  createdAt          DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime                @updatedAt @db.Timestamptz(3)
+  event              Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sourceSubmission   CfpSubmission?          @relation("ProgramSessionSourceSubmission", fields: [eventId, sourceSubmissionId], references: [eventId, id], onDelete: NoAction)
+  versions           ProgramSessionVersion[]
+
+  @@unique([eventId, id])
+  @@unique([eventId, sourceSubmissionId])
+  @@index([eventId, kind, archivedAt])
+  @@map("program_sessions")
+}
+
+model ProgramSessionVersion {
+  id              String                      @id @default(uuid()) @db.Uuid
+  eventId         String                      @db.Uuid
+  sessionId       String                      @db.Uuid
+  versionNumber   Int
+  title           String
+  description     String?
+  durationMinutes Int
+  trackId         String?                     @db.Uuid
+  createdAt       DateTime                    @default(now()) @db.Timestamptz(3)
+  event           Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  session         ProgramSession              @relation(fields: [eventId, sessionId], references: [eventId, id], onDelete: Cascade)
+  track           Track?                      @relation(fields: [eventId, trackId], references: [eventId, id], onDelete: NoAction)
+  participants    ProgramSessionParticipant[]
+
+  @@unique([sessionId, versionNumber])
+  @@unique([eventId, id])
+  @@index([eventId, trackId])
+  @@map("program_session_versions")
+}
+
+model ProgramSessionParticipant {
+  eventId         String                @db.Uuid
+  sessionVersionId String               @db.Uuid
+  speakerId       String                @db.Uuid
+  sortOrder       Int
+  sessionVersion  ProgramSessionVersion @relation(fields: [eventId, sessionVersionId], references: [eventId, id], onDelete: Cascade)
+  speaker         Speaker               @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
+
+  @@id([sessionVersionId, speakerId])
+  @@unique([sessionVersionId, sortOrder])
+  @@index([eventId, speakerId])
+  @@map("program_session_participants")
+}
+
 model CfpSubmissionRevision {
   id                 String                    @id @default(uuid()) @db.Uuid
   submissionId       String                    @db.Uuid
@@ -657,8 +720,10 @@ model Track {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sessionVersions ProgramSessionVersion[]
 
   @@unique([eventId, sortOrder])
+  @@unique([eventId, id])
   @@index([eventId])
   @@map("tracks")
 }
