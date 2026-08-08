@@ -7,13 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum EventType {
-  CONFERENCE
-  MEETUP
-  WORKSHOP
-  OTHER
-}
-
 enum MessageRecipientStatus {
   QUEUED
   RETRY_SCHEDULED
@@ -32,29 +25,65 @@ enum DeliveryFailureClass {
   PERMANENT
 }
 
+enum EventType {
+  CONFERENCE
+  MEETUP
+  WORKSHOP
+  OTHER
+}
+
 model Event {
-  id                  String    @id @default(uuid()) @db.Uuid
+  id                  String          @id @default(uuid()) @db.Uuid
   name                String
-  slug                String    @unique
-  type                EventType @default(CONFERENCE)
+  slug                String          @unique
+  type                EventType       @default(CONFERENCE)
   websiteUrl          String?
   location            String?
+  communicationTemplates CommunicationTemplate[]
+  messageDeliveries      MessageDelivery[]
   timezone            String
-  startsAt            DateTime  @db.Timestamptz(3)
-  endsAt              DateTime  @db.Timestamptz(3)
+  startsAt            DateTime        @db.Timestamptz(3)
+  endsAt              DateTime        @db.Timestamptz(3)
   theme               String?
-  exhibitorsEnabled   Boolean   @default(false)
-  sponsorsEnabled     Boolean   @default(false)
+  exhibitorsEnabled   Boolean         @default(false)
+  sponsorsEnabled     Boolean         @default(false)
   logoObjectKey       String?
   backgroundObjectKey String?
-  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @db.Timestamptz(3)
   rooms               Room[]
   tracks              Track[]
-  communicationTemplates CommunicationTemplate[]
-  messageDeliveries   MessageDelivery[]
 
   @@map("events")
+}
+
+model Room {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @db.Uuid
+  name      String
+  sortOrder Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, sortOrder])
+  @@index([eventId])
+  @@map("rooms")
+}
+
+model Track {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @db.Uuid
+  name      String
+  color     String
+  sortOrder Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, sortOrder])
+  @@index([eventId])
+  @@map("tracks")
 }
 
 model CommunicationTemplate {
@@ -153,33 +182,4 @@ model DeliveryAttempt {
   @@unique([provider, providerMessageId])
   @@index([recipientId, status])
   @@map("delivery_attempts")
-}
-
-model Room {
-  id        String   @id @default(uuid()) @db.Uuid
-  eventId   String   @db.Uuid
-  name      String
-  sortOrder Int
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@unique([eventId, sortOrder])
-  @@index([eventId])
-  @@map("rooms")
-}
-
-model Track {
-  id        String   @id @default(uuid()) @db.Uuid
-  eventId   String   @db.Uuid
-  name      String
-  color     String
-  sortOrder Int
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@unique([eventId, sortOrder])
-  @@index([eventId])
-  @@map("tracks")
 }
