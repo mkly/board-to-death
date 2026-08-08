@@ -174,6 +174,10 @@ no "just to be safe" exception and no "one quick build to confirm" exception.
 - To check formatting, imports, and lint rules, run `npm run check`.
 - To check behavior, run `npm run test` (or the narrower `test:infrastructure` / `test:repositories`).
 - To see a change actually render, use `npm run dev` and the `agent-browser` skill.
+- To run the Playwright browser specs, do **not** reach for `npm run quality` — it chains `npm run build`.
+  Point the web server at the dev server instead, which compiles routes on demand:
+  `PLAYWRIGHT_WEB_SERVER_COMMAND="npm run dev -- --hostname 127.0.0.1 --port 3100" npm run test:browser`
+  (run `npm run db:test:reset` first). Same specs, no production build.
 
 Run the build **only** when the user asks for it in those words — "run the build", "does it build",
 "check the production build". A request to "verify", "make sure it works", "check it compiles", or
