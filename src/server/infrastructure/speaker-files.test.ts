@@ -175,6 +175,45 @@ describe("speaker file lifecycle", () => {
     if (!failedWrite.ok) assert.equal(failedWrite.error.code, "unavailable");
     assert.equal((await storage.get("events/event-1/speakers/speaker-1/object-3")).ok, false);
   });
+
+  test("rejects malformed Unicode filenames without throwing", async () => {
+    const result = await createService().write({
+      ...owner,
+      fileName: "slides\uD800.pdf",
+      contentType: "application/pdf",
+      bytes: Uint8Array.from([1]),
+    });
+
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "invalid-input");
+  });
+
+  test("truncates filenames without splitting an astral character", async () => {
+    const result = await createService().write({
+      ...owner,
+      fileName: `${"a".repeat(254)}💡.pdf`,
+      contentType: "application/pdf",
+      bytes: Uint8Array.from([1]),
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.value.fileName, "a".repeat(254));
+    assert.equal(result.value.fileName.isWellFormed(), true);
+  });
+
+  test("percent-encodes RFC 5987 characters that encodeURIComponent leaves bare", async () => {
+    const result = await createService().write({
+      ...owner,
+      fileName: "speaker's (final)*.pdf",
+      contentType: "application/pdf",
+      bytes: Uint8Array.from([1]),
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.match(result.value.contentDisposition, /filename\*=UTF-8''speaker%27s%20%28final%29%2A\.pdf$/);
+  });
 });
 
 describe("configurable file storage adapters", () => {

@@ -47,6 +47,9 @@ export interface SpeakerFileServiceOptions {
 }
 
 function safeFileName(fileName: string): string | undefined {
+  if (!fileName.isWellFormed()) {
+    return undefined;
+  }
   const baseName = fileName
     .split(/[\\/]/)
     .at(-1)
@@ -60,12 +63,17 @@ function safeFileName(fileName: string): string | undefined {
   if (!baseName || baseName === "." || baseName === "..") {
     return undefined;
   }
-  return baseName.slice(0, 255);
+  const truncatedLength = baseName.length > 255 && /[\uD800-\uDBFF]/.test(baseName.at(254) ?? "") ? 254 : 255;
+  return baseName.slice(0, truncatedLength);
 }
 
 function contentDisposition(fileName: string): string {
   const asciiName = fileName.replaceAll(/[^a-zA-Z0-9._ -]/g, "_").replaceAll('"', "_") || "download";
-  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+  const encodedName = encodeURIComponent(fileName).replaceAll(
+    /[()'*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
 }
 
 function canAccess(owner: SpeakerFileOwner, principal: SpeakerFilePrincipal): boolean {
