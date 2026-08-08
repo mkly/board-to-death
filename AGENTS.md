@@ -84,9 +84,10 @@ npm run format
 npm run check
 npm run check:fix
 npm run generate:presets
+npm run test
 ```
 
-There is currently no automated test command. Run build, lint, check, or other validation commands only when the user explicitly requests that validation.
+Run build, lint, check, test, or other validation commands only when the user explicitly requests that validation.
 
 ### Co-location-based structure
 
