@@ -2,6 +2,10 @@
   "name": "studio-admin",
   "version": "2.2.0",
   "private": true,
+  "engines": {
+    "node": ">=24.19.0 <25",
+    "npm": ">=11.17.0 <12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,10 +22,11 @@
     "db:test:reset": "node scripts/run-test-database-command.mjs prisma migrate reset --force",
     "db:test:smoke": "node scripts/migration-smoke-test.mjs",
     "test:infrastructure": "node --test src/server/infrastructure/infrastructure.test.ts",
+    "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "prepare": "husky",
     "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts",
-    "test": "vitest run"
+    "test": "vitest run && npm run test:infrastructure"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"]
@@ -48,6 +53,7 @@
     "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.6.0",
     "geist": "^1.7.2",
+    "hast-util-sanitize": "^5.0.2",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.30.0",
     "next": "^16.3.0",
@@ -58,8 +64,15 @@
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.85.0",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.12.2",
     "recharts": "^3.8.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
     "server-only": "^0.0.1",
     "shadcn": "^4.16.2",
     "simple-icons": "^16.28.0",
@@ -67,6 +80,8 @@
     "tailwind-merge": "^3.6.0",
     "temporal-polyfill": "^1.0.3",
     "topojson-client": "^3.1.0",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0",
     "vaul": "^1.1.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
@@ -74,7 +89,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
     "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/react": "^16.3.2",
     "@types/d3-geo": "^3.1.1",
+    "@types/hast": "^3.0.4",
     "@types/node": "^22.20.1",
     "@types/pg": "^8.21.0",
     "@types/react": "^19.2.18",
@@ -82,6 +99,7 @@
     "@types/topojson-client": "^3.1.5",
     "babel-plugin-react-compiler": "^1.0.0",
     "husky": "^9.1.7",
+    "jsdom": "^30.0.1",
     "lint-staged": "^16.4.0",
     "postcss": "^8.5.26",
     "prisma": "^7.9.1",

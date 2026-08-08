@@ -16,6 +16,7 @@ import type {
   TokenGeneratorService,
   TokenRequest,
 } from "./contracts.ts";
+import { isSafeObjectKey } from "./object-key.ts";
 import {
   captureInfrastructureResult,
   infrastructureFailure,
@@ -167,7 +168,7 @@ export class InMemoryFileStorage implements FileStorageService {
       return failure;
     }
 
-    if (file.key.trim() === "" || file.contentType.trim() === "") {
+    if (!isSafeObjectKey(file.key) || file.contentType.trim() === "") {
       return infrastructureFailure("file-storage", "invalid-input");
     }
 
@@ -177,6 +178,7 @@ export class InMemoryFileStorage implements FileStorageService {
       contentType: file.contentType,
       size: file.bytes.byteLength,
       etag: `fake-object-${String(this.#writeCount).padStart(4, "0")}`,
+      contentDisposition: file.contentDisposition,
       metadata: { ...file.metadata },
     };
     this.#files.set(file.key, { metadata, bytes: file.bytes.slice() });

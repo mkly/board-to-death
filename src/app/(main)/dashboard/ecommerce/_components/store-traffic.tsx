@@ -190,7 +190,7 @@ export function StoreTraffic() {
               content={<ChartTooltipContent labelFormatter={(value) => formatTrafficTooltipLabel(String(value))} />}
               cursor={{ stroke: "var(--border)", strokeDasharray: "4 4" }}
             />
-            <ChartLegend align="right" verticalAlign="top" className="justify-end" content={<ChartLegendContent />} />
+            <ChartLegend align="right" verticalAlign="top" content={<ChartLegendContent className="justify-end" />} />
             <Area
               dataKey="visitors"
               dot={false}
