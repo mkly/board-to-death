@@ -6,7 +6,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const productionEnvironment = {
+  AUTH_ALLOWED_EMAILS: "admin@example.com",
+  AUTH_MAGIC_LINK_WEBHOOK_TOKEN: "webhook-token",
+  AUTH_MAGIC_LINK_WEBHOOK_URL: "https://mailer.example.com/magic-link",
   AUTH_SECRET: "a-production-secret-with-enough-entropy",
+  BETTER_AUTH_SECRET: "a-production-better-auth-secret-with-enough-entropy",
+  BETTER_AUTH_URL: "https://events.example.com",
   DATABASE_URL: "postgresql://app:password@database.example.com:5432/board_to_death",
   NEXT_PUBLIC_APP_URL: "https://events.example.com",
   NODE_ENV: "production",
@@ -14,7 +19,18 @@ const productionEnvironment = {
 
 const productionProcessEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(
-    ([key]) => !["AUTH_SECRET", "DATABASE_URL", "NEXT_PUBLIC_APP_URL", "NEXT_RUNTIME"].includes(key),
+    ([key]) =>
+      ![
+        "AUTH_ALLOWED_EMAILS",
+        "AUTH_MAGIC_LINK_WEBHOOK_TOKEN",
+        "AUTH_MAGIC_LINK_WEBHOOK_URL",
+        "AUTH_SECRET",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL",
+        "DATABASE_URL",
+        "NEXT_PUBLIC_APP_URL",
+        "NEXT_RUNTIME",
+      ].includes(key),
   ),
 );
 
@@ -37,6 +53,7 @@ test("development and test use isolated local defaults", () => {
   assert.match(development.DATABASE_URL, /\/board_to_death$/);
   assert.match(testConfig.DATABASE_URL, /\/board_to_death_test$/);
   assert.notEqual(development.AUTH_SECRET, testConfig.AUTH_SECRET);
+  assert.notEqual(development.BETTER_AUTH_SECRET, testConfig.BETTER_AUTH_SECRET);
 });
 
 test("production requires every configured server and public value", () => {
@@ -47,6 +64,10 @@ test("production requires every configured server and public value", () => {
       assert.deepEqual(error.issues, [
         "AUTH_SECRET is required when NODE_ENV=production",
         "DATABASE_URL is required when NODE_ENV=production",
+        "BETTER_AUTH_SECRET is required when NODE_ENV=production",
+        "BETTER_AUTH_URL is required when NODE_ENV=production",
+        "AUTH_ALLOWED_EMAILS is required when NODE_ENV=production",
+        "AUTH_MAGIC_LINK_WEBHOOK_URL is required when NODE_ENV=production",
         "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
       ]);
       return true;
@@ -61,14 +82,18 @@ test("invalid supplied values fail in development, test, and production", () => 
         parseServerRuntimeConfig({
           ...productionEnvironment,
           AUTH_SECRET: "too-short",
+          BETTER_AUTH_SECRET: "also-too-short",
+          BETTER_AUTH_URL: "ftp://events.example.com",
           DATABASE_URL: "ftp://database.example.com/board_to_death",
           NODE_ENV,
         }),
       (error: unknown) => {
         assert.ok(error instanceof RuntimeConfigError);
         assert.match(error.message, /AUTH_SECRET must contain at least 32 characters/);
+        assert.match(error.message, /BETTER_AUTH_SECRET must contain at least 32 characters/);
+        assert.match(error.message, /BETTER_AUTH_URL must use the http or https protocol/);
         assert.match(error.message, /DATABASE_URL must use the postgres or postgresql protocol/);
-        assert.doesNotMatch(error.message, /too-short|ftp|database\.example\.com/);
+        assert.doesNotMatch(error.message, /too-short|ftp|database\.example\.com|events\.example\.com/);
         return true;
       },
     );
@@ -131,6 +156,8 @@ test("the public parser returns only its explicit allowlist", () => {
     NEXT_PUBLIC_APP_URL: "https://events.example.com",
   });
   assert.equal("AUTH_SECRET" in publicConfig, false);
+  assert.equal("BETTER_AUTH_SECRET" in publicConfig, false);
+  assert.equal("AUTH_ALLOWED_EMAILS" in publicConfig, false);
   assert.equal("DATABASE_URL" in publicConfig, false);
 });
 
@@ -165,7 +192,7 @@ test("next config loads for production builds without server credentials and war
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /NEXT_PUBLIC_APP_URL is unset during next build/);
   assert.match(result.stderr, /http:\/\/localhost:3000/);
-  assert.doesNotMatch(result.stderr, /AUTH_SECRET|DATABASE_URL/);
+  assert.doesNotMatch(result.stderr, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
 });
 
 test("instrumentation exits production startup with key-only runtime configuration errors", () => {
@@ -174,6 +201,11 @@ test("instrumentation exits production startup with key-only runtime configurati
   const result = runNodeModule(`import { register } from "./src/instrumentation.ts"; await register();`, {
     ...productionProcessEnvironment,
     AUTH_SECRET: authSecret,
+    AUTH_ALLOWED_EMAILS: productionEnvironment.AUTH_ALLOWED_EMAILS,
+    AUTH_MAGIC_LINK_WEBHOOK_TOKEN: productionEnvironment.AUTH_MAGIC_LINK_WEBHOOK_TOKEN,
+    AUTH_MAGIC_LINK_WEBHOOK_URL: productionEnvironment.AUTH_MAGIC_LINK_WEBHOOK_URL,
+    BETTER_AUTH_SECRET: productionEnvironment.BETTER_AUTH_SECRET,
+    BETTER_AUTH_URL: productionEnvironment.BETTER_AUTH_URL,
     DATABASE_URL: databaseUrl,
     NEXT_PUBLIC_APP_URL: productionEnvironment.NEXT_PUBLIC_APP_URL,
     NEXT_RUNTIME: "nodejs",
@@ -204,7 +236,7 @@ test("the client entry point never references server-only keys", async () => {
   const clientModule = await readFile(new URL("./env.client.ts", import.meta.url), "utf8");
   const publicModule = await readFile(new URL("./public-env.ts", import.meta.url), "utf8");
 
-  assert.doesNotMatch(clientModule, /AUTH_SECRET|DATABASE_URL/);
-  assert.doesNotMatch(publicModule, /AUTH_SECRET|DATABASE_URL/);
+  assert.doesNotMatch(clientModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
+  assert.doesNotMatch(publicModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
   assert.match(clientModule, /process\.env\.NEXT_PUBLIC_APP_URL/);
 });

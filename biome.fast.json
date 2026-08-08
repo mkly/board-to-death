@@ -1,0 +1,18 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "extends": ["./biome.json"],
+  "linter": {
+    "rules": {
+      "correctness": { "noUndeclaredDependencies": "off" },
+      "nursery": {
+        "noFloatingPromises": "off",
+        "noMisusedPromises": "off",
+        "useNullishCoalescing": "off"
+      },
+      "suspicious": {
+        "noImportCycles": "off",
+        "noUnnecessaryConditions": "off"
+      }
+    }
+  }
+}
