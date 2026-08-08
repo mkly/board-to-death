@@ -57,41 +57,37 @@ exists (`INCUS_PROFILE=auto`); set `INCUS_PROFILE=` to opt out. Boxes leased
 before this change stay on the `dir` pool and keep working — they simply do
 not get the faster launch until they are re-leased.
 
-### The image ships with no apt sources
+### The image skips crabbox's apt bootstrap
 
 Crabbox's first-boot bootstrap runs `apt-get update` and installs
 `openssh-server ca-certificates curl git rsync jq`. All six are baked into the
 image, so that step's only real work is downloading a 190MB package index to
 find nothing to do — about 20s of every warmup.
 
-Crabbox does have a supported opt-out: `internal/cli/bootstrap.go` skips the
-apt block when `/var/lib/crabbox/image-ready` exists and sshd, the CA bundle,
-curl, git, rsync, and jq are all present. The image touches that marker and
-satisfies every other condition. **But the guard landed 52 commits after
-v0.40.0 and is in no release yet**, so it is currently inert — upgrading
-crabbox does not help.
+Crabbox has a supported opt-out: `internal/cli/bootstrap.go` skips the apt
+block entirely when `/var/lib/crabbox/image-ready` exists and sshd, the CA
+bundle, curl, git, rsync, and jq are all present. The image's last `post-files`
+action touches that marker and asserts every other condition, so a build fails
+loudly rather than silently paying the 20s. Nothing else about apt is special:
+boxes keep normal working sources.
 
-So until that ships, the image also takes the blunt route: it ships with empty
-apt sources and `apt_preserve_sources_list: true`
-(the flag matters: cloud-init regenerates
-`/etc/apt/sources.list.d/ubuntu.sources` on first boot, so emptying the file
-alone would not survive). `apt-get update` then takes 0.11s and the install
-0.02s, because apt still resolves already-installed packages out of dpkg's
-status file.
-
-To install something that is not baked in, restore sources inside the box:
+The guard is **not in any crabbox release** — it landed after v0.40.0 — so this
+only works on a crabbox built from `main`:
 
 ```sh
-sudo enable-apt      # rewrites ubuntu.sources, runs apt-get update
+git clone https://github.com/openclaw/crabbox.git && cd crabbox
+CGO_ENABLED=0 go build -trimpath \
+  -ldflags "-s -w -X github.com/openclaw/crabbox/internal/cli.version=$(git rev-parse --short HEAD)" \
+  -o ~/.local/bin/crabbox ./cmd/crabbox
 ```
 
-If a package is needed on every box, add it to `distrobuilder.yml` instead and
-rebuild the image.
+The local install is `~/.local/bin/crabbox`, ahead of Homebrew on `PATH`; the
+`crabbox` formula is uninstalled. `brew install openclaw/tap/crabbox` puts the
+released build back. On a released crabbox the marker is simply inert — the
+image still works, warmups are just 20s slower.
 
-When a crabbox release ships the `image-ready` guard, drop the empty-sources
-workaround — the last `post-files` action in `distrobuilder.yml`,
-`/etc/cloud/cloud.cfg.d/99-board-to-death-apt.cfg`, and `enable-apt` — keeping
-only the marker. Boxes then get a normal working apt at the same speed.
+If a package is needed on every box, add it to `distrobuilder.yml` and rebuild
+the image.
 
 ---
 

@@ -209,3 +209,20 @@ actions:
     runuser -u dev-loop-smoke -- env PATH=/usr/local/bin:/usr/bin:/bin sh -c \
       'node --version && npm --version && git --version && cc --version'
     userdel --remove dev-loop-smoke
+
+# Crabbox's first-boot bootstrap otherwise runs `apt-get update` and installs
+# openssh-server, ca-certificates, curl, git, rsync, and jq. All six are baked
+# in above, so that step's only real work is downloading a 190 MB package index
+# to find nothing to do -- about 20s of every warmup. internal/cli/bootstrap.go
+# skips the apt block entirely when this marker exists and sshd, the CA bundle,
+# curl, git, rsync, and jq are all present, so assert each condition here
+# rather than assume the package stage delivered them.
+- trigger: post-files
+  action: |-
+    #!/bin/sh
+    set -eux
+    install -d /var/lib/crabbox
+    touch /var/lib/crabbox/image-ready
+    test -x /usr/sbin/sshd
+    test -s /etc/ssl/certs/ca-certificates.crt
+    for tool in curl git rsync jq; do command -v "$tool" >/dev/null; done
