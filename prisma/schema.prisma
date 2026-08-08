@@ -182,6 +182,19 @@ enum SpeakerTaskAssignmentStatus {
   WITHDRAWN
 }
 
+enum EvaluationRoundStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum ReviewerVisibility {
+  IDENTIFIED
+  BLIND
+  ANONYMIZED
+}
+
 model Event {
   id                  String             @id @default(uuid()) @db.Uuid
   name                String
@@ -214,6 +227,8 @@ model Event {
   speakers            Speaker[]
   speakerTaskDefinitions SpeakerTaskDefinition[]
   speakerTaskAssignments SpeakerTaskAssignment[]
+  evaluationPlan        EvaluationPlan?
+  evaluationRounds      EvaluationRound[]
 
   @@map("events")
 }
@@ -534,6 +549,55 @@ model SpeakerTaskAssignmentTransition {
 
   @@index([assignmentId, occurredAt])
   @@map("speaker_task_assignment_transitions")
+}
+
+model EvaluationPlan {
+  id        String            @id @default(uuid()) @db.Uuid
+  eventId   String            @unique @db.Uuid
+  name      String
+  createdAt DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(3)
+  event     Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rounds    EvaluationRound[]
+
+  @@unique([eventId, id])
+  @@map("evaluation_plans")
+}
+
+model EvaluationRound {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  eventId            String                      @db.Uuid
+  planId             String                      @db.Uuid
+  name               String
+  sortOrder          Int
+  status             EvaluationRoundStatus       @default(DRAFT)
+  reviewerVisibility ReviewerVisibility
+  visibilitySnapshot ReviewerVisibility?
+  activatedAt        DateTime?                   @db.Timestamptz(3)
+  closedAt           DateTime?                   @db.Timestamptz(3)
+  archivedAt         DateTime?                   @db.Timestamptz(3)
+  createdAt          DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime                    @updatedAt @db.Timestamptz(3)
+  event              Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  plan               EvaluationPlan              @relation(fields: [eventId, planId], references: [eventId, id], onDelete: Cascade)
+  transitions        EvaluationRoundTransition[]
+
+  @@unique([planId, sortOrder])
+  @@unique([eventId, id])
+  @@index([eventId, status])
+  @@map("evaluation_rounds")
+}
+
+model EvaluationRoundTransition {
+  id         String                @id @default(uuid()) @db.Uuid
+  roundId    String                @db.Uuid
+  fromStatus EvaluationRoundStatus?
+  toStatus   EvaluationRoundStatus
+  occurredAt DateTime              @default(now()) @db.Timestamptz(3)
+  round      EvaluationRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, occurredAt])
+  @@map("evaluation_round_transitions")
 }
 
 model SpeakerProfileVersion {
