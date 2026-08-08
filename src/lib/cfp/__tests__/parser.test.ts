@@ -163,6 +163,35 @@ describe("parseCfpDefinition", () => {
     }
   });
 
+  it("reports every category routing target when no categories are declared", () => {
+    const definition = baseDefinition({
+      categoryRouting: [
+        {
+          id: "route-talk",
+          when: { logic: "all", conditions: [{ questionId: "session-type", operator: "equals", value: "talk" }] },
+          categoryId: "talks",
+        },
+        {
+          id: "route-workshop",
+          when: { logic: "all", conditions: [{ questionId: "session-type", operator: "equals", value: "workshop" }] },
+          categoryId: "workshops",
+        },
+      ],
+    });
+
+    const result = parseCfpDefinition(definition);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "missing_rule_target", path: "categoryRouting.0.categoryId" }),
+          expect.objectContaining({ code: "missing_rule_target", path: "categoryRouting.1.categoryId" }),
+        ]),
+      );
+    }
+  });
+
   it("reports an unknown question type that is neither built-in nor declared custom", () => {
     const definition = baseDefinition();
     definition.sections[0].questions[0].type = "mystery_widget";

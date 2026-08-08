@@ -152,7 +152,7 @@ function findMissingRuleTargetErrors(definition: CfpFormDefinition): CfpParseErr
         );
       }
     });
-    if (definition.categories && !categoryIds.has(rule.categoryId)) {
+    if (!categoryIds.has(rule.categoryId)) {
       errors.push(
         cfpError(
           "missing_rule_target",
