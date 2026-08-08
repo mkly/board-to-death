@@ -87,13 +87,29 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
     {
       id: 1,
       label: "Program workspace",
-      items: workspaces.map(({ id, title, icon }) => ({
-        id,
-        title,
-        icon,
-        url: eventSlug ? dashboardEventHref(eventSlug, id) : "/dashboard",
-        disabled: !eventSlug,
-      })),
+      items: workspaces.map(({ id, title, icon }): NavMainItem => {
+        const url = eventSlug ? dashboardEventHref(eventSlug, id) : "/dashboard";
+        const disabled = !eventSlug;
+        if (id === "evaluations") {
+          return {
+            id,
+            title,
+            icon,
+            disabled,
+            subItems: [
+              { id: "evaluation-rubrics", title: "Rubrics", url, disabled },
+              {
+                id: "evaluation-assignments",
+                title: "Reviewer assignments",
+                url: eventSlug ? `${url}/assignments` : "/dashboard",
+                disabled,
+              },
+            ],
+          };
+        }
+
+        return { id, title, icon, url, disabled };
+      }),
     },
   ];
 }
