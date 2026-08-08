@@ -5,9 +5,10 @@ image:
   variant: cloud
   description: |-
     board-to-death dev-loop box: Node.js 24 LTS + npm, Git, build tooling,
-    and a local PostgreSQL server preinstalled so the Next.js admin starter
-    and its Prisma-backed persistence layer can be imported, installed,
-    built, and tested without production credentials.
+    a local PostgreSQL server, and Playwright's Chromium preinstalled so the
+    Next.js admin starter, its Prisma-backed persistence layer, and its
+    browser tests can be imported, installed, built, and run without
+    production credentials.
   expiry: 30d
 
 source:
@@ -209,6 +210,49 @@ actions:
     runuser -u dev-loop-smoke -- env PATH=/usr/local/bin:/usr/bin:/bin sh -c \
       'node --version && npm --version && git --version && cc --version'
     userdel --remove dev-loop-smoke
+
+# post-files and after node: `playwright install --with-deps chromium` needs npx
+# and installs both the Chromium build and its shared-library dependencies. In a
+# box that costs about four minutes of every browser-test run -- an apt
+# dependency pass plus a ~170 MB browser download -- so bake both into the image.
+#
+# The version is pinned to the @playwright/test entry in package-lock.json. When
+# the lockfile moves to a version whose browser revision differs, Playwright
+# re-downloads it at run time rather than failing, so the image degrades to the
+# old cost instead of breaking; update PLAYWRIGHT_VERSION here to win it back.
+- trigger: post-files
+  action: |-
+    #!/bin/sh
+    set -eux
+    PLAYWRIGHT_VERSION=1.62.1
+
+    # A shared, world-readable browser root, since the Crabbox user is
+    # unprivileged and a per-user ~/.cache/ms-playwright would not be baked in.
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+    export PLAYWRIGHT_BROWSERS_PATH
+    install -d "${PLAYWRIGHT_BROWSERS_PATH}"
+
+    # The package stage cleaned the apt lists, and --with-deps installs packages.
+    apt-get update
+    npx --yes "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+    chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"
+
+    # PAM reads /etc/environment for ssh sessions, so this reaches the
+    # non-interactive `sh -c` commands Crabbox runs; a profile.d script would not.
+    printf 'PLAYWRIGHT_BROWSERS_PATH=%s\n' "${PLAYWRIGHT_BROWSERS_PATH}" \
+      >> /etc/environment
+
+    # Assert the browser is present and executable as a non-root user, rather
+    # than trusting the installer's exit status.
+    chromium_bin="$(find "${PLAYWRIGHT_BROWSERS_PATH}" -type f -name headless_shell -o \
+      -type f -name chrome | head -n 1)"
+    test -n "${chromium_bin}"
+    useradd --create-home --shell /bin/sh playwright-smoke
+    runuser -u playwright-smoke -- "${chromium_bin}" --version
+    userdel --remove playwright-smoke
 
 # Crabbox's first-boot bootstrap otherwise runs `apt-get update` and installs
 # openssh-server, ca-certificates, curl, git, rsync, and jq. All six are baked

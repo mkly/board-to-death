@@ -26,10 +26,19 @@ Anything expected to run longer than ~30s (installs, test suites, image builds, 
 ## Shared Development Image
 
 `distrobuilder.yml` defines the `board-to-death` Incus image: Ubuntu 24.04
-(noble) with Git, build-essential, a pinned Node.js 24 LTS (bundled npm), and
-a local PostgreSQL 16 server preinstalled so the application and its
-Prisma-backed persistence layer can be imported, installed, built, and tested
-without production credentials.
+(noble) with Git, build-essential, a pinned Node.js 24 LTS (bundled npm), a
+local PostgreSQL 16 server, and Playwright's Chromium preinstalled so the
+application, its Prisma-backed persistence layer, and its browser tests can be
+imported, installed, built, and run without production credentials.
+
+Chromium and its shared-library dependencies are baked in at
+`/opt/playwright-browsers`, exported as `PLAYWRIGHT_BROWSERS_PATH` through
+`/etc/environment`, so `npm run test:browser` works in a box without running
+`npx playwright install --with-deps chromium` (an apt pass plus a ~170 MB
+download) first. The version is pinned in `distrobuilder.yml` to match
+`@playwright/test` in `package-lock.json`; if the lockfile moves to a release
+with a different browser revision, Playwright just re-downloads it at run time
+— bump `PLAYWRIGHT_VERSION` in the image definition to win the time back.
 
 The PostgreSQL server is provisioned at boot by
 `board-to-death-pg-bootstrap.service`, which pins the cluster to port 5432 and
