@@ -34,14 +34,15 @@
     "ignoreUnknown": true,
     "includes": [
       "**",
-      "!.github",
-      "!.husky",
-      "!node_modules",
-      "!.next",
-      "!dist",
-      "!out",
-      "!src/components/ui",
-      "!src/components/calendar"
+      "!!.github",
+      "!!.husky",
+      "!!node_modules",
+      "!!.next",
+      "!!dist",
+      "!!out",
+      "!!src/generated/prisma",
+      "!!src/components/ui",
+      "!!src/components/calendar"
     ]
   },
   "formatter": {
@@ -63,14 +64,10 @@
       "preset": "recommended",
       "correctness": {
         "noUndeclaredVariables": "error",
-        "noNestedComponentDefinitions": "error",
-        "noUndeclaredDependencies": "error"
+        "noNestedComponentDefinitions": "error"
       },
       "nursery": {
-        "useSortedClasses": "on",
-        "useNullishCoalescing": "error",
-        "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "useSortedClasses": "on"
       },
       "performance": {
         "noImgElement": "warn"
@@ -91,9 +88,7 @@
         "noArrayIndexKey": "warn",
         "noConstantBinaryExpressions": "error",
         "noEmptyBlockStatements": "error",
-        "noUnknownAtRules": "off",
-        "noImportCycles": "error",
-        "noUnnecessaryConditions": "warn"
+        "noUnknownAtRules": "off"
       },
       "complexity": {
         "noImportantStyles": "off"

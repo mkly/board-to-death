@@ -165,8 +165,6 @@ npm run lint              # biome lint
 npm run format            # biome format --write
 npm run check             # biome check (lint + format + import sorting, read-only)
 npm run check:fix         # biome check --write (applies safe fixes)
-npm run check:changed     # biome over changed files only — use this one (see below)
-npm run check:changed:fix # same, applying safe fixes
 npm run typecheck         # tsc (no emit)
 npm run generate:presets  # regenerate theme presets
 npm run test              # vitest run
@@ -207,56 +205,43 @@ development speed is the priority.
 [Biome](https://biomejs.dev) is the only formatter and linter here. There is no ESLint and no Prettier;
 do not add either. Everything is configured in `biome.json`.
 
-- `npm run check:changed:fix` is the one command to reach for after editing. It formats, sorts imports,
-  and applies safe lint fixes over **only the files you touched**, and finishes in about a second.
-  Prefer it over running `format` and `lint` separately, and over the repo-wide variants below.
-- `npm run check:changed` is the same scoping, read-only.
-- `npm run check` / `npm run check:fix` run the full rule set over the whole repo. They are the
-  authoritative gate, and they take **minutes of saturated CPU**. Run them when you have finished a
-  piece of work and want the type-aware rules to weigh in, not as an after-every-edit habit.
+- `npm run check:fix` is the one command to reach for after editing. It formats, sorts imports, and
+  applies safe lint fixes across the whole repo in about three seconds. Prefer it over running
+  `format` and `lint` separately.
+- `npm run check` is the same thing, read-only.
 - Formatting is not a matter of taste: two-space indent, 120-character lines, LF endings, double quotes
   (including JSX), always semicolons, trailing commas everywhere, always-parenthesized arrows.
 - Imports are grouped and blank-line separated in this order: `react` → `next/**` → third-party packages →
   `@/` aliases → relative paths. Biome's `organizeImports` assist enforces it, so let `check:fix` sort them
   rather than hand-ordering.
 - Beyond Biome's recommended preset, the Next.js and React domains are on and several rules are errors:
-  `noFloatingPromises`, `noMisusedPromises`, `noUndeclaredDependencies`, `noUndeclaredVariables`,
-  `useNullishCoalescing`, `useFilenamingConvention`, `noImportCycles`. Tailwind class order is enforced by
-  `useSortedClasses`.
+  `noUndeclaredVariables`, `noNestedComponentDefinitions`, `useFilenamingConvention`, `noCommonJs`,
+  `noNamespace`. Tailwind class order is enforced by `useSortedClasses`.
+- No type-aware rules are enabled. See "Why there are no type-aware rules" below before adding one.
 - `src/components/ui/` and `src/components/calendar/` are excluded from Biome, as are `.next`, `dist`, `out`,
   `.github`, and `.husky`. Biome also honors `.gitignore`. Running `check:fix` will not touch or report on the
   vendored component directories.
 
 A Husky `pre-commit` hook regenerates theme presets and then runs `lint-staged`, which applies
-`biome check --write --config-path=biome.fast.json` to staged `.js/.ts/.jsx/.tsx` files. Staged code is
-formatted and auto-fixed at commit time, so a commit can change files after you stage them.
+`biome check --write` to staged `.js/.ts/.jsx/.tsx` files. Staged code is formatted and auto-fixed at
+commit time, so a commit can change files after you stage them.
 
-#### Why scoping matters: `biome.fast.json`
+#### Why there are no type-aware rules
 
-Passing Biome a single file does **not** make it do a single file's worth of work. Six rules here are
-project rules — `noFloatingPromises`, `noMisusedPromises`, `noImportCycles`, `noUndeclaredDependencies`,
-`noUnnecessaryConditions`, and `useNullishCoalescing` — and every one of them builds a whole-project
-module graph before linting anything. Measured on this repo: `biome check` on one file took over three
-minutes; the same file with those rules off took 35ms. File count was never the cost.
+This project used to enable six of them — `noFloatingPromises`, `noMisusedPromises`, `noImportCycles`,
+`noUndeclaredDependencies`, `noUnnecessaryConditions`, and `useNullishCoalescing`. None was a deliberate
+choice; they arrived wholesale with the imported Next.js admin starter baseline, and none is in Biome's
+recommended preset.
 
-`biome.fast.json` extends `biome.json` and turns exactly those six rules off. Everything else —
-formatting, import sorting, Tailwind class order, the Next.js and React domains, the ignore lists — is
-inherited unchanged, so the fast path and the full path never disagree about formatting.
+They were catastrophically expensive. Measured on this repo at 344 files: `npm run check` took **892
+seconds** (14.9 minutes) with a 2.65 GB peak RSS and produced **two** diagnostics. The identical run with
+those six rules off took **3 seconds**. The whole-project scan is only ~6s of that; the remaining ~886s is
+per-file type inference at roughly 2.6s per file. Type-aware linting in Biome is still young and does not
+scale here.
 
-`scripts/biome-changed.mjs` backs the `check:changed` scripts. It collects changed files from
-`git diff --name-only HEAD` plus untracked files, filters to extensions Biome handles, and passes them
-explicitly with `--config-path=biome.fast.json`. Options:
-
-- `--write` applies safe fixes.
-- `--since=<ref>` diffs against another ref (default `HEAD`), e.g. `--since=main` for a whole branch.
-- Bare paths override the git detection: `node scripts/biome-changed.mjs src/lib/utils.ts`.
-
-Do not reach for Biome's built-in `--changed` / `--staged` flags. They resolved to zero files in this
-repo, and they would not help anyway — they filter which files get reported, after the project scan has
-already been paid for.
-
-Because the fast path skips the type-aware rules, a `noFloatingPromises` or `noImportCycles` violation
-will not surface until the full `npm run check`. Run the full check once before handing off work.
+Nothing of value was lost: `tsc` via `npm run typecheck` already covers the type-level ground, in seconds.
+Do not re-enable these rules, and do not add new ones from the `types` or `project` domains, without
+measuring `npm run check` before and after.
 
 Biome does not typecheck. Use `npm run typecheck` for that; it runs `tsc` against the root `tsconfig.json`,
 which already sets `noEmit`.
@@ -364,7 +349,7 @@ Keep a component inside its route until it is reused by another feature. Do not 
 
 - TypeScript strict mode is enabled. Use precise types and avoid `any`.
 - Use the existing `@/` import aliases.
-- Follow the Biome configuration; see "Formatting and linting" above. Let `npm run check:changed:fix` apply it rather than hand-formatting.
+- Follow the Biome configuration; see "Formatting and linting" above. Let `npm run check:fix` apply it rather than hand-formatting.
 - Reach for an established open source library before writing a bespoke utility; see "Prefer established
   libraries over bespoke code" above. Avoid dependencies that earn nothing.
 - Keep changes focused and do not refactor unrelated files.

@@ -14,8 +14,6 @@
     "format": "biome format --write",
     "check": "biome check",
     "check:fix": "biome check --write",
-    "check:changed": "node scripts/biome-changed.mjs",
-    "check:changed:fix": "node scripts/biome-changed.mjs --write",
     "test:env": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/config/runtime-env.node-test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -37,7 +35,7 @@
     "quality": "npm run check && npm run typecheck && npm run test && npm run db:test:reset && npm run test:repositories && npm run test:auth && npm run test:authorization && npm run build && npm run test:browser"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched --config-path=biome.fast.json"]
+    "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"]
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
