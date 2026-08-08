@@ -250,6 +250,7 @@ model Event {
   programSessions     ProgramSession[]
   programSessionVersions ProgramSessionVersion[]
   integrationConfigurations IntegrationConfiguration[]
+  agendaPlacements    AgendaPlacement[]
 
   @@map("events")
 }
@@ -450,6 +451,7 @@ model Speaker {
   magicLinks      SpeakerMagicLink[]
   sessions        SpeakerSession[]
   programSessionParticipants ProgramSessionParticipant[]
+  agendaPlacementSpeakers AgendaPlacementSpeaker[]
 
   @@unique([eventId, normalizedEmail])
   @@unique([eventId, id])
@@ -626,6 +628,7 @@ model ProgramSession {
   event              Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sourceSubmission   CfpSubmission?          @relation("ProgramSessionSourceSubmission", fields: [eventId, sourceSubmissionId], references: [eventId, id], onDelete: NoAction)
   versions           ProgramSessionVersion[]
+  agendaPlacement    AgendaPlacement?
 
   @@unique([eventId, id])
   @@unique([eventId, sourceSubmissionId])
@@ -666,6 +669,57 @@ model ProgramSessionParticipant {
   @@unique([sessionVersionId, sortOrder])
   @@index([eventId, speakerId])
   @@map("program_session_participants")
+}
+
+model AgendaPlacement {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @db.Uuid
+  sessionId String   @db.Uuid
+  roomId    String   @db.Uuid
+  startsAt  DateTime @db.Timestamptz(3)
+  endsAt    DateTime @db.Timestamptz(3)
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  session   ProgramSession @relation(fields: [eventId, sessionId], references: [eventId, id], onDelete: Cascade)
+  room      Room     @relation(fields: [eventId, roomId], references: [eventId, id], onDelete: NoAction)
+  tracks    AgendaPlacementTrack[]
+  speakers  AgendaPlacementSpeaker[]
+
+  @@unique([eventId, id])
+  @@unique([eventId, sessionId])
+  @@index([eventId, startsAt, endsAt])
+  @@index([eventId, roomId])
+  @@map("agenda_placements")
+}
+
+model AgendaPlacementTrack {
+  eventId    String          @db.Uuid
+  placementId String         @db.Uuid
+  trackId    String          @db.Uuid
+  sortOrder  Int
+  placement  AgendaPlacement @relation(fields: [eventId, placementId], references: [eventId, id], onDelete: Cascade)
+  track      Track           @relation(fields: [eventId, trackId], references: [eventId, id], onDelete: NoAction)
+
+  @@id([placementId, trackId])
+  @@unique([placementId, sortOrder])
+  @@index([eventId, trackId])
+  @@map("agenda_placement_tracks")
+}
+
+model AgendaPlacementSpeaker {
+  eventId    String          @db.Uuid
+  placementId String         @db.Uuid
+  speakerId  String          @db.Uuid
+  sortOrder  Int
+  placement  AgendaPlacement @relation(fields: [eventId, placementId], references: [eventId, id], onDelete: Cascade)
+  speaker    Speaker         @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
+
+  @@id([placementId, speakerId])
+  @@unique([placementId, sortOrder])
+  @@index([eventId, speakerId])
+  @@map("agenda_placement_speakers")
 }
 
 model CfpSubmissionRevision {
@@ -773,8 +827,10 @@ model Room {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  agendaPlacements AgendaPlacement[]
 
   @@unique([eventId, sortOrder])
+  @@unique([eventId, id])
   @@index([eventId])
   @@map("rooms")
 }
@@ -789,6 +845,7 @@ model Track {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sessionVersions ProgramSessionVersion[]
+  agendaPlacementTracks AgendaPlacementTrack[]
 
   @@unique([eventId, sortOrder])
   @@unique([eventId, id])
