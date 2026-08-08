@@ -371,11 +371,40 @@ model Speaker {
   profileVersions SpeakerProfileVersion[]
   submissions     CfpSubmissionParticipant[]
   taskAssignments SpeakerTaskAssignment[]
+  magicLinks      SpeakerMagicLink[]
+  sessions        SpeakerSession[]
 
   @@unique([eventId, normalizedEmail])
   @@unique([eventId, id])
   @@index([eventId])
   @@map("speakers")
+}
+
+model SpeakerMagicLink {
+  id         String    @id @default(uuid()) @db.Uuid
+  eventId    String    @db.Uuid
+  speakerId  String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  speaker    Speaker   @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Cascade)
+
+  @@index([eventId, speakerId, expiresAt])
+  @@map("speaker_magic_links")
+}
+
+model SpeakerSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @db.Uuid
+  speakerId String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  speaker   Speaker  @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Cascade)
+
+  @@index([eventId, speakerId, expiresAt])
+  @@map("speaker_sessions")
 }
 
 model SpeakerTaskDefinition {
