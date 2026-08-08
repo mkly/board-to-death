@@ -1,37 +1,17 @@
 import { expect, test } from "@playwright/test";
 import { Client } from "pg";
 
+import { signInAsAdmin } from "./fixtures/magic-link-webhook";
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type Server } from "node:http";
 
 const databaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 const eventSlug = "question-editor-conference";
 const formId = randomUUID();
-const webhookPort = 3199;
 const database = new Client({ connectionString: databaseUrl });
-let webhook: Server;
-let resolveMagicLink: ((url: string) => void) | undefined;
-
-function readRequestBody(request: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    request.on("error", reject);
-  });
-}
 
 test.beforeAll(async () => {
-  webhook = createServer(async (request, response) => {
-    const body = JSON.parse(await readRequestBody(request)) as { text?: string };
-    const link = body.text?.match(/https?:\/\/\S+/)?.[0];
-    if (link) resolveMagicLink?.(link);
-    response.writeHead(204).end();
-  });
-  await new Promise<void>((resolve) => webhook.listen(webhookPort, "127.0.0.1", resolve));
-
   await database.connect();
   await database.query('DELETE FROM "events"');
   const eventId = randomUUID();
@@ -91,17 +71,10 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await database.end();
-  await new Promise<void>((resolve, reject) => webhook.close((error) => (error ? reject(error) : resolve())));
 });
 
 test("configures, validates, reorders, removes, saves, and restores CFP questions", async ({ page }) => {
-  const magicLink = new Promise<string>((resolve) => {
-    resolveMagicLink = resolve;
-  });
-  await page.goto("/auth/v1/login");
-  await page.getByRole("textbox", { name: "Email address" }).fill("admin@example.test");
-  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
-  await page.goto(await magicLink);
+  await signInAsAdmin(page);
   await page.goto(`/dashboard/events/${eventSlug}/cfp/forms/${formId}/setup`);
 
   await expect(page.getByRole("heading", { name: "Board Game Design CFP" })).toBeVisible();
