@@ -98,7 +98,7 @@ test("creates, edits, reorders, locks, and reloads an event-scoped rubric", asyn
     ]);
 
     await page.goto(`/dashboard/events/${event.slug}/evaluations`);
-    await expect(page.getByRole("heading", { name: "Evaluation rubrics" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
     await page.getByRole("button", { name: "Add default rubric" }).click();
     await expect(page.getByText("Default 1-to-5 rubric added.")).toBeVisible();
     await expect(page.getByLabel("Label").nth(0)).toHaveValue("Relevance");

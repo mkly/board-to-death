@@ -1,8 +1,13 @@
 import { notFound } from "next/navigation";
 
+import { getDashboardShellData } from "@/app/(main)/dashboard/_lib/dashboard-data";
+import { findAuthorizedEvent } from "@/app/(main)/dashboard/_lib/dashboard-shell";
+import { Separator } from "@/components/ui/separator";
 import { getDatabaseClient } from "@/server/database/client";
+import { EvaluationPlanRepository } from "@/server/evaluations";
 import { EvaluationRubricRepository } from "@/server/evaluations/rubrics";
 
+import { EvaluationPlanWorkspace } from "./_components/evaluation-plan-workspace";
 import { EvaluationRubricWorkspace } from "./_components/evaluation-rubric-workspace";
 
 interface EvaluationRubricPageProps {
@@ -11,14 +16,36 @@ interface EvaluationRubricPageProps {
 }
 
 export default async function EvaluationRubricPage({ params, searchParams }: EvaluationRubricPageProps) {
-  const [{ eventSlug }, query] = await Promise.all([params, searchParams]);
-  const client = getDatabaseClient();
-  const event = await client.event.findUnique({
-    where: { slug: eventSlug },
-    select: { id: true, name: true, slug: true },
-  });
+  const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
+  const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event) notFound();
 
-  const plans = await new EvaluationRubricRepository(client).list(event.id);
-  return <EvaluationRubricWorkspace event={event} plans={plans} notice={query.notice} error={query.error} />;
+  const client = getDatabaseClient();
+  const [plans, rubricPlans] = await Promise.all([
+    new EvaluationPlanRepository(client).list(event.id),
+    new EvaluationRubricRepository(client).list(event.id),
+  ]);
+
+  return (
+    <div className="flex flex-col gap-8">
+      <header className="flex flex-col gap-2">
+        <p className="text-muted-foreground text-sm">{event.name}</p>
+        <div>
+          <h1 className="font-semibold text-2xl tracking-tight">Evaluations</h1>
+          <p className="text-muted-foreground text-sm">
+            Administer plan versions, ordered review rounds, lifecycle history, reviewer visibility, and scoring
+            rubrics.
+          </p>
+        </div>
+      </header>
+      <EvaluationPlanWorkspace eventSlug={event.slug} plans={plans} />
+      <Separator />
+      <EvaluationRubricWorkspace
+        event={{ slug: event.slug }}
+        plans={rubricPlans}
+        notice={query.notice}
+        error={query.error}
+      />
+    </div>
+  );
 }
