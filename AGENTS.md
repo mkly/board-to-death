@@ -91,6 +91,7 @@ npm run typecheck         # tsc (no emit)
 npm run generate:presets  # regenerate theme presets
 npm run test              # vitest run
 npm run test:infrastructure
+npm run test:repositories # event repository integration tests against TEST_DATABASE_URL
 ```
 
 Run build, lint, check, test, or other validation commands only when the user explicitly requests that validation.

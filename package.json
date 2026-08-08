@@ -22,6 +22,7 @@
     "db:test:reset": "node scripts/run-test-database-command.mjs prisma migrate reset --force",
     "db:test:smoke": "node scripts/migration-smoke-test.mjs",
     "test:infrastructure": "node --test src/server/infrastructure/infrastructure.test.ts",
+    "test:repositories": "node scripts/run-test-database-command.mjs node --test src/server/events/repositories.integration.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "prepare": "husky",
