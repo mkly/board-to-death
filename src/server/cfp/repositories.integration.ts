@@ -1,9 +1,18 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { EventType, PrismaClient } from "../../generated/prisma/client.ts";
+import {
+  CfpAdminRole,
+  CfpDraftPolicy,
+  CfpPolicyStatus,
+  CfpSubmissionKind,
+  EventType,
+  PrismaClient,
+} from "../../generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
+import { CfpAdministratorRepository, CfpPolicyRepository } from "./policies.ts";
 import { CfpFormRepository } from "./repositories.ts";
+import { CfpSubmissionRepository } from "./submissions.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -13,6 +22,9 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for CFP repository i
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const events = new EventRepository(client);
 const forms = new CfpFormRepository(client);
+const policies = new CfpPolicyRepository(client);
+const administrators = new CfpAdministratorRepository(client);
+const submissions = new CfpSubmissionRepository(client);
 
 const eventInput = {
   name: "Board to Death 2027",
@@ -128,6 +140,62 @@ describe("CFP form persistence", () => {
     assert.equal(second.versionNumber, 2);
     assert.equal((await forms.get(event.id, first.formId))?.definition.title, "Second");
     assert.equal((await forms.get(event.id, first.formId, 1))?.definition.title, "First");
+  });
+
+  test("lists latest event-scoped form details with policy state, assignments, and responses", async () => {
+    const event = await events.create(eventInput);
+    const otherEvent = await events.create({ ...eventInput, name: "Other", slug: "other" });
+    const administrator = await administrators.create({
+      eventId: event.id,
+      externalId: "admin-1",
+      displayName: "Ada Lovelace",
+    });
+    const form = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition("First title") });
+    const latest = await forms.createVersion(event.id, form.formId, definition("Latest title"));
+    await policies.create({
+      eventId: event.id,
+      key: "main-cfp",
+      definition: {
+        submissionOpensAt: new Date("2027-01-01T08:00:00.000Z"),
+        submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+        messages: {
+          introduction: "Welcome",
+          submissionConfirmation: "Submitted",
+          closed: "Closed",
+        },
+        conditionalVisibility: [],
+        categoryRouting: [],
+        adminAssignments: [{ administratorId: administrator.id, role: CfpAdminRole.OWNER }],
+      },
+    });
+    await submissions.createDraft({
+      eventId: event.id,
+      formVersionId: (
+        await client.cfpFormVersion.findFirstOrThrow({
+          where: { formId: latest.formId, versionNumber: latest.versionNumber },
+          select: { id: true },
+        })
+      ).id,
+      kind: CfpSubmissionKind.ABSTRACT,
+      answers: [],
+    });
+
+    assert.deepEqual(await forms.list(otherEvent.id), []);
+    assert.deepEqual(await forms.list(event.id), [
+      {
+        id: form.formId,
+        eventId: event.id,
+        key: "main-cfp",
+        title: "Latest title",
+        versionNumber: 2,
+        status: CfpPolicyStatus.DRAFT,
+        submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
+        responseCount: 1,
+        assignedAdministrators: ["Ada Lovelace"],
+      },
+    ]);
   });
 
   test("rejects malformed type-specific constraints before writing", async () => {
