@@ -14,6 +14,24 @@ enum EventType {
   OTHER
 }
 
+enum MessageRecipientStatus {
+  QUEUED
+  RETRY_SCHEDULED
+  DELIVERED
+  FAILED
+}
+
+enum DeliveryAttemptStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum DeliveryFailureClass {
+  TRANSIENT
+  PERMANENT
+}
+
 model Event {
   id                  String    @id @default(uuid()) @db.Uuid
   name                String
@@ -33,8 +51,108 @@ model Event {
   updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
   rooms               Room[]
   tracks              Track[]
+  communicationTemplates CommunicationTemplate[]
+  messageDeliveries   MessageDelivery[]
 
   @@map("events")
+}
+
+model CommunicationTemplate {
+  id        String                         @id @default(uuid()) @db.Uuid
+  eventId   String                         @db.Uuid
+  key       String
+  name      String
+  createdAt DateTime                       @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime                       @updatedAt @db.Timestamptz(3)
+  event     Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions  CommunicationTemplateVersion[]
+
+  @@unique([id, eventId])
+  @@unique([eventId, key])
+  @@index([eventId])
+  @@map("communication_templates")
+}
+
+model CommunicationTemplateVersion {
+  id              String                @id @default(uuid()) @db.Uuid
+  templateId      String                @db.Uuid
+  eventId         String                @db.Uuid
+  version         Int
+  subjectTemplate String
+  htmlTemplate    String
+  textTemplate    String?
+  createdAt       DateTime              @default(now()) @db.Timestamptz(3)
+  template        CommunicationTemplate @relation(fields: [templateId, eventId], references: [id, eventId], onDelete: Cascade)
+  deliveries      MessageDelivery[]
+
+  @@unique([id, eventId])
+  @@unique([templateId, version])
+  @@index([templateId])
+  @@map("communication_template_versions")
+}
+
+model MessageDelivery {
+  id                String                       @id @default(uuid()) @db.Uuid
+  eventId           String                       @db.Uuid
+  templateVersionId String                       @db.Uuid
+  idempotencyKey    String
+  occurrenceKey     String?
+  scheduledFor      DateTime?                    @db.Timestamptz(3)
+  createdAt         DateTime                     @default(now()) @db.Timestamptz(3)
+  event             Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  templateVersion   CommunicationTemplateVersion @relation(fields: [templateVersionId, eventId], references: [id, eventId])
+  recipients        MessageRecipient[]
+
+  @@unique([eventId, idempotencyKey])
+  @@unique([eventId, occurrenceKey])
+  @@index([eventId, scheduledFor])
+  @@index([templateVersionId])
+  @@map("message_deliveries")
+}
+
+model MessageRecipient {
+  id              String                 @id @default(uuid()) @db.Uuid
+  deliveryId      String                 @db.Uuid
+  recipientKey    String
+  email           String
+  displayName     String?
+  subjectSnapshot String
+  htmlSnapshot    String
+  textSnapshot    String?
+  status          MessageRecipientStatus @default(QUEUED)
+  nextAttemptAt   DateTime?               @db.Timestamptz(3)
+  deliveredAt     DateTime?               @db.Timestamptz(3)
+  terminalAt      DateTime?               @db.Timestamptz(3)
+  createdAt       DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                @updatedAt @db.Timestamptz(3)
+  delivery        MessageDelivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  attempts        DeliveryAttempt[]
+
+  @@unique([deliveryId, recipientKey])
+  @@index([deliveryId, status])
+  @@index([status, nextAttemptAt])
+  @@map("message_recipients")
+}
+
+model DeliveryAttempt {
+  id                String                 @id @default(uuid()) @db.Uuid
+  recipientId       String                 @db.Uuid
+  attemptNumber     Int
+  provider          String
+  providerMessageId String?
+  status            DeliveryAttemptStatus @default(PENDING)
+  failureClass      DeliveryFailureClass?
+  failureCode       String?
+  failureMessage    String?
+  startedAt         DateTime               @default(now()) @db.Timestamptz(3)
+  completedAt       DateTime?              @db.Timestamptz(3)
+  createdAt         DateTime               @default(now()) @db.Timestamptz(3)
+  recipient         MessageRecipient       @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientId, attemptNumber])
+  @@unique([provider, providerMessageId])
+  @@index([recipientId, status])
+  @@map("delivery_attempts")
 }
 
 model Room {
