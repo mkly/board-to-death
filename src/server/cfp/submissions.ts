@@ -70,6 +70,42 @@ export interface PersistedCfpSubmission {
   }[];
 }
 
+export interface CfpSubmissionDetail {
+  readonly id: string;
+  readonly kind: CfpSubmissionKind;
+  readonly status: CfpSubmissionStatus;
+  readonly submittedAt: Date | null;
+  readonly reviewStartedAt: Date | null;
+  readonly decidedAt: Date | null;
+  readonly confirmedAt: Date | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly event: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+    readonly timezone: string;
+  };
+  readonly categories: readonly {
+    readonly id: string;
+    readonly label: string;
+  }[];
+  readonly participants: readonly {
+    readonly sortOrder: number;
+    readonly speaker: {
+      readonly id: string;
+      readonly email: string;
+      readonly givenName: string;
+      readonly familyName: string;
+      readonly preferredName: string | null;
+      readonly pronouns: string | null;
+      readonly organization: string | null;
+      readonly jobTitle: string | null;
+    };
+  }[];
+  readonly revision: CfpSubmissionRevisionSnapshot | null;
+}
+
 const formVersionInclude = {
   form: true,
   steps: {
@@ -90,8 +126,33 @@ const submissionInclude = {
   transitions: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }] },
 } as const satisfies Prisma.CfpSubmissionInclude;
 
+const submissionDetailInclude = {
+  event: { select: { id: true, name: true, slug: true, timezone: true } },
+  revisions: {
+    orderBy: { versionNumber: "desc" },
+    take: 1,
+    include: { answers: { orderBy: { sortOrder: "asc" } } },
+  },
+  categories: {
+    orderBy: { sortOrder: "asc" },
+    include: { category: { select: { id: true, label: true } } },
+  },
+  participants: {
+    orderBy: { sortOrder: "asc" },
+    include: {
+      speaker: {
+        select: {
+          id: true,
+          profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 },
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.CfpSubmissionInclude;
+
 type StoredFormVersion = Prisma.CfpFormVersionGetPayload<{ include: typeof formVersionInclude }>;
 type StoredSubmission = Prisma.CfpSubmissionGetPayload<{ include: typeof submissionInclude }>;
+type StoredSubmissionDetail = Prisma.CfpSubmissionGetPayload<{ include: typeof submissionDetailInclude }>;
 
 const adminTransitions: Readonly<Record<CfpSubmissionStatus, readonly CfpSubmissionStatus[]>> = {
   [CfpSubmissionStatus.DRAFT]: [],
@@ -244,6 +305,51 @@ function fromStored(submission: StoredSubmission): PersistedCfpSubmission {
       note,
       occurredAt,
     })),
+  };
+}
+
+function detailFromStored(submission: StoredSubmissionDetail): CfpSubmissionDetail {
+  const storedRevision = submission.revisions[0];
+  return {
+    id: submission.id,
+    kind: submission.kind,
+    status: submission.status,
+    submittedAt: submission.submittedAt,
+    reviewStartedAt: submission.reviewStartedAt,
+    decidedAt: submission.decidedAt,
+    confirmedAt: submission.confirmedAt,
+    createdAt: submission.createdAt,
+    updatedAt: submission.updatedAt,
+    event: submission.event,
+    categories: submission.categories.map(({ category }) => category),
+    participants: submission.participants.map(({ sortOrder, speaker }) => {
+      const profile = speaker.profileVersions[0];
+      if (!profile) throw new Error(`Speaker ${speaker.id} has no profile version.`);
+      return {
+        sortOrder,
+        speaker: {
+          id: speaker.id,
+          email: profile.email,
+          givenName: profile.givenName,
+          familyName: profile.familyName,
+          preferredName: profile.preferredName,
+          pronouns: profile.pronouns,
+          organization: profile.organization,
+          jobTitle: profile.jobTitle,
+        },
+      };
+    }),
+    revision: storedRevision
+      ? {
+          id: storedRevision.id,
+          versionNumber: storedRevision.versionNumber,
+          kind: storedRevision.kind,
+          formVersionId: storedRevision.formVersionId,
+          definition: definitionFromSnapshot(storedRevision.definitionSnapshot),
+          answers: storedRevision.answers.map(({ questionId, value }) => ({ questionId, value })),
+          createdAt: storedRevision.createdAt,
+        }
+      : null,
   };
 }
 
@@ -510,6 +616,14 @@ export class CfpSubmissionRepository {
       include: submissionInclude,
     });
     return submission ? fromStored(submission) : null;
+  }
+
+  async getDetailByEventSlug(eventSlug: string, submissionId: string): Promise<CfpSubmissionDetail | null> {
+    const submission = await this.client.cfpSubmission.findFirst({
+      where: { id: submissionId, event: { slug: eventSlug } },
+      include: submissionDetailInclude,
+    });
+    return submission ? detailFromStored(submission) : null;
   }
 
   private async require(eventId: string, submissionId: string): Promise<PersistedCfpSubmission> {

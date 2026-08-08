@@ -10,6 +10,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
+import { SpeakerRepository } from "../speakers/repositories.ts";
 import { CfpFormRepository } from "./repositories.ts";
 import { CfpCategoryRepository, CfpSubmissionRepository } from "./submissions.ts";
 import assert from "node:assert/strict";
@@ -23,6 +24,7 @@ const events = new EventRepository(client);
 const forms = new CfpFormRepository(client);
 const categories = new CfpCategoryRepository(client);
 const submissions = new CfpSubmissionRepository(client);
+const speakers = new SpeakerRepository(client);
 
 const eventInput = {
   name: "Board to Death 2027",
@@ -233,5 +235,70 @@ describe("CFP submission persistence", () => {
       answers: [],
     });
     assert.equal(await submissions.get(second.eventId, firstSubmission.id), null);
+  });
+
+  test("loads abstract and guaranteed submission details with event-isolated speakers and answers", async () => {
+    const first = await createEventAndForm("detail-event");
+    const second = await createEventAndForm("other-detail-event");
+    const category = await categories.create({ eventId: first.eventId, key: "design", label: "Game design" });
+    const abstract = await submissions.createDraft({
+      eventId: first.eventId,
+      formVersionId: first.formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      categoryIds: [category.id],
+      answers: [
+        { questionId: "abstract", value: "How collaborative games create memorable stories." },
+        { questionId: "duration", value: 45 },
+      ],
+    });
+    await submissions.finalize(first.eventId, abstract.id);
+    const primary = await speakers.create({
+      eventId: first.eventId,
+      email: "alex@example.test",
+      givenName: "Alex",
+      familyName: "Rivera",
+      preferredName: "Lex",
+    });
+    const coSpeaker = await speakers.create({
+      eventId: first.eventId,
+      email: "sam@example.test",
+      givenName: "Sam",
+      familyName: "Lee",
+    });
+    await speakers.replaceSubmissionParticipants(first.eventId, abstract.id, [primary.id, coSpeaker.id]);
+
+    const guaranteed = await submissions.createDraft({
+      eventId: second.eventId,
+      formVersionId: second.formVersionId,
+      kind: CfpSubmissionKind.GUARANTEED_SESSION,
+      answers: [{ questionId: "abstract", value: "Invited keynote" }],
+    });
+    await submissions.finalize(second.eventId, guaranteed.id);
+
+    const detail = await submissions.getDetailByEventSlug("detail-event", abstract.id);
+    assert.equal(detail?.event.id, first.eventId);
+    assert.equal(detail?.kind, CfpSubmissionKind.ABSTRACT);
+    assert.deepEqual(
+      detail?.categories.map(({ label }) => label),
+      ["Game design"],
+    );
+    assert.deepEqual(
+      detail?.participants.map(({ sortOrder, speaker }) => [sortOrder, speaker.email, speaker.preferredName]),
+      [
+        [0, "alex@example.test", "Lex"],
+        [1, "sam@example.test", null],
+      ],
+    );
+    assert.equal(detail?.revision?.kind, CfpSubmissionRevisionKind.FINAL);
+    assert.deepEqual(detail?.revision?.answers, [
+      { questionId: "abstract", value: "How collaborative games create memorable stories." },
+      { questionId: "duration", value: 45 },
+    ]);
+
+    const guaranteedDetail = await submissions.getDetailByEventSlug("other-detail-event", guaranteed.id);
+    assert.equal(guaranteedDetail?.kind, CfpSubmissionKind.GUARANTEED_SESSION);
+    assert.equal(await submissions.getDetailByEventSlug("detail-event", guaranteed.id), null);
+    assert.equal(await submissions.getDetailByEventSlug("other-detail-event", abstract.id), null);
+    assert.equal(await submissions.getDetailByEventSlug("detail-event", "00000000-0000-0000-0000-000000000000"), null);
   });
 });
