@@ -3,7 +3,6 @@ import {
   Calendar,
   ChartBar,
   CheckSquare,
-  ClipboardCheck,
   Fingerprint,
   FolderOpen,
   Forklift,
@@ -159,12 +158,6 @@ export const sidebarItems: NavGroup[] = [
         title: "Event Settings",
         url: "/dashboard/event-settings",
         icon: Settings2,
-      },
-      {
-        id: "evaluations",
-        title: "Evaluations",
-        url: "/dashboard/evaluations",
-        icon: ClipboardCheck,
       },
       {
         id: "calendar",
