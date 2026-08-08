@@ -63,9 +63,15 @@ describe("program workspace navigation", () => {
       "integrations",
       "settings",
     ]);
-    expect(navigation.every((item) => "url" in item && item.url.startsWith("/dashboard/events/tabletop-summit/"))).toBe(
-      true,
-    );
+    const directLinks = navigation.filter((item) => "url" in item);
+    expect(directLinks.every((item) => item.url.startsWith("/dashboard/events/tabletop-summit/"))).toBe(true);
+
+    const evaluations = navigation.find(({ id }) => id === "evaluations");
+    if (!evaluations?.subItems) throw new Error("Expected Evaluations to expose its nested workspaces.");
+    expect(evaluations.subItems.map(({ url }) => url)).toEqual([
+      "/dashboard/events/tabletop-summit/evaluations",
+      "/dashboard/events/tabletop-summit/evaluations/assignments",
+    ]);
   });
 
   test("validates workspace segments before using them in a route", () => {
