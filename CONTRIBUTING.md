@@ -111,6 +111,7 @@ If you’d like a more detailed example of this setup, check out the [Next Coloc
 Run the complete local release gate from a clean checkout with:
 
 ```bash
+cp .env.example .env   # provides DATABASE_URL and TEST_DATABASE_URL; .env is gitignored
 npm ci
 npx playwright install --with-deps chromium
 npm run quality
