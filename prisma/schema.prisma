@@ -14,26 +14,54 @@ enum EventType {
   OTHER
 }
 
+enum CfpSubmissionKind {
+  ABSTRACT
+  GUARANTEED_SESSION
+}
+
+enum CfpSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  WAITLISTED
+  ACCEPTED
+  REJECTED
+  CONFIRMED
+}
+
+enum CfpSubmissionRevisionKind {
+  DRAFT
+  FINAL
+}
+
+enum CfpSubmissionTransitionActor {
+  SYSTEM
+  ADMIN
+  SPEAKER_CONFIRMATION
+}
+
 model Event {
-  id                  String    @id @default(uuid()) @db.Uuid
+  id                  String          @id @default(uuid()) @db.Uuid
   name                String
-  slug                String    @unique
-  type                EventType @default(CONFERENCE)
+  slug                String          @unique
+  type                EventType       @default(CONFERENCE)
   websiteUrl          String?
   location            String?
   timezone            String
-  startsAt            DateTime  @db.Timestamptz(3)
-  endsAt              DateTime  @db.Timestamptz(3)
+  startsAt            DateTime        @db.Timestamptz(3)
+  endsAt              DateTime        @db.Timestamptz(3)
   theme               String?
-  exhibitorsEnabled   Boolean   @default(false)
-  sponsorsEnabled     Boolean   @default(false)
+  exhibitorsEnabled   Boolean         @default(false)
+  sponsorsEnabled     Boolean         @default(false)
   logoObjectKey       String?
   backgroundObjectKey String?
-  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @db.Timestamptz(3)
   rooms               Room[]
   tracks              Track[]
   cfpForms            CfpForm[]
+  cfpCategories       CfpCategory[]
+  cfpSubmissions      CfpSubmission[]
 
   @@map("events")
 }
@@ -53,8 +81,8 @@ model CfpForm {
 }
 
 model CfpFormVersion {
-  id            String        @id @default(uuid()) @db.Uuid
-  formId        String        @db.Uuid
+  id            String                  @id @default(uuid()) @db.Uuid
+  formId        String                  @db.Uuid
   versionNumber Int
   schemaVersion Int
   title         String
@@ -62,13 +90,117 @@ model CfpFormVersion {
   customTypes   Json
   categories    Json?
   categoryRules Json?
-  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
-  form          CfpForm       @relation(fields: [formId], references: [id], onDelete: Cascade)
+  createdAt     DateTime                @default(now()) @db.Timestamptz(3)
+  form          CfpForm                 @relation(fields: [formId], references: [id], onDelete: Cascade)
   steps         CfpFormStep[]
+  submissions   CfpSubmission[]
+  revisions     CfpSubmissionRevision[]
 
   @@unique([formId, versionNumber])
   @@index([formId])
   @@map("cfp_form_versions")
+}
+
+model CfpCategory {
+  id          String                  @id @default(uuid()) @db.Uuid
+  eventId     String                  @db.Uuid
+  key         String
+  label       String
+  description String?
+  createdAt   DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                @updatedAt @db.Timestamptz(3)
+  event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submissions CfpSubmissionCategory[]
+
+  @@unique([eventId, key])
+  @@unique([eventId, id])
+  @@index([eventId])
+  @@map("cfp_categories")
+}
+
+model CfpSubmission {
+  id              String                    @id @default(uuid()) @db.Uuid
+  eventId         String                    @db.Uuid
+  formVersionId   String                    @db.Uuid
+  kind            CfpSubmissionKind
+  status          CfpSubmissionStatus       @default(DRAFT)
+  submittedAt     DateTime?                 @db.Timestamptz(3)
+  reviewStartedAt DateTime?                 @db.Timestamptz(3)
+  decidedAt       DateTime?                 @db.Timestamptz(3)
+  confirmedAt     DateTime?                 @db.Timestamptz(3)
+  createdAt       DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                  @updatedAt @db.Timestamptz(3)
+  event           Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  formVersion     CfpFormVersion            @relation(fields: [formVersionId], references: [id], onDelete: Restrict)
+  revisions       CfpSubmissionRevision[]
+  categories      CfpSubmissionCategory[]
+  transitions     CfpSubmissionTransition[]
+
+  @@unique([eventId, id])
+  @@index([eventId, status])
+  @@index([formVersionId])
+  @@map("cfp_submissions")
+}
+
+model CfpSubmissionRevision {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  submissionId       String                    @db.Uuid
+  versionNumber      Int
+  kind               CfpSubmissionRevisionKind
+  formVersionId      String                    @db.Uuid
+  definitionSnapshot Json
+  createdAt          DateTime                  @default(now()) @db.Timestamptz(3)
+  submission         CfpSubmission             @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  formVersion        CfpFormVersion            @relation(fields: [formVersionId], references: [id], onDelete: Restrict)
+  answers            CfpSubmissionAnswer[]
+
+  @@unique([submissionId, versionNumber])
+  @@index([submissionId, kind])
+  @@index([formVersionId])
+  @@map("cfp_submission_revisions")
+}
+
+model CfpSubmissionAnswer {
+  id         String                @id @default(uuid()) @db.Uuid
+  revisionId String                @db.Uuid
+  questionId String
+  sortOrder  Int
+  value      Json
+  revision   CfpSubmissionRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+
+  @@unique([revisionId, questionId])
+  @@unique([revisionId, sortOrder])
+  @@index([revisionId])
+  @@map("cfp_submission_answers")
+}
+
+model CfpSubmissionCategory {
+  eventId      String        @db.Uuid
+  submissionId String        @db.Uuid
+  categoryId   String        @db.Uuid
+  sortOrder    Int
+  submission   CfpSubmission @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Cascade)
+  category     CfpCategory   @relation(fields: [eventId, categoryId], references: [eventId, id], onDelete: Cascade)
+
+  @@id([submissionId, categoryId])
+  @@unique([submissionId, sortOrder])
+  @@index([eventId, categoryId])
+  @@map("cfp_submission_categories")
+}
+
+model CfpSubmissionTransition {
+  id           String                       @id @default(uuid()) @db.Uuid
+  submissionId String                       @db.Uuid
+  fromStatus   CfpSubmissionStatus?
+  toStatus     CfpSubmissionStatus
+  actor        CfpSubmissionTransitionActor
+  actorId      String?
+  note         String?
+  occurredAt   DateTime                     @default(now()) @db.Timestamptz(3)
+  submission   CfpSubmission                @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, occurredAt])
+  @@map("cfp_submission_transitions")
 }
 
 model CfpFormStep {
