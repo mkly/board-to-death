@@ -72,5 +72,9 @@ describe("program workspace navigation", () => {
     expect(isDashboardWorkspace("billing")).toBe(false);
     expect(dashboardWorkspaceTitle("communications")).toBe("Communications");
     expect(dashboardEventHref("indie games", "overview")).toBe("/dashboard/events/indie%20games/overview");
+    expect(dashboardEventHref("indie games", "communications")).toBe(
+      "/dashboard/events/indie%20games/communications/templates",
+    );
+    expect(dashboardEventHref("indie games", "settings")).toBe("/dashboard/events/indie%20games/settings");
   });
 });

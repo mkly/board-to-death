@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { EmailTemplateRepository } from "@/server/communications/templates";
 import { getDatabaseClient } from "@/server/database/client";
 
+import { getDashboardShellData } from "../../../../_lib/dashboard-data";
+import { findAuthorizedEvent } from "../../../../_lib/dashboard-shell";
 import { EmailTemplateWorkspace } from "./_components/email-template-workspace";
 
 interface EmailTemplatesPageProps {
@@ -10,10 +12,13 @@ interface EmailTemplatesPageProps {
 }
 
 export default async function EmailTemplatesPage({ params }: EmailTemplatesPageProps) {
-  const { eventSlug } = await params;
+  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
+  const authorizedEvent = findAuthorizedEvent(shell.events, eventSlug);
+  if (!authorizedEvent || shell.activeEvent?.id !== authorizedEvent.id) notFound();
+
   const client = getDatabaseClient();
   const event = await client.event.findUnique({
-    where: { slug: eventSlug },
+    where: { id: authorizedEvent.id },
     select: { id: true, name: true, slug: true, startsAt: true, location: true },
   });
   if (!event) notFound();
