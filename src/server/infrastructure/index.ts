@@ -8,6 +8,7 @@ export type {
   AcceleventsService,
   ClockService,
   EmailAddress,
+  EmailAttachment,
   EmailDelivery,
   EmailMessage,
   EmailService,

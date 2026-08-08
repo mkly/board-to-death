@@ -43,12 +43,20 @@ export interface EmailAddress {
   readonly name?: string;
 }
 
+export interface EmailAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: string;
+  readonly disposition?: "attachment" | "inline";
+}
+
 export interface EmailMessage {
   readonly to: readonly EmailAddress[];
   readonly subject: string;
   readonly text: string;
   readonly html?: string;
   readonly idempotencyKey?: string;
+  readonly attachments?: readonly EmailAttachment[];
 }
 
 export interface EmailDelivery {
