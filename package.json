@@ -25,7 +25,7 @@
     "db:test:reset": "node scripts/run-test-database-command.mjs prisma migrate reset --force",
     "db:test:smoke": "node scripts/migration-smoke-test.mjs",
     "test:infrastructure": "node --test src/server/infrastructure/infrastructure.test.ts",
-    "test:repositories": "node scripts/run-test-database-command.mjs node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 src/server/events/repositories.integration.ts src/server/cfp/repositories.integration.ts src/server/cfp/submissions.integration.ts src/server/cfp/policies.integration.ts src/server/communications/persistence.integration.ts src/server/speakers/repositories.integration.ts src/server/speakers/onboarding.integration.ts src/server/speaker-auth/speaker-auth.integration.ts src/server/evaluations/persistence.integration.ts",
+    "test:repositories": "node scripts/run-test-database-command.mjs node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 src/server/events/repositories.integration.ts src/server/cfp/repositories.integration.ts src/server/cfp/submissions.integration.ts src/server/cfp/policies.integration.ts src/server/communications/persistence.integration.ts src/server/speakers/repositories.integration.ts src/server/speakers/onboarding.integration.ts src/server/speaker-auth/speaker-auth.integration.ts src/server/evaluations/persistence.integration.ts src/server/sessions/repositories.integration.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "prepare": "husky",
