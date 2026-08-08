@@ -33,8 +33,78 @@ model Event {
   updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
   rooms               Room[]
   tracks              Track[]
+  cfpForms            CfpForm[]
 
   @@map("events")
+}
+
+model CfpForm {
+  id        String           @id @default(uuid()) @db.Uuid
+  eventId   String           @db.Uuid
+  key       String
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+  event     Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions  CfpFormVersion[]
+
+  @@unique([eventId, key])
+  @@index([eventId])
+  @@map("cfp_forms")
+}
+
+model CfpFormVersion {
+  id            String        @id @default(uuid()) @db.Uuid
+  formId        String        @db.Uuid
+  versionNumber Int
+  schemaVersion Int
+  title         String
+  description   String?
+  customTypes   Json
+  categories    Json?
+  categoryRules Json?
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  form          CfpForm       @relation(fields: [formId], references: [id], onDelete: Cascade)
+  steps         CfpFormStep[]
+
+  @@unique([formId, versionNumber])
+  @@index([formId])
+  @@map("cfp_form_versions")
+}
+
+model CfpFormStep {
+  id          String            @id @default(uuid()) @db.Uuid
+  versionId   String            @db.Uuid
+  key         String
+  kind        String
+  title       String
+  description String?
+  sortOrder   Int
+  version     CfpFormVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  questions   CfpFormQuestion[]
+
+  @@unique([versionId, key])
+  @@unique([versionId, sortOrder])
+  @@index([versionId])
+  @@map("cfp_form_steps")
+}
+
+model CfpFormQuestion {
+  id          String      @id @default(uuid()) @db.Uuid
+  stepId      String      @db.Uuid
+  key         String
+  type        String
+  label       String
+  description String?
+  required    Boolean
+  constraints Json?
+  visibleWhen Json?
+  sortOrder   Int
+  step        CfpFormStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, key])
+  @@unique([stepId, sortOrder])
+  @@index([stepId])
+  @@map("cfp_form_questions")
 }
 
 model Room {
