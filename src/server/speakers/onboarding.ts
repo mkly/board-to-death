@@ -50,6 +50,14 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
+// An explicit null due date is distinct from an absent one: it opts out of the
+// definition's default offset rather than falling back to it.
+function resolveDueAt(dueAt: Date | null | undefined, defaultDueOffsetDays: number | null, assignedAt: Date) {
+  if (dueAt !== undefined) return dueAt;
+  if (defaultDueOffsetDays === null) return null;
+  return new Date(assignedAt.getTime() + defaultDueOffsetDays * 86_400_000);
+}
+
 function validateDefinition(input: SpeakerTaskDefinitionInput) {
   if (!Number.isInteger(input.sortOrder) || input.sortOrder < 0) invalid("sortOrder must be a nonnegative integer.");
   if (
@@ -163,16 +171,7 @@ export class SpeakerOnboardingRepository {
           select: { id: true },
         });
         if (!speaker) throw new RepositoryError("not-found", "The event-owned speaker was not found.");
-        // An explicit null due date is distinct from an absent one: it opts out of the
-        // definition's default offset rather than falling back to it.
-        let dueAt: Date | null;
-        if (input.dueAt !== undefined) {
-          dueAt = input.dueAt;
-        } else if (version.defaultDueOffsetDays === null) {
-          dueAt = null;
-        } else {
-          dueAt = new Date(assignedAt.getTime() + version.defaultDueOffsetDays * 86_400_000);
-        }
+        const dueAt = resolveDueAt(input.dueAt, version.defaultDueOffsetDays, assignedAt);
         if (dueAt !== null && (!Number.isFinite(dueAt.getTime()) || dueAt < assignedAt)) {
           invalid("dueAt must be a valid date on or after assignedAt.");
         }

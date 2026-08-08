@@ -31,7 +31,10 @@
     "prepare": "husky",
     "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts",
     "test": "npm run test:env && vitest run && npm run test:infrastructure",
-    "test:auth": "node scripts/run-test-database-command.mjs vitest run src/server/auth/auth.test.ts"
+    "test:auth": "node scripts/run-test-database-command.mjs vitest run src/server/auth/auth.test.ts",
+    "test:authorization": "vitest run src/server/authorization/authorization.test.ts",
+    "test:browser": "playwright test",
+    "quality": "npm run check && npm run typecheck && npm run test && npm run db:test:reset && npm run test:repositories && npm run test:auth && npm run test:authorization && npm run build && npm run test:browser"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched --config-path=biome.fast.json"]
@@ -92,7 +95,9 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.5.7",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/react": "^16.3.2",
     "@types/d3-geo": "^3.1.1",

@@ -106,6 +106,43 @@ If you’d like a more detailed example of this setup, check out the [Next Coloc
 - Use clear commit messages with conventional prefixes (`feat:`, `fix:`, `chore:`, etc.)
 - Avoid unnecessary dependencies — prefer existing utilities where possible
 
+## Quality and release gate
+
+Run the complete local release gate from a clean checkout with:
+
+```bash
+cp .env.example .env   # provides DATABASE_URL and TEST_DATABASE_URL; .env is gitignored
+npm ci
+npx playwright install --with-deps chromium
+npm run quality
+```
+
+`npm run quality` stops at the first failing stage. It checks formatting and lint rules, TypeScript, unit and
+infrastructure tests, database migrations and repository integration tests, authentication and authorization,
+the production build, and Chromium browser and accessibility smoke tests. Database-backed stages use
+`TEST_DATABASE_URL`; the guard requires its database name to end in `_test` and refuses to use the same database as
+`DATABASE_URL`. Browser tests run the production server against that test database with local magic-link delivery,
+so no production email, storage, or Accelevents credentials are required.
+
+The browser stage writes screenshots and traces to `test-results/` and an HTML report to `playwright-report/` when it
+fails. CI uploads both directories as the `playwright-failure-artifacts` artifact.
+
+To run the browser specs on their own without waiting for a production build, point the Playwright web server at the
+dev server, which compiles routes on demand:
+
+```bash
+npm run db:test:reset
+PLAYWRIGHT_WEB_SERVER_COMMAND="npm run dev -- --hostname 127.0.0.1 --port 3100" npm run test:browser
+```
+
+This verifies the specs and the accessibility assertions but not the production build, so it is a development
+shortcut and not a substitute for `npm run quality`. `PLAYWRIGHT_BASE_URL` overrides the URL the same way.
+
+The separate Incus image smoke test is intentionally outside this portable gate. It requires an x86_64 Linux host
+with Incus, `distrobuilder`, the `crabbox-btrfs` profile, passwordless access to the repository's documented `sudo`
+operation, and a Crabbox build containing the image-ready optimization. On a prepared host, run
+`./scripts/bootstrap-image.sh` independently.
+
 ---
 
 ## Submitting PRs
