@@ -154,6 +154,13 @@ export class EventRepository {
     return this.client.event.findUnique({ where: { id } });
   }
 
+  async list(ids: readonly string[]): Promise<Event[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    return this.client.event.findMany({ where: { id: { in: [...ids] } }, orderBy: { startsAt: "asc" } });
+  }
+
   async update(id: string, input: UpdateEventInput): Promise<Event> {
     const current = await this.get(id);
     if (!current) {
