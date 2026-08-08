@@ -33,6 +33,7 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
 
   return (
     <EventSettingsWorkspace
+      key={initialSnapshot.event.id}
       eventOptions={[{ id: authorizedEvent.id, name: authorizedEvent.name }]}
       initialSnapshot={initialSnapshot}
     />
