@@ -53,6 +53,7 @@ describe("program workspace navigation", () => {
       "overview",
       "cfp",
       "submissions",
+      "sessions",
       "speakers",
       "onboarding",
       "communications",
