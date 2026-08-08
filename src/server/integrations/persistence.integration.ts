@@ -8,6 +8,8 @@ import {
   IntegrationSyncRunStatus,
   PrismaClient,
 } from "../../generated/prisma/client.ts";
+import { RepositoryError } from "../events/repositories.ts";
+import { AcceleventsConfigurationRepository, acceleventsAuditDetails } from "./configuration.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -120,6 +122,59 @@ describe("external integration persistence", () => {
       client.integrationConfiguration.create({
         data: { eventId: event.id, provider: IntegrationProvider.ACCELEVENTS },
       }),
+    );
+  });
+
+  test("stores only a runtime credential reference and redacts configuration responses and audit details", async () => {
+    const event = await createEvent("integration-test-redacted-configuration");
+    const repository = new AcceleventsConfigurationRepository(client);
+    const apiKey = "production-api-key-must-not-persist";
+    const reference = `secret://events/${event.id}/accelevents`;
+
+    const first = await repository.save({
+      eventId: event.id,
+      remoteEventId: "remote-event-42",
+      credentialReference: reference,
+    });
+    const second = await repository.save({
+      eventId: event.id,
+      remoteEventId: "remote-event-43",
+      credentialReference: reference,
+    });
+    const stored = await client.integrationConfigurationVersion.findMany({
+      where: { configurationId: first.id },
+      orderBy: { versionNumber: "asc" },
+    });
+
+    assert.deepEqual(
+      stored.map(({ versionNumber, remoteEventId }) => [versionNumber, remoteEventId]),
+      [
+        [1, "remote-event-42"],
+        [2, "remote-event-43"],
+      ],
+    );
+    assert.equal(
+      stored.every(({ credentialReference: storedReference }) => storedReference === reference),
+      true,
+    );
+    assert.equal(JSON.stringify(stored).includes(apiKey), false);
+    assert.equal(JSON.stringify(second).includes(reference), false);
+    assert.equal(JSON.stringify(second).includes(apiKey), false);
+    assert.deepEqual(acceleventsAuditDetails(second), {
+      configurationId: second.id,
+      eventId: event.id,
+      provider: "accelevents",
+      remoteEventId: "remote-event-43",
+      credential: "[REDACTED]",
+      versionNumber: 2,
+    });
+    await assert.rejects(
+      repository.save({
+        eventId: event.id,
+        remoteEventId: "remote-event-44",
+        credentialReference: apiKey,
+      }),
+      (error: unknown) => error instanceof RepositoryError && error.code === "invalid-input",
     );
   });
 
