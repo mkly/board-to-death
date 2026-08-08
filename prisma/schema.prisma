@@ -488,6 +488,7 @@ model SpeakerTaskDefinition {
   id          String                         @id @default(uuid()) @db.Uuid
   eventId     String                         @db.Uuid
   key         String
+  archivedAt  DateTime?                      @db.Timestamptz(3)
   createdAt   DateTime                       @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime                       @updatedAt @db.Timestamptz(3)
   event       Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -496,7 +497,7 @@ model SpeakerTaskDefinition {
 
   @@unique([eventId, key])
   @@unique([eventId, id])
-  @@index([eventId])
+  @@index([eventId, archivedAt])
   @@map("speaker_task_definitions")
 }
 

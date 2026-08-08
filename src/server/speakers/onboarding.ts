@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient, SpeakerTaskAssignmentStatus } from "../../generated/prisma/client.ts";
+import { Prisma, type PrismaClient, type SpeakerTaskAssignmentStatus } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export interface SpeakerTaskDefinitionInput {
@@ -21,6 +21,10 @@ export interface AssignSpeakerTaskInput {
   readonly definitionId: string;
   readonly speakerId: string;
   readonly dueAt?: Date | null;
+}
+
+export interface ListSpeakerTaskDefinitionsOptions {
+  readonly includeArchived?: boolean;
 }
 
 const definitionInclude = {
@@ -144,15 +148,104 @@ export class SpeakerOnboardingRepository {
     }
   }
 
-  async listDefinitions(eventId: string): Promise<PersistedSpeakerTaskDefinition[]> {
+  async listDefinitions(
+    eventId: string,
+    options: ListSpeakerTaskDefinitionsOptions = {},
+  ): Promise<PersistedSpeakerTaskDefinition[]> {
     const definitions = await this.client.speakerTaskDefinition.findMany({
-      where: { eventId },
+      where: { eventId, ...(options.includeArchived ? {} : { archivedAt: null }) },
       include: definitionInclude,
     });
     return definitions.sort((left, right) => {
       const leftVersion = left.versions.at(-1);
       const rightVersion = right.versions.at(-1);
       return (leftVersion?.sortOrder ?? 0) - (rightVersion?.sortOrder ?? 0) || left.key.localeCompare(right.key);
+    });
+  }
+
+  async getDefinition(eventId: string, definitionId: string): Promise<PersistedSpeakerTaskDefinition | null> {
+    return this.client.speakerTaskDefinition.findFirst({
+      where: { eventId, id: definitionId },
+      include: definitionInclude,
+    });
+  }
+
+  async reorderDefinitions(eventId: string, orderedIds: readonly string[]): Promise<PersistedSpeakerTaskDefinition[]> {
+    try {
+      const current = await this.listDefinitions(eventId);
+      const currentIds = new Set(current.map(({ id }) => id));
+      if (
+        orderedIds.length !== current.length ||
+        new Set(orderedIds).size !== orderedIds.length ||
+        orderedIds.some((id) => !currentIds.has(id))
+      ) {
+        invalid("orderedIds must contain every active event-owned task definition exactly once.");
+      }
+
+      const byId = new Map(current.map((definition) => [definition.id, definition]));
+      await this.client.$transaction(async (transaction) => {
+        for (const [sortOrder, definitionId] of orderedIds.entries()) {
+          const definition = byId.get(definitionId);
+          const latest = definition?.versions.at(-1);
+          if (!latest) throw new RepositoryError("not-found", "The event-owned task definition was not found.");
+          if (latest.sortOrder === sortOrder) continue;
+          await transaction.speakerTaskDefinitionVersion.create({
+            data: {
+              eventId,
+              definitionId,
+              versionNumber: latest.versionNumber + 1,
+              sortOrder,
+              title: latest.title,
+              description: latest.description,
+              applicability: latest.applicability as Prisma.InputJsonValue,
+              defaultDueOffsetDays: latest.defaultDueOffsetDays,
+              responseRequired: latest.responseRequired,
+              responseSchema: latest.responseSchema === null ? Prisma.DbNull : latest.responseSchema,
+            },
+          });
+        }
+      });
+      return this.listDefinitions(eventId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async archiveDefinition(eventId: string, definitionId: string): Promise<PersistedSpeakerTaskDefinition> {
+    try {
+      const result = await this.client.speakerTaskDefinition.updateMany({
+        where: { eventId, id: definitionId, archivedAt: null },
+        data: { archivedAt: this.now() },
+      });
+      if (result.count === 0) {
+        throw new RepositoryError("not-found", "The active event-owned task definition was not found.");
+      }
+      return await this.requireDefinition(eventId, definitionId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async duplicateDefinition(
+    eventId: string,
+    definitionId: string,
+    key: string,
+  ): Promise<PersistedSpeakerTaskDefinition> {
+    const source = await this.getDefinition(eventId, definitionId);
+    const latest = source?.versions.at(-1);
+    if (!source || !latest) {
+      throw new RepositoryError("not-found", "The event-owned task definition was not found.");
+    }
+    return this.createDefinition({
+      eventId,
+      key,
+      sortOrder: (await this.listDefinitions(eventId)).length,
+      title: `${latest.title} copy`,
+      description: latest.description,
+      applicability: latest.applicability as Prisma.InputJsonValue,
+      defaultDueOffsetDays: latest.defaultDueOffsetDays,
+      responseRequired: latest.responseRequired,
+      responseSchema: latest.responseSchema ?? undefined,
     });
   }
 

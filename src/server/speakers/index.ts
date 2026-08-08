@@ -1,6 +1,7 @@
 export {
   type AssignSpeakerTaskInput,
   type CreateSpeakerTaskDefinitionInput,
+  type ListSpeakerTaskDefinitionsOptions,
   type PersistedSpeakerTaskAssignment,
   type PersistedSpeakerTaskDefinition,
   SpeakerOnboardingRepository,

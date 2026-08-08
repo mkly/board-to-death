@@ -91,6 +91,94 @@ describe("speaker onboarding persistence", () => {
     assert.deepEqual(updated.versions[0]?.responseSchema, { type: "object", required: ["objectKey"] });
   });
 
+  test("edits, reorders, duplicates, and archives definitions within one event", async () => {
+    const eventId = await createEvent("definition-lifecycle");
+    const otherEventId = await createEvent("other-definition-lifecycle");
+    const biography = await createDefinition(eventId, "biography", 0);
+    const headshot = await createDefinition(eventId, "headshot", 1);
+
+    const edited = await onboarding.createDefinitionVersion(eventId, headshot.id, {
+      sortOrder: 1,
+      title: "Upload a high-resolution headshot",
+      description: "Use a square image.",
+      applicability: { confirmedOnly: true, sessionKinds: ["TALK"] },
+      defaultDueOffsetDays: 7,
+      responseRequired: true,
+      responseSchema: { type: "object", required: ["objectKey"] },
+    });
+    assert.equal(edited.versions.at(-1)?.versionNumber, 2);
+
+    const reordered = await onboarding.reorderDefinitions(eventId, [headshot.id, biography.id]);
+    assert.deepEqual(
+      reordered.map(({ id, versions }) => [id, versions.at(-1)?.sortOrder]),
+      [
+        [headshot.id, 0],
+        [biography.id, 1],
+      ],
+    );
+
+    const duplicate = await onboarding.duplicateDefinition(eventId, headshot.id, "headshot-copy");
+    assert.notEqual(duplicate.id, headshot.id);
+    assert.equal(duplicate.versions.at(-1)?.title, "Upload a high-resolution headshot copy");
+    assert.equal(await client.speakerTaskAssignment.count({ where: { definitionId: duplicate.id } }), 0);
+
+    const archived = await onboarding.archiveDefinition(eventId, biography.id);
+    assert.deepEqual(archived.archivedAt, currentTime);
+    assert.deepEqual(
+      (await onboarding.listDefinitions(eventId)).map(({ id }) => id),
+      [headshot.id, duplicate.id],
+    );
+    assert.equal((await onboarding.listDefinitions(eventId, { includeArchived: true })).length, 3);
+
+    assert.equal(await onboarding.getDefinition(otherEventId, headshot.id), null);
+    await expectRepositoryError(
+      onboarding.createDefinitionVersion(otherEventId, headshot.id, {
+        sortOrder: 0,
+        title: "Cross-event edit",
+        applicability: {},
+      }),
+      "not-found",
+    );
+    await expectRepositoryError(onboarding.archiveDefinition(otherEventId, headshot.id), "not-found");
+  });
+
+  test("preserves a null response schema when reordering and duplicating definitions", async () => {
+    const eventId = await createEvent("definition-null-response-schema");
+    const noResponse = await onboarding.createDefinition({
+      eventId,
+      key: "confirm-details",
+      sortOrder: 0,
+      title: "Confirm your details",
+      applicability: { confirmedOnly: true },
+      responseRequired: false,
+    });
+    const headshot = await createDefinition(eventId, "headshot", 1);
+
+    const reordered = await onboarding.reorderDefinitions(eventId, [headshot.id, noResponse.id]);
+    const reorderedNoResponse = reordered.find(({ id }) => id === noResponse.id);
+    const reorderedVersion = reorderedNoResponse?.versions.at(-1);
+    assert.equal(reorderedNoResponse?.versions.at(-1)?.versionNumber, 2);
+    assert.equal(reorderedNoResponse?.versions.at(-1)?.sortOrder, 1);
+    assert.equal(reorderedNoResponse?.versions.at(-1)?.responseSchema, null);
+    const reorderedRows = await client.$queryRaw<Array<{ responseSchemaIsNull: boolean }>>`
+      SELECT "responseSchema" IS NULL AS "responseSchemaIsNull"
+      FROM "speaker_task_definition_versions"
+      WHERE "id" = ${reorderedVersion?.id}
+    `;
+    assert.equal(reorderedRows[0]?.responseSchemaIsNull, true);
+
+    const duplicate = await onboarding.duplicateDefinition(eventId, noResponse.id, "confirm-details-copy");
+    const duplicateVersion = duplicate.versions.at(-1);
+    assert.equal(duplicateVersion?.title, "Confirm your details copy");
+    assert.equal(duplicateVersion?.responseSchema, null);
+    const duplicateRows = await client.$queryRaw<Array<{ responseSchemaIsNull: boolean }>>`
+      SELECT "responseSchema" IS NULL AS "responseSchemaIsNull"
+      FROM "speaker_task_definition_versions"
+      WHERE "id" = ${duplicateVersion?.id}
+    `;
+    assert.equal(duplicateRows[0]?.responseSchemaIsNull, true);
+  });
+
   test("assigns the latest definition version with deterministic due dates and event isolation", async () => {
     const eventId = await createEvent("assignments");
     const otherEventId = await createEvent("other-assignments");
