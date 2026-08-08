@@ -33,6 +33,7 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
 
   return (
     <EventSettingsWorkspace
+      key={initialSnapshot.event.id}
       eventOptions={shell.events.map(({ id, name }) => ({ id, name }))}
       eventScoped
       initialSnapshot={initialSnapshot}
