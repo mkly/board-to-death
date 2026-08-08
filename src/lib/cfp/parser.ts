@@ -1,6 +1,11 @@
-import { type CfpParseError, cfpError } from "./errors";
-import { cfpFormDefinitionSchema } from "./schema";
-import { CFP_BUILT_IN_QUESTION_TYPES, CFP_SUPPORTED_VERSIONS, type CfpFormDefinition, type CfpQuestion } from "./types";
+import { type CfpParseError, cfpError } from "./errors.ts";
+import { cfpFormDefinitionSchema } from "./schema.ts";
+import {
+  CFP_BUILT_IN_QUESTION_TYPES,
+  CFP_SUPPORTED_VERSIONS,
+  type CfpFormDefinition,
+  type CfpQuestion,
+} from "./types.ts";
 
 export type CfpParseResult =
   | { ok: true; definition: CfpFormDefinition; errors: [] }
@@ -37,12 +42,82 @@ export function parseCfpDefinition(input: unknown): CfpParseResult {
   errors.push(...findUnknownQuestionTypeErrors(definition));
   errors.push(...findMissingRuleTargetErrors(definition));
   errors.push(...findImpossibleConstraintErrors(definition));
+  errors.push(...findQuestionTypeConstraintErrors(definition));
   errors.push(...findVisibilityRuleErrors(definition));
 
   if (errors.length > 0) {
     return { ok: false, definition: null, errors };
   }
   return { ok: true, definition, errors: [] };
+}
+
+function findQuestionTypeConstraintErrors(definition: CfpFormDefinition): CfpParseError[] {
+  const errors: CfpParseError[] = [];
+
+  for (const { question, path } of allQuestions(definition)) {
+    const constraints = question.constraints;
+    if ((definition.customQuestionTypes ?? []).includes(question.type)) continue;
+    if (!constraints) {
+      if (question.type === "select" || question.type === "multi_select") {
+        errors.push(
+          cfpError(
+            "impossible_rule",
+            `${path}.constraints.options`,
+            `Question "${question.id}" must declare at least one option`,
+          ),
+        );
+      }
+      continue;
+    }
+
+    const keys = Object.keys(constraints) as (keyof typeof constraints)[];
+    const allowed = new Set<keyof typeof constraints>();
+    if (
+      question.type === "short_text" ||
+      question.type === "long_text" ||
+      question.type === "url" ||
+      question.type === "email"
+    ) {
+      allowed.add("minLength").add("maxLength").add("pattern");
+    } else if (question.type === "number") {
+      allowed.add("min").add("max");
+    } else if (question.type === "select" || question.type === "multi_select") {
+      allowed.add("options");
+    }
+    const unsupported = keys.find((key) => !allowed.has(key));
+    if (unsupported) {
+      errors.push(
+        cfpError(
+          "impossible_rule",
+          `${path}.constraints.${unsupported}`,
+          `Question "${question.id}" cannot use ${unsupported} with type "${question.type}"`,
+        ),
+      );
+    }
+
+    if (question.type === "select" || question.type === "multi_select") {
+      const values = constraints.options?.map(({ value }) => value) ?? [];
+      if (values.length === 0) {
+        errors.push(
+          cfpError(
+            "impossible_rule",
+            `${path}.constraints.options`,
+            `Question "${question.id}" must declare at least one option`,
+          ),
+        );
+      } else if (new Set(values).size !== values.length) {
+        errors.push(
+          cfpError(
+            "duplicate_id",
+            `${path}.constraints.options`,
+            `Question "${question.id}" has duplicate option values`,
+          ),
+        );
+      }
+    }
+  }
+
+  return errors;
 }
 
 function allQuestions(definition: CfpFormDefinition): { question: CfpQuestion; path: string }[] {

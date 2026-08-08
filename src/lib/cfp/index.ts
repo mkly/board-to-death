@@ -1,5 +1,5 @@
-export type { CfpParseError, CfpParseErrorCode } from "./errors";
-export { type CfpParseResult, parseCfpDefinition } from "./parser";
+export type { CfpParseError, CfpParseErrorCode } from "./errors.ts";
+export { type CfpParseResult, parseCfpDefinition } from "./parser.ts";
 export {
   CFP_BUILT_IN_QUESTION_TYPES,
   CFP_SUPPORTED_VERSIONS,
@@ -16,4 +16,4 @@ export {
   type CfpSection,
   type CfpSectionKind,
   type CfpVisibilityRule,
-} from "./types";
+} from "./types.ts";
