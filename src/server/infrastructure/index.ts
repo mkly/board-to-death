@@ -37,9 +37,21 @@ export {
   DeterministicTokenGenerator,
   InMemoryFileStorage,
 } from "./fakes.ts";
+export type { FileStorageOptions, LocalFileStorageOptions } from "./file-storage.ts";
+export { createFileStorage, LocalFileStorage } from "./file-storage.ts";
+export { isSafeObjectKey } from "./object-key.ts";
 export {
   captureInfrastructureResult,
   infrastructureFailure,
   infrastructureSuccess,
   normalizeInfrastructureFailure,
 } from "./results.ts";
+export type {
+  SpeakerFileDownload,
+  SpeakerFileOwner,
+  SpeakerFilePrincipal,
+  SpeakerFileReference,
+  SpeakerFileServiceOptions,
+  SpeakerFileWrite,
+} from "./speaker-files.ts";
+export { SpeakerFileService } from "./speaker-files.ts";

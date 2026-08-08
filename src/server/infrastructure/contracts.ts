@@ -64,6 +64,7 @@ export interface FileWrite {
   readonly key: string;
   readonly bytes: Uint8Array;
   readonly contentType: string;
+  readonly contentDisposition?: string;
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
@@ -72,6 +73,7 @@ export interface StoredFileMetadata {
   readonly contentType: string;
   readonly size: number;
   readonly etag: string;
+  readonly contentDisposition?: string;
   readonly metadata: Readonly<Record<string, string>>;
 }
 
