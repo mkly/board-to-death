@@ -34,6 +34,65 @@ is kept under a dated `board-to-death-prev-*` alias for rollback.
 
 Once imported, warm a box against it with `INCUS_IMAGE=board-to-death`.
 
+### Lease storage pool
+
+Boxes launch from a `btrfs` Incus storage pool rather than the default `dir`
+pool. The `dir` driver byte-copies the whole image rootfs on every launch
+(~15s); btrfs makes a copy-on-write clone instead (~1s), which takes a cold
+`crabbox warmup` from ~42s to ~33s. The remainder is cloud-init and SSH
+bootstrap, which the pool does not affect.
+
+The pool is a 50GiB sparse loop file at `/var/lib/incus/disks/btrfs.img`, and
+leases reach it through the `crabbox-btrfs` profile:
+
+```sh
+incus storage list          # btrfs (btrfs) alongside default (dir)
+incus profile show crabbox-btrfs
+```
+
+`crabbox`'s `-incus-profile` **replaces** the default profile rather than
+adding to it, so `crabbox-btrfs` carries both the `root` disk and the `eth0`
+nic. The `dev-implement-task` skill applies it automatically when the profile
+exists (`INCUS_PROFILE=auto`); set `INCUS_PROFILE=` to opt out. Boxes leased
+before this change stay on the `dir` pool and keep working — they simply do
+not get the faster launch until they are re-leased.
+
+### The image ships with no apt sources
+
+Crabbox's first-boot bootstrap runs `apt-get update` and installs
+`openssh-server ca-certificates curl git rsync jq`. All six are baked into the
+image, so that step's only real work is downloading a 190MB package index to
+find nothing to do — about 20s of every warmup.
+
+Crabbox does have a supported opt-out: `internal/cli/bootstrap.go` skips the
+apt block when `/var/lib/crabbox/image-ready` exists and sshd, the CA bundle,
+curl, git, rsync, and jq are all present. The image touches that marker and
+satisfies every other condition. **But the guard landed 52 commits after
+v0.40.0 and is in no release yet**, so it is currently inert — upgrading
+crabbox does not help.
+
+So until that ships, the image also takes the blunt route: it ships with empty
+apt sources and `apt_preserve_sources_list: true`
+(the flag matters: cloud-init regenerates
+`/etc/apt/sources.list.d/ubuntu.sources` on first boot, so emptying the file
+alone would not survive). `apt-get update` then takes 0.11s and the install
+0.02s, because apt still resolves already-installed packages out of dpkg's
+status file.
+
+To install something that is not baked in, restore sources inside the box:
+
+```sh
+sudo enable-apt      # rewrites ubuntu.sources, runs apt-get update
+```
+
+If a package is needed on every box, add it to `distrobuilder.yml` instead and
+rebuild the image.
+
+When a crabbox release ships the `image-ready` guard, drop the empty-sources
+workaround — the last `post-files` action in `distrobuilder.yml`,
+`/etc/cloud/cloud.cfg.d/99-board-to-death-apt.cfg`, and `enable-apt` — keeping
+only the marker. Boxes then get a normal working apt at the same speed.
+
 ---
 
 ## Studio Admin Starter Notes
@@ -82,7 +141,7 @@ npm run dev
 Available commands:
 
 ```bash
-npm run build             # production build
+npm run build             # production build — DO NOT RUN (see below)
 npm run lint              # biome lint
 npm run format            # biome format --write
 npm run check             # biome check (lint + format + import sorting, read-only)
@@ -94,9 +153,29 @@ npm run test:infrastructure
 npm run test:repositories # event repository integration tests against TEST_DATABASE_URL
 ```
 
-Run build, lint, check, test, or other validation commands only when the user explicitly requests that validation.
-Do not run a production build (`npm run build`) merely to verify a change; run the relevant tests instead so work can complete quickly.
-This is a prototype, and development speed is a priority.
+#### Never run the production build
+
+**`npm run build` (and `next build`, `npx next build`, or any wrapper around them) is off limits.**
+It takes minutes, saturates the CPU, and tells you almost nothing a faster check would not. There is
+no "just to be safe" exception and no "one quick build to confirm" exception.
+
+- To check types, run `npm run typecheck`. That is what catches the errors you were hoping a build
+  would catch, and it takes seconds.
+- To check formatting, imports, and lint rules, run `npm run check`.
+- To check behavior, run `npm run test` (or the narrower `test:infrastructure` / `test:repositories`).
+- To see a change actually render, use `npm run dev` and the `agent-browser` skill.
+
+Run the build **only** when the user asks for it in those words — "run the build", "does it build",
+"check the production build". A request to "verify", "make sure it works", "check it compiles", or
+"finish up" is not that request. If you genuinely believe a full build is needed, say so and let the
+user decide; do not start one on your own.
+
+Do not report a change as "build-verified" or "builds cleanly" unless you actually ran a build the
+user asked for. Say which checks you did run.
+
+The same restraint applies to lint, check, and test: run them when the user asks for that validation
+or when they are the cheap way to confirm the work you were asked to do. This is a prototype, and
+development speed is the priority.
 
 ### Formatting and linting
 
