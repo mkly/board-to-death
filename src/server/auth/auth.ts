@@ -1,15 +1,22 @@
 import "server-only";
 
+import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { getAllowedAdminEmails, isAllowedAdminEmail } from "./admin-access";
 import { createAuth } from "./auth-factory";
-import { sendConfiguredMagicLink } from "./magic-link-email";
+import { createConfiguredMagicLinkSender } from "./magic-link-email";
 
-const allowedAdminEmails = getAllowedAdminEmails();
+const runtimeConfig = getRuntimeConfig().server;
+const allowedAdminEmails = getAllowedAdminEmails(runtimeConfig.AUTH_ALLOWED_EMAILS);
 
 export const auth = createAuth({
+  baseURL: runtimeConfig.BETTER_AUTH_URL,
   database: getDatabaseClient(),
   isAllowedEmail: (email) => isAllowedAdminEmail(email, allowedAdminEmails),
-  sendMagicLink: sendConfiguredMagicLink,
+  secret: runtimeConfig.BETTER_AUTH_SECRET,
+  sendMagicLink: createConfiguredMagicLinkSender({
+    webhookToken: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_TOKEN,
+    webhookUrl: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_URL,
+  }),
 });

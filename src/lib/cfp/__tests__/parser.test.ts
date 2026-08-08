@@ -284,4 +284,51 @@ describe("parseCfpDefinition", () => {
       expect(result.errors).toContainEqual(expect.objectContaining({ code: "impossible_rule" }));
     }
   });
+
+  it("rejects constraints that do not apply to a built-in question type", () => {
+    const definition = baseDefinition();
+    definition.sections[1].questions[1].constraints = { minLength: 2 };
+
+    const result = parseCfpDefinition(definition);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "impossible_rule", path: "sections.1.questions.1.constraints.minLength" }),
+      );
+    }
+  });
+
+  it("requires unique options for selection questions", () => {
+    const definition = baseDefinition();
+    definition.sections[1].questions[0].constraints = {
+      options: [
+        { value: "talk", label: "Talk" },
+        { value: "talk", label: "Another talk" },
+      ],
+    };
+
+    const result = parseCfpDefinition(definition);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "duplicate_id", path: "sections.1.questions.0.constraints.options" }),
+      );
+    }
+  });
+
+  it("requires selection questions to declare options", () => {
+    const definition = baseDefinition();
+    definition.sections[1].questions[0].constraints = undefined;
+
+    const result = parseCfpDefinition(definition);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "impossible_rule", path: "sections.1.questions.0.constraints.options" }),
+      );
+    }
+  });
 });

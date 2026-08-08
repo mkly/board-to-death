@@ -9,25 +9,11 @@ import { createAuth } from "./auth-factory";
 const baseURL = "http://localhost:3000";
 const testEmail = "admin@example.test";
 const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl?.includes("_test")) {
-  throw new Error("Auth integration tests require a guarded *_test DATABASE_URL");
-}
-
-const database = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+const databaseDescribe = databaseUrl?.includes("_test") ? describe : describe.skip;
 const deliveredLinks: string[] = [];
 let activeCookie = "";
-
-process.env.BETTER_AUTH_SECRET = "test-only-better-auth-secret-at-least-32-characters";
-process.env.BETTER_AUTH_URL = baseURL;
-
-const auth = createAuth({
-  database,
-  isAllowedEmail: (email) => email.toLowerCase() === testEmail,
-  sendMagicLink: async ({ url }) => {
-    deliveredLinks.push(url);
-  },
-});
+let auth: ReturnType<typeof createAuth>;
+let database: PrismaClient;
 
 function request(path: string, init?: RequestInit): Request {
   return new Request(new URL(path, baseURL), {
@@ -58,18 +44,33 @@ function sessionCookie(response: Response): string {
   return `better-auth.session_token=${match[1]}`;
 }
 
-beforeAll(async () => {
-  await database.verification.deleteMany();
-  await database.account.deleteMany();
-  await database.session.deleteMany();
-  await database.user.deleteMany();
-});
+databaseDescribe("admin magic-link authentication", () => {
+  beforeAll(async () => {
+    if (!databaseUrl?.includes("_test")) {
+      throw new Error("Auth integration tests require a guarded *_test DATABASE_URL");
+    }
 
-afterAll(async () => {
-  await database.$disconnect();
-});
+    database = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+    auth = createAuth({
+      baseURL,
+      database,
+      isAllowedEmail: (email) => email.toLowerCase() === testEmail,
+      secret: "test-only-better-auth-secret-at-least-32-characters",
+      sendMagicLink: async ({ url }) => {
+        deliveredLinks.push(url);
+      },
+    });
 
-describe("admin magic-link authentication", () => {
+    await database.verification.deleteMany();
+    await database.account.deleteMany();
+    await database.session.deleteMany();
+    await database.user.deleteMany();
+  });
+
+  afterAll(async () => {
+    await database.$disconnect();
+  });
+
   test("delivers links only for configured administrator addresses", async () => {
     const allowed = await requestMagicLink();
     const denied = await requestMagicLink("stranger@example.test");

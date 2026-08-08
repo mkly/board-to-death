@@ -8,15 +8,19 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { SendMagicLink } from "./magic-link-email";
 
 interface CreateAuthOptions {
+  readonly baseURL: string;
   readonly database: PrismaClient;
   readonly isAllowedEmail: (email: string) => boolean;
+  readonly secret: string;
   readonly sendMagicLink: SendMagicLink;
 }
 
-export function createAuth({ database, isAllowedEmail, sendMagicLink }: CreateAuthOptions) {
+export function createAuth({ baseURL, database, isAllowedEmail, secret, sendMagicLink }: CreateAuthOptions) {
   return betterAuth({
     appName: "Board to Death",
+    baseURL,
     database: prismaAdapter(database, { provider: "postgresql" }),
+    secret,
     session: {
       expiresIn: 60 * 60 * 24 * 7,
       updateAge: 60 * 60 * 24,

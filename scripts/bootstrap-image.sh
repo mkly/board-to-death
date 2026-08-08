@@ -119,6 +119,24 @@ incus exec "${SMOKE_INSTANCE}" -- \
   runuser -u nobody -- env PATH=/usr/local/bin:/usr/bin:/bin sh -c \
   'command -v sh && command -v git && git --version && command -v node && node --version && command -v npm && npm --version && command -v cc && cc --version'
 
+# Crabbox skips its boot-time `apt-get update` -- a 20s package-index download
+# that finds nothing to do -- only when the image-ready marker is present *and*
+# every tool its readiness check names is installed. A missing piece silently
+# costs 20s on every warmup instead of failing, so assert the whole condition.
+echo "Smoke-testing Crabbox's prebaked-image fast path..."
+if ! incus exec "${SMOKE_INSTANCE}" -- sh -c '
+  test -f /var/lib/crabbox/image-ready &&
+  test -x /usr/sbin/sshd &&
+  test -s /etc/ssl/certs/ca-certificates.crt &&
+  command -v curl >/dev/null &&
+  command -v git >/dev/null &&
+  command -v rsync >/dev/null &&
+  command -v jq >/dev/null'; then
+  echo "The image does not satisfy Crabbox's prebaked-packages check;" >&2
+  echo "its bootstrap would fall back to a full apt-get update." >&2
+  exit 1
+fi
+
 # is-system-running reports "degraded" as a nonzero exit, which is not fatal
 # here; the bootstrap unit's own result is what matters. Wait for the unit to
 # leave "activating", then read its verdict.
