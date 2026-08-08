@@ -78,7 +78,8 @@ export function dashboardWorkspaceTitle(workspace: DashboardWorkspace): string {
 }
 
 export function dashboardEventHref(eventSlug: string, workspace: DashboardWorkspace = "overview"): string {
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/${workspace}`;
+  const workspacePath = workspace === "communications" ? "communications/templates" : workspace;
+  return `/dashboard/events/${encodeURIComponent(eventSlug)}/${workspacePath}`;
 }
 
 export function getSidebarItems(eventSlug?: string): NavGroup[] {
