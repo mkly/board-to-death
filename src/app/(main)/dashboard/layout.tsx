@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { AppSidebar } from "@/app/(main)/dashboard/_components/sidebar/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { users } from "@/data/users";
 import { cn } from "@/lib/utils";
+import { auth } from "@/server/auth/auth";
 import { getPreference } from "@/server/server-actions";
 
 import { AccountSwitcher } from "./_components/header/account-switcher";
@@ -16,7 +18,12 @@ import { SearchDialog } from "./_components/header/search-dialog";
 import { ThemeSwitcher } from "./_components/header/theme-switcher";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
-  const cookieStore = await cookies();
+  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  const session = await auth.api.getSession({ headers: requestHeaders });
+  if (!session) {
+    redirect("/auth/v1/login");
+  }
+
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
   const [variant, collapsible] = await Promise.all([
     getPreference("sidebar_variant"),
@@ -32,7 +39,11 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
         } as React.CSSProperties
       }
     >
-      <AppSidebar variant={variant} collapsible={collapsible} />
+      <AppSidebar
+        variant={variant}
+        collapsible={collapsible}
+        user={{ name: session.user.name, email: session.user.email, avatar: session.user.image ?? "" }}
+      />
       <SidebarInset
         className={cn(
           "[html[data-content-layout=centered]_&>*]:mx-auto",

@@ -11,19 +11,34 @@ import {
   type RuntimeMode,
 } from "./public-env.ts";
 
-const SERVER_KEYS = ["AUTH_SECRET", "DATABASE_URL"] as const;
+const SERVER_KEYS = [
+  "AUTH_SECRET",
+  "DATABASE_URL",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+  "AUTH_ALLOWED_EMAILS",
+  "AUTH_MAGIC_LINK_WEBHOOK_URL",
+  "AUTH_MAGIC_LINK_WEBHOOK_TOKEN",
+] as const;
+const REQUIRED_PRODUCTION_SERVER_KEYS = SERVER_KEYS.filter((key) => key !== "AUTH_MAGIC_LINK_WEBHOOK_TOKEN");
 
 type ServerRuntimeKey = (typeof SERVER_KEYS)[number];
-type ServerRuntimeValues = Record<ServerRuntimeKey, string>;
+type ServerRuntimeValues = Partial<Record<ServerRuntimeKey, string>>;
 
 const DEFAULTS: Record<Exclude<RuntimeMode, "production">, ServerRuntimeValues> = {
   development: {
     AUTH_SECRET: "local-development-auth-secret-change-me",
     DATABASE_URL: "postgresql://board_to_death:board_to_death@localhost:5432/board_to_death",
+    BETTER_AUTH_SECRET: "local-development-better-auth-secret",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    AUTH_ALLOWED_EMAILS: "admin@example.com",
   },
   test: {
     AUTH_SECRET: "test-only-auth-secret-not-for-production",
     DATABASE_URL: "postgresql://board_to_death:board_to_death@localhost:5432/board_to_death_test",
+    BETTER_AUTH_SECRET: "test-only-better-auth-secret-not-for-production",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    AUTH_ALLOWED_EMAILS: "admin@example.test",
   },
 };
 
@@ -35,6 +50,29 @@ const serverSchema = z.object({
     .refine((value) => hasAllowedUrlProtocol(value, ["postgres:", "postgresql:"]), {
       message: "must use the postgres or postgresql protocol",
     }),
+  BETTER_AUTH_SECRET: z.string().min(32, "must contain at least 32 characters"),
+  BETTER_AUTH_URL: z
+    .string()
+    .url("must be a valid URL")
+    .refine((value) => hasAllowedUrlProtocol(value, ["http:", "https:"]), {
+      message: "must use the http or https protocol",
+    }),
+  AUTH_ALLOWED_EMAILS: z.string().refine(
+    (value) =>
+      value
+        .split(",")
+        .map((email) => email.trim())
+        .some(Boolean),
+    "must contain at least one email address",
+  ),
+  AUTH_MAGIC_LINK_WEBHOOK_URL: z
+    .string()
+    .url("must be a valid URL")
+    .refine((value) => hasAllowedUrlProtocol(value, ["http:", "https:"]), {
+      message: "must use the http or https protocol",
+    })
+    .optional(),
+  AUTH_MAGIC_LINK_WEBHOOK_TOKEN: z.string().optional(),
 });
 
 export type ServerRuntimeConfig = z.infer<typeof serverSchema>;
@@ -49,7 +87,8 @@ function getServerValues(environment: Environment, mode: RuntimeMode): ServerRun
     }),
   ) as Record<ServerRuntimeKey, string | undefined>;
 
-  const missing = SERVER_KEYS.filter((key) => values[key] === undefined);
+  const requiredKeys = mode === "production" ? REQUIRED_PRODUCTION_SERVER_KEYS : SERVER_KEYS.slice(0, 5);
+  const missing = requiredKeys.filter((key) => values[key] === undefined);
 
   if (missing.length > 0) {
     throw new RuntimeConfigError(missing.map((key) => `${key} is required when NODE_ENV=production`));

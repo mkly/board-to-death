@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { CircleUser, CreditCard, EllipsisVertical, LogOut, MessageSquareDot } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -13,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import { authClient } from "@/lib/auth-client";
 import { getInitials } from "@/lib/utils";
 
 export function NavUser({
@@ -25,6 +28,18 @@ export function NavUser({
   };
 }) {
   const { isMobile } = useSidebar();
+  const router = useRouter();
+
+  async function signOut() {
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/auth/v1/login");
+          router.refresh();
+        },
+      },
+    });
+  }
 
   return (
     <SidebarMenu>
@@ -80,7 +95,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void signOut()}>
               <LogOut />
               Log out
             </DropdownMenuItem>
