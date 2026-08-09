@@ -160,7 +160,8 @@ await database.speakerResourcePage.create({
         slug: "arrival-guide",
         title: "Speaker arrival guide",
         summary: "Where to check in and when to arrive.",
-        bodyMarkdown: "# Arrival guide",
+        bodyMarkdown:
+          '# Arrival guide\n\n<iframe src="https://www.youtube.com/embed/unconfigured-allowlist" title="Unconfigured allowlist"></iframe>',
         sortOrder: 1,
         publishedAt: new Date("2027-02-25T18:00:00.000Z"),
       },

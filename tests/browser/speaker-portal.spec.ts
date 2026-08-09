@@ -263,6 +263,7 @@ test("navigates ordered published resources and reflects publication changes", a
   await page.getByRole("link", { name: "Speaker arrival guide" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/resources/arrival-guide`);
+  await expect(page.getByTitle("Unconfigured allowlist")).toBeVisible();
 
   for (const hiddenSlug of ["draft-resource", "unpublished-resource", "archived-resource", "other-event-only"]) {
     const response = await page.goto(`/portal/${fixture.eventSlug}/resources/${hiddenSlug}`);

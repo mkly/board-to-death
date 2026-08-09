@@ -44,8 +44,15 @@ function questionLabelsFromSnapshot(snapshot: Prisma.JsonValue): Map<string, str
   );
 }
 
-function embedUrls(value: Prisma.JsonValue): string[] {
-  if (!Array.isArray(value)) return [];
+/**
+ * `allowedEmbedUrls` is nullable, and `SpeakerResourceRepository` keeps the
+ * distinction: SQL NULL means the version never configured an allowlist, an
+ * empty array means it configured one that permits nothing. Collapsing NULL to
+ * `[]` here would strip every embed from resources authored before (or without)
+ * per-resource configuration, so leave those to the global host allowlist.
+ */
+function embedUrls(value: Prisma.JsonValue): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
   return value.filter((url): url is string => typeof url === "string");
 }
 
