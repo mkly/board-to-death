@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const actionMocks = vi.hoisted(() => ({
+  resetSubmissionView: vi.fn(),
+  saveSubmissionView: vi.fn(),
+}));
+
+vi.mock("../actions", () => actionMocks);
 
 import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/client";
 import type { CfpSubmissionListResult } from "@/server/cfp/submissions";
@@ -38,7 +45,12 @@ afterEach(cleanup);
 describe("SubmissionsWorkspace", () => {
   it("renders lifecycle metrics and the empty state", () => {
     render(
-      <SubmissionsWorkspace event={event} filters={{}} options={{ categories: [], assignees: [] }} result={result()} />,
+      <SubmissionsWorkspace
+        event={event}
+        filters={{}}
+        options={{ categories: [], assignees: [], customColumns: [] }}
+        result={result()}
+      />,
     );
 
     expect(screen.getByRole("heading", { name: "Submissions" })).toBeTruthy();
@@ -62,6 +74,7 @@ describe("SubmissionsWorkspace", () => {
         options={{
           categories: [{ id: "category-1", label: "Strategy" }],
           assignees: [{ id: "reviewer-1", displayName: "Casey Reviewer" }],
+          customColumns: [{ id: "audience", label: "Audience", type: "short_text" }],
         }}
         result={result({
           items: [
@@ -75,6 +88,10 @@ describe("SubmissionsWorkspace", () => {
               categories: [{ id: "category-1", label: "Strategy" }],
               applicants: [{ id: "speaker-1", name: "Lex", email: "lex@example.test" }],
               assignees: [{ id: "reviewer-1", displayName: "Casey Reviewer" }],
+              answers: { audience: "Design leaders" },
+              averageScore: 4.25,
+              completedReviews: 1,
+              totalReviews: 2,
             },
           ],
           total: 21,
@@ -95,5 +112,11 @@ describe("SubmissionsWorkspace", () => {
     expect(previous.getAttribute("href")).toContain("status=UNDER_REVIEW");
     expect(previous.getAttribute("href")).toContain("category=category-1");
     expect(screen.getByRole("link", { name: "Page 2 of 2" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: "Columns" })).toBeTruthy();
+    const exportButton = screen.getByRole("button", { name: "Export" });
+    fireEvent.pointerDown(exportButton, { button: 0, ctrlKey: false });
+    expect(screen.getByRole("menuitem", { name: "CSV spreadsheet" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Excel workbook" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Attachment bundle" })).toBeNull();
   });
 });
