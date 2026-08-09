@@ -7,17 +7,30 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
-import { EvaluationRoundStatus } from "@/generated/prisma/client";
+import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/prisma/client";
 import { getAllowedAdminEmails, isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
-import { EvaluationPlanRepository, EvaluationProgressionRepository } from "@/server/evaluations";
+import {
+  EvaluationDecisionRepository,
+  EvaluationPlanRepository,
+  EvaluationProgressionRepository,
+} from "@/server/evaluations";
 import { RepositoryError } from "@/server/events/repositories";
 
 const actionSchema = z.object({
   eventSlug: z.string().min(1),
   roundId: z.string().uuid(),
   submissionId: z.string().uuid().optional(),
+});
+const decisionSchema = actionSchema.extend({
+  submissionId: z.string().uuid(),
+  outcome: z.enum([
+    EvaluationDecisionOutcome.WAITLISTED,
+    EvaluationDecisionOutcome.ACCEPTED,
+    EvaluationDecisionOutcome.REJECTED,
+  ]),
+  expectedDecisionNumber: z.number().int().nonnegative(),
 });
 const allowedAdminEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
 
@@ -52,9 +65,43 @@ function errorMessage(error: unknown): string {
 }
 
 function refresh(eventSlug: string): void {
+  revalidatePath(`/dashboard/events/${eventSlug}/overview`);
+  revalidatePath(`/dashboard/events/${eventSlug}/submissions`);
   revalidatePath(`/dashboard/events/${eventSlug}/evaluations`);
   revalidatePath(`/dashboard/events/${eventSlug}/evaluations/assignments`);
   revalidatePath(`/dashboard/events/${eventSlug}/evaluations/results`);
+}
+
+const decisionNotices: Readonly<Record<EvaluationDecisionOutcome, string>> = {
+  [EvaluationDecisionOutcome.WAITLISTED]: "Submission added to the waitlist.",
+  [EvaluationDecisionOutcome.ACCEPTED]: "Submission accepted.",
+  [EvaluationDecisionOutcome.REJECTED]: "Submission rejected.",
+};
+
+export async function recordEvaluationDecision(
+  eventSlug: string,
+  roundId: string,
+  submissionId: string,
+  outcome: EvaluationDecisionOutcome,
+  expectedDecisionNumber: number,
+): Promise<never> {
+  const parsed = decisionSchema.safeParse({ eventSlug, roundId, submissionId, outcome, expectedDecisionNumber });
+  if (!parsed.success) redirect(destination(eventSlug, roundId, { error: "The decision request was invalid." }));
+  try {
+    const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
+    await new EvaluationDecisionRepository(getDatabaseClient()).record({
+      eventId: event.id,
+      roundId: parsed.data.roundId,
+      submissionId: parsed.data.submissionId,
+      outcome: parsed.data.outcome,
+      expectedDecisionNumber: parsed.data.expectedDecisionNumber,
+      actorId,
+    });
+    refresh(event.slug);
+  } catch (error) {
+    redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
+  }
+  redirect(destination(eventSlug, roundId, { notice: decisionNotices[outcome] }));
 }
 
 export async function advanceEvaluationSubmission(

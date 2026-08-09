@@ -8,9 +8,10 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EvaluationDecisionOutcome } from "@/generated/prisma/client";
 import type { EvaluationResultsWorkspace, EvaluationSubmissionResult } from "@/server/evaluations/results";
 
-import { advanceEvaluationSubmission, closeEvaluationRound } from "../actions";
+import { advanceEvaluationSubmission, closeEvaluationRound, recordEvaluationDecision } from "../actions";
 
 interface EvaluationResultsProps {
   readonly event: { readonly name: string; readonly slug: string };
@@ -47,6 +48,86 @@ function ProgressionAction({
         Advance
       </Button>
     </form>
+  );
+}
+
+const decisionLabels: Readonly<Record<EvaluationDecisionOutcome, string>> = {
+  [EvaluationDecisionOutcome.WAITLISTED]: "Waitlisted",
+  [EvaluationDecisionOutcome.ACCEPTED]: "Accepted",
+  [EvaluationDecisionOutcome.REJECTED]: "Rejected",
+};
+
+const decisionActionLabels: Readonly<Record<EvaluationDecisionOutcome, string>> = {
+  [EvaluationDecisionOutcome.WAITLISTED]: "Waitlist",
+  [EvaluationDecisionOutcome.ACCEPTED]: "Accept",
+  [EvaluationDecisionOutcome.REJECTED]: "Reject",
+};
+
+function decisionButtonVariant(outcome: EvaluationDecisionOutcome): "default" | "destructive" | "outline" {
+  if (outcome === EvaluationDecisionOutcome.REJECTED) return "destructive";
+  if (outcome === EvaluationDecisionOutcome.WAITLISTED) return "outline";
+  return "default";
+}
+
+function DecisionAction({
+  eventSlug,
+  roundId,
+  submission,
+  hasNextRound,
+}: {
+  readonly eventSlug: string;
+  readonly roundId: string;
+  readonly submission: EvaluationSubmissionResult;
+  readonly hasNextRound: boolean;
+}) {
+  const expectedDecisionNumber = submission.decision?.decisionNumber ?? 0;
+  if (submission.availableDecisionOutcomes.length === 0) {
+    if (submission.decision) {
+      return (
+        <div className="flex min-w-28 flex-col items-start gap-1">
+          <Badge
+            variant={submission.decision.outcome === EvaluationDecisionOutcome.REJECTED ? "destructive" : "secondary"}
+          >
+            {decisionLabels[submission.decision.outcome]}
+          </Badge>
+          <span className="text-muted-foreground text-xs">Decision {submission.decision.decisionNumber}</span>
+        </div>
+      );
+    }
+    return (
+      <span className="text-muted-foreground text-xs">
+        {hasNextRound ? "Final round only" : "Complete reviews first"}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex min-w-52 flex-col items-start gap-2">
+      {submission.decision ? (
+        <Badge variant="secondary">
+          {decisionLabels[submission.decision.outcome]} · Decision {submission.decision.decisionNumber}
+        </Badge>
+      ) : null}
+      <div className="flex flex-wrap gap-1">
+        {submission.availableDecisionOutcomes.map((outcome) => (
+          <form
+            key={outcome}
+            action={recordEvaluationDecision.bind(
+              null,
+              eventSlug,
+              roundId,
+              submission.id,
+              outcome,
+              expectedDecisionNumber,
+            )}
+          >
+            <Button type="submit" size="xs" variant={decisionButtonVariant(outcome)}>
+              {decisionActionLabels[outcome]}
+            </Button>
+          </form>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -244,7 +325,8 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                     ))}
                     <TableHead>Weighted average</TableHead>
                     <TableHead className="pr-(--card-spacing)">Rank</TableHead>
-                    <TableHead className="pr-(--card-spacing)">Progression</TableHead>
+                    <TableHead>Progression</TableHead>
+                    <TableHead className="pr-(--card-spacing)">Final decision</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -296,7 +378,7 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                       <TableCell className="font-medium tabular-nums">
                         {scoreLabel(submission.weightedAverage)}
                       </TableCell>
-                      <TableCell className="pr-(--card-spacing)">
+                      <TableCell>
                         {submission.rank === null ? (
                           <Badge variant="outline">Unranked</Badge>
                         ) : (
@@ -309,6 +391,16 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                       <TableCell className="pr-(--card-spacing)">
                         {workspace.selectedRoundId ? (
                           <ProgressionAction
+                            eventSlug={event.slug}
+                            roundId={workspace.selectedRoundId}
+                            submission={submission}
+                            hasNextRound={workspace.workflow?.nextRound !== null}
+                          />
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="pr-(--card-spacing)">
+                        {workspace.selectedRoundId ? (
+                          <DecisionAction
                             eventSlug={event.slug}
                             roundId={workspace.selectedRoundId}
                             submission={submission}

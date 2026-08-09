@@ -1,5 +1,7 @@
 import {
+  CfpSubmissionStatus,
   EvaluationAssignmentStatus,
+  EvaluationDecisionOutcome,
   EvaluationPlanVersionStatus,
   EvaluationRoundStatus,
   EvaluationStatus,
@@ -40,6 +42,12 @@ export interface EvaluationSubmissionResult {
   readonly tied: boolean;
   readonly advancedAt: Date | null;
   readonly canAdvance: boolean;
+  readonly decision: {
+    readonly decisionNumber: number;
+    readonly outcome: EvaluationDecisionOutcome;
+    readonly decidedAt: Date;
+  } | null;
+  readonly availableDecisionOutcomes: readonly EvaluationDecisionOutcome[];
 }
 
 export interface EvaluationResultsWorkspace {
@@ -143,6 +151,7 @@ export class EvaluationResultsRepository {
       orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
+        status: true,
         formVersion: { select: { title: true } },
         categories: { orderBy: { sortOrder: "asc" }, select: { category: { select: { label: true } } } },
         participants: {
@@ -177,6 +186,16 @@ export class EvaluationResultsRepository {
           where: { sourceRoundId: selectedRound.id },
           take: 1,
           select: { occurredAt: true },
+        },
+        evaluationDecisions: {
+          orderBy: { decisionNumber: "desc" },
+          select: {
+            decisionNumber: true,
+            outcome: true,
+            decidedAt: true,
+            planVersionId: true,
+            roundId: true,
+          },
         },
       },
     });
@@ -217,6 +236,25 @@ export class EvaluationResultsRepository {
                 availableWeight,
             )
           : null;
+      const latestDecision = submission.evaluationDecisions[0];
+      const reviewsComplete = activeAssignments.length > 0 && completedReviewerCount === activeAssignments.length;
+      const isFinalRound = nextRound === null;
+      let availableDecisionOutcomes: readonly EvaluationDecisionOutcome[] = [];
+      if (isFinalRound && submission.status === CfpSubmissionStatus.UNDER_REVIEW && reviewsComplete) {
+        availableDecisionOutcomes = [
+          EvaluationDecisionOutcome.WAITLISTED,
+          EvaluationDecisionOutcome.ACCEPTED,
+          EvaluationDecisionOutcome.REJECTED,
+        ];
+      } else if (
+        isFinalRound &&
+        submission.status === CfpSubmissionStatus.WAITLISTED &&
+        latestDecision?.outcome === EvaluationDecisionOutcome.WAITLISTED &&
+        latestDecision.planVersionId === selectedRound.planVersionId &&
+        latestDecision.roundId === selectedRound.id
+      ) {
+        availableDecisionOutcomes = [EvaluationDecisionOutcome.ACCEPTED, EvaluationDecisionOutcome.REJECTED];
+      }
 
       return {
         id: submission.id,
@@ -239,6 +277,14 @@ export class EvaluationResultsRepository {
           activeAssignments.length > 0 &&
           completedReviewerCount === activeAssignments.length &&
           submission.evaluationAdvancements.length === 0,
+        decision: latestDecision
+          ? {
+              decisionNumber: latestDecision.decisionNumber,
+              outcome: latestDecision.outcome,
+              decidedAt: latestDecision.decidedAt,
+            }
+          : null,
+        availableDecisionOutcomes,
       };
     });
 
