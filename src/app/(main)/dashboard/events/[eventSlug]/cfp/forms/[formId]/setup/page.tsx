@@ -5,7 +5,12 @@ import { ArrowLeft } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
 import { Button } from "@/components/ui/button";
-import { DEFAULT_REMINDER_DAYS, DEFAULT_REMINDER_SEND_AT_MINUTE, reminderTimeFromMinute } from "@/lib/cfp/messages";
+import {
+  DEFAULT_PORTAL_REDIRECT_DELAY_SECONDS,
+  DEFAULT_REMINDER_DAYS,
+  DEFAULT_REMINDER_SEND_AT_MINUTE,
+  reminderTimeFromMinute,
+} from "@/lib/cfp/messages";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
@@ -132,6 +137,9 @@ export default async function CfpFormSetupPage({
         eventSlug={event.slug}
         formId={form.formId}
         initialMessageSettings={{
+          portalAutoRedirect: policy?.definition.messages.portalHandoff?.autoRedirect ?? false,
+          portalRedirectDelaySeconds:
+            policy?.definition.messages.portalHandoff?.redirectDelaySeconds ?? DEFAULT_PORTAL_REDIRECT_DELAY_SECONDS,
           remindersEnabled: reminder?.enabled ?? false,
           reminderDaysBeforeClose: reminder?.daysBeforeClose ?? DEFAULT_REMINDER_DAYS,
           reminderSendAt: reminderTimeFromMinute(reminder?.sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE),

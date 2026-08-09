@@ -117,6 +117,27 @@ export class SpeakerAuthService {
     return { eventId, speakerId, token, expiresAt };
   }
 
+  async issueSession({ eventId, speakerId }: SpeakerIdentity): Promise<SpeakerSessionIdentity> {
+    const generated = this.#tokenGenerator.generate({ purpose: "speaker-session", byteLength: 32 });
+    if (!generated.ok) {
+      throw new SpeakerAuthError("token-generation-failed", "Unable to establish a speaker session.");
+    }
+
+    const sessionToken = generated.value;
+    const now = this.#clock.now();
+    const expiresAt = new Date(now.getTime() + this.#sessionLifetimeMs);
+    await this.#database.$transaction(async (transaction) => {
+      const speaker = await transaction.speaker.findUnique({ where: { eventId_id: { eventId, id: speakerId } } });
+      if (!speaker) throw new SpeakerAuthError("not-found", "Speaker not found in this event.");
+
+      await transaction.speakerSession.deleteMany({ where: { eventId, speakerId } });
+      await transaction.speakerSession.create({
+        data: { eventId, speakerId, tokenHash: hashToken(sessionToken), expiresAt },
+      });
+    });
+    return { eventId, speakerId, sessionToken, expiresAt };
+  }
+
   async consumeMagicLink({
     eventId,
     speakerId,

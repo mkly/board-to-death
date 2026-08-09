@@ -77,6 +77,7 @@ describe("CFP thank-you delivery", () => {
       submissionId: submission.id,
       recipient: { email: "avery@example.test", name: "Avery Chen" },
       bodyTemplate: "Thank you, **{{recipient.name}}**, for submitting to {{event.name}}.",
+      portalUrl: `https://events.example.test/portal/${event.slug}/sign-in`,
     } as const;
 
     const first = await repository.queue(input);
@@ -111,6 +112,9 @@ describe("CFP thank-you delivery", () => {
       to: [{ address: "avery@example.test", name: "Avery Chen" }],
       subject: "Thank you for submitting to Board to Death 2027",
     });
+    expect(infrastructure.email.sentMessages[0]?.text).toContain(
+      `https://events.example.test/portal/${event.slug}/sign-in`,
+    );
 
     const delivery = await new BulkCommunicationRepository(client).get(event.id, first.deliveryId);
     expect(delivery?.recipients[0]).toMatchObject({ status: "delivered", email: "avery@example.test" });

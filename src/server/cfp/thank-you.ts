@@ -24,6 +24,7 @@ export interface QueueCfpThankYouInput extends CfpApplicantMessageContext {
   readonly policyVersionNumber: number;
   readonly submissionId: string;
   readonly bodyTemplate: string;
+  readonly portalUrl: string;
 }
 
 export interface QueuedCfpThankYou {
@@ -78,7 +79,8 @@ export class CfpThankYouRepository {
   }
 
   async queue(input: QueueCfpThankYouInput): Promise<QueuedCfpThankYou> {
-    const rendered = renderCfpApplicantMessage(input.bodyTemplate, input);
+    const bodyTemplate = `${input.bodyTemplate}\n\n[Open your speaker portal](${input.portalUrl})`;
+    const rendered = renderCfpApplicantMessage(bodyTemplate, input);
     const idempotencyKey = `cfp-thank-you:${input.submissionId}`;
     const templateKey = `cfp-thank-you-${input.policyId}`;
 
@@ -101,7 +103,7 @@ export class CfpThankYouRepository {
             templateId: template.id,
             version: input.policyVersionNumber,
             subjectTemplate: "Thank you for submitting to {{event.name}}",
-            htmlTemplate: input.bodyTemplate,
+            htmlTemplate: bodyTemplate,
           },
           update: {},
         });

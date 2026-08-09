@@ -1,7 +1,11 @@
 "use server";
 
+import { cookies } from "next/headers";
+
 import { z } from "zod";
 
+import { portalHref, SPEAKER_SESSION_COOKIE } from "@/app/(speaker)/portal/[eventSlug]/_lib/portal-session";
+import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { CfpDraftPolicy } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
 import { validateCfpAnswers } from "@/lib/cfp";
@@ -15,6 +19,7 @@ import {
 import { type CfpApplicantRecipient, CfpThankYouRepository, renderCfpApplicantMessage } from "@/server/cfp/thank-you";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { SpeakerAuthService } from "@/server/speaker-auth";
 
 export interface PublicCfpFormActionState {
   readonly status: "idle" | "error" | "success";
@@ -22,6 +27,8 @@ export interface PublicCfpFormActionState {
   readonly errors?: Readonly<Record<string, readonly string[]>>;
   readonly submissionId?: string;
   readonly confirmationMarkdown?: string;
+  readonly portalHref?: string;
+  readonly autoRedirectDelaySeconds?: number;
 }
 
 export interface SaveCfpDraftActionState {
@@ -230,13 +237,39 @@ export async function submitPublicCfpForm(
       categoryIds,
       participants: speakers.participants,
     });
+    const runtimeConfig = getRuntimeConfig();
+    const speakerPortalHref = portalHref(lookup.event.slug);
+    const portalSignInUrl = new URL(
+      portalHref(lookup.event.slug, "/sign-in"),
+      runtimeConfig.public.NEXT_PUBLIC_APP_URL,
+    ).toString();
     await new CfpThankYouRepository(client).queue({
       ...messageContext,
       policyId: lookup.policy.id,
       policyVersionNumber: lookup.policy.versionNumber,
       submissionId: submission.id,
       bodyTemplate: lookup.policy.messages.thankYou ?? lookup.policy.messages.submissionConfirmation,
+      portalUrl: portalSignInUrl,
     });
+
+    const leadParticipant = await client.cfpSubmissionParticipant.findFirst({
+      where: { eventId: lookup.event.id, submissionId: submission.id },
+      orderBy: { sortOrder: "asc" },
+      select: { speakerId: true },
+    });
+    if (leadParticipant) {
+      const session = await new SpeakerAuthService({ database: client }).issueSession({
+        eventId: lookup.event.id,
+        speakerId: leadParticipant.speakerId,
+      });
+      (await cookies()).set(SPEAKER_SESSION_COOKIE, session.sessionToken, {
+        expires: session.expiresAt,
+        httpOnly: true,
+        path: "/portal",
+        sameSite: "lax",
+        secure: new URL(runtimeConfig.public.NEXT_PUBLIC_APP_URL).protocol === "https:",
+      });
+    }
 
     const draftToken = formData.get("draftToken");
     if (typeof draftToken === "string" && draftToken.trim() !== "") {
@@ -250,6 +283,14 @@ export async function submitPublicCfpForm(
       message: "Your proposal was submitted.",
       submissionId: submission.id,
       confirmationMarkdown: confirmation.previewMarkdown,
+      ...(leadParticipant
+        ? {
+            portalHref: speakerPortalHref,
+            ...(lookup.policy.messages.portalHandoff?.autoRedirect
+              ? { autoRedirectDelaySeconds: lookup.policy.messages.portalHandoff.redirectDelaySeconds }
+              : {}),
+          }
+        : {}),
     };
   } catch {
     return { status: "error", message: "Your proposal could not be submitted. Try again." };

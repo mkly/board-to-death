@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { reminderTimeFromMinute, validateCfpMessageSettings } from "./messages";
 
 const validInput = {
+  portalAutoRedirect: true,
+  portalRedirectDelaySeconds: "10",
   remindersEnabled: true,
   reminderDaysBeforeClose: "3",
   reminderSendAt: "09:30",
@@ -15,11 +17,23 @@ describe("CFP message settings", () => {
     const result = validateCfpMessageSettings(validInput);
 
     expect(result.fields).toMatchObject({
+      portalAutoRedirect: true,
+      portalRedirectDelaySeconds: 10,
       remindersEnabled: true,
       reminderDaysBeforeClose: 3,
       reminderSendAtMinute: 570,
     });
     expect(reminderTimeFromMinute(570)).toBe("09:30");
+  });
+
+  it("retains a valid delay while automatic portal redirects are disabled", () => {
+    const result = validateCfpMessageSettings({
+      ...validInput,
+      portalAutoRedirect: false,
+      portalRedirectDelaySeconds: "30",
+    });
+
+    expect(result.fields).toMatchObject({ portalAutoRedirect: false, portalRedirectDelaySeconds: 30 });
   });
 
   it("allows disabled reminders without requiring timing fields", () => {
@@ -55,6 +69,7 @@ describe("CFP message settings", () => {
   it("rejects invalid timing, raw HTML, and variables unavailable to CFP messages", () => {
     const result = validateCfpMessageSettings({
       ...validInput,
+      portalRedirectDelaySeconds: "2",
       reminderDaysBeforeClose: "0",
       reminderSendAt: "25:00",
       submissionConfirmation: "<script>alert('no')</script>",
@@ -63,6 +78,7 @@ describe("CFP message settings", () => {
 
     expect(result.fields).toBeNull();
     expect(result.errors.reminderDaysBeforeClose?.[0]).toContain("1 to 90");
+    expect(result.errors.portalRedirectDelaySeconds?.[0]).toContain("5 to 60");
     expect(result.errors.reminderSendAt?.[0]).toContain("valid reminder time");
     expect(result.errors.submissionConfirmation?.join(" ")).toContain("Raw HTML is not allowed");
     expect(result.errors.thankYou?.join(" ")).toContain("Unknown variables: session.title");
