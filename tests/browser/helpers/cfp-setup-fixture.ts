@@ -64,9 +64,7 @@ async function createEventFormAndPolicy(options: FixtureOptions = {}) {
   const categoryRepository = new CfpCategoryRepository(client);
   const categories = [];
   for (const category of options.categories ?? []) {
-    categories.push(
-      await categoryRepository.create({ eventId: event.id, key: category.key, label: category.label }),
-    );
+    categories.push(await categoryRepository.create({ eventId: event.id, key: category.key, label: category.label }));
   }
   await new CfpPolicyRepository(client).create({
     eventId: event.id,

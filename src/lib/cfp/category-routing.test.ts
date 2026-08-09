@@ -44,7 +44,10 @@ describe("validateCfpPolicyCategoryRouting", () => {
         [
           {
             categoryId: "design-category",
-            condition: { logic: "all", conditions: [{ questionId: "topic", operator: "equals", value: "game-design" }] },
+            condition: {
+              logic: "all",
+              conditions: [{ questionId: "topic", operator: "equals", value: "game-design" }],
+            },
           },
         ],
         definition,
@@ -137,11 +140,17 @@ describe("resolveCfpPolicyCategoryId", () => {
   const routes = [
     {
       categoryId: "design-category",
-      condition: { logic: "all" as const, conditions: [{ questionId: "topic", operator: "equals" as const, value: "game-design" }] },
+      condition: {
+        logic: "all" as const,
+        conditions: [{ questionId: "topic", operator: "equals" as const, value: "game-design" }],
+      },
     },
     {
       categoryId: "publishing-category",
-      condition: { logic: "all" as const, conditions: [{ questionId: "topic", operator: "equals" as const, value: "publishing" }] },
+      condition: {
+        logic: "all" as const,
+        conditions: [{ questionId: "topic", operator: "equals" as const, value: "publishing" }],
+      },
     },
   ];
 
@@ -162,7 +171,10 @@ describe("resolveCfpPolicyCategoryId", () => {
       },
       {
         categoryId: "publishing-category",
-        condition: { logic: "all" as const, conditions: [{ questionId: "topic", operator: "equals" as const, value: "game-design" }] },
+        condition: {
+          logic: "all" as const,
+          conditions: [{ questionId: "topic", operator: "equals" as const, value: "game-design" }],
+        },
       },
     ];
     expect(resolveCfpPolicyCategoryId(ambiguousRoutes, { topic: "game-design" })).toBe("design-category");

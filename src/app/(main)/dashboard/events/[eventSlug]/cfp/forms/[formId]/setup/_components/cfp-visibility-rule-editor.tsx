@@ -233,9 +233,7 @@ export function CfpVisibilityRuleEditor({
           />
         </Field>
       ) : null}
-      {sources.length === 0 ? (
-        <FieldDescription>Add another question before creating a rule.</FieldDescription>
-      ) : null}
+      {sources.length === 0 ? <FieldDescription>Add another question before creating a rule.</FieldDescription> : null}
       {rule ? (
         <>
           <Field>

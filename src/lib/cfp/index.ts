@@ -11,12 +11,12 @@ export {
 } from "./category-routing.ts";
 export type { CfpParseError, CfpParseErrorCode } from "./errors.ts";
 export { type CfpParseResult, parseCfpDefinition } from "./parser.ts";
-export { cfpVisibilityRuleSchema } from "./schema.ts";
 export {
   type CfpPublicationIssue,
   publicCfpHref,
   validateCfpDefinitionForPublication,
 } from "./publication.ts";
+export { cfpVisibilityRuleSchema } from "./schema.ts";
 export {
   CFP_BUILT_IN_QUESTION_TYPES,
   CFP_REQUIRED_SPEAKER_FIELDS,
