@@ -13,6 +13,15 @@ interface PublicCfpStartPageProps {
   readonly params: Promise<{ readonly publicId: string }>;
 }
 
+// This route has a dynamic segment but no generateStaticParams and no dynamic
+// API, so Next would render it once on demand and then serve it from the full
+// route cache. That would freeze both the published form definition and the
+// per-render submissionKey below, and a frozen key is silent data loss: the
+// second applicant's answers would be swallowed by createFinalized's replay
+// path and they would be shown the first applicant's submission id. Every
+// request has to render its own key.
+export const dynamic = "force-dynamic";
+
 export default async function PublicCfpStartPage({ params }: PublicCfpStartPageProps) {
   const { publicId } = await params;
   const lookup = await new CfpPublicAccessRepository(getDatabaseClient()).findByPublicId(publicId);
