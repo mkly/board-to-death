@@ -4,7 +4,14 @@ import {
   type PrismaClient,
   ProgramSessionKind,
 } from "../../generated/prisma/client.ts";
+import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
+
+export interface ListProgramSessionsOptions {
+  readonly includeArchived?: boolean;
+  readonly cursor?: string | null;
+  readonly limit?: number;
+}
 
 export interface ProgramSessionVersionInput {
   readonly title: string;
@@ -256,16 +263,33 @@ export class ProgramSessionRepository {
     return session ? fromStored(session) : null;
   }
 
-  async list(
+  /**
+   * One bounded page of an event's sessions, newest cursor last.
+   *
+   * Interactive screens read a single page so their cost does not follow the
+   * event's session count; `list` walks every page for the callers that need the
+   * whole program.
+   */
+  async listPage(
     eventId: string,
-    options: { readonly includeArchived?: boolean } = {},
-  ): Promise<PersistedProgramSession[]> {
+    options: ListProgramSessionsOptions = {},
+  ): Promise<ListPage<PersistedProgramSession>> {
+    const limit = boundedLimit(options.limit, LIST_BOUNDS.programSessions);
     const sessions = await this.client.programSession.findMany({
       where: { eventId, ...(options.includeArchived ? {} : { archivedAt: null }) },
       include: programSessionInclude,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: limit + 1,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });
-    return sessions.map(fromStored);
+    return toListPage(sessions.map(fromStored), limit, (session) => session.id);
+  }
+
+  async list(
+    eventId: string,
+    options: { readonly includeArchived?: boolean } = {},
+  ): Promise<PersistedProgramSession[]> {
+    return collectPages((cursor, take) => this.listPage(eventId, { ...options, cursor, limit: take }));
   }
 
   private async create(

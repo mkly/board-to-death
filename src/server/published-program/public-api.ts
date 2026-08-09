@@ -25,6 +25,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Authorization, Content-Type, If-None-Match, X-API-Key",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Expose-Headers": "ETag, Server-Timing",
   "Access-Control-Max-Age": "86400",
 } as const;
 
