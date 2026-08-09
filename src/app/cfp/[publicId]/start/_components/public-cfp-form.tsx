@@ -2,6 +2,7 @@
 
 import { type FormEvent, startTransition, useActionState, useEffect, useMemo, useState } from "react";
 
+import { SanitizedMarkdown } from "@/components/content/sanitized-markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -191,7 +192,8 @@ export function PublicCfpForm({
           <h2>Proposal submitted</h2>
         </AlertTitle>
         <AlertDescription>
-          Your proposal is now ready for review. Keep this reference: {state.submissionId}
+          {state.confirmationMarkdown ? <SanitizedMarkdown content={state.confirmationMarkdown} /> : null}
+          <p>Keep this reference: {state.submissionId}</p>
         </AlertDescription>
       </Alert>
     );

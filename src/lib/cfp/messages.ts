@@ -5,7 +5,7 @@ import {
   type EmailTemplateIssue,
   type EmailTemplateVariable,
   validateEmailTemplate,
-} from "@/lib/communications/email-templates";
+} from "../communications/email-templates.ts";
 
 export const CFP_MESSAGE_VARIABLES = EMAIL_TEMPLATE_VARIABLES.filter(({ key }) =>
   ["event.name", "event.start_date", "event.location", "recipient.name", "recipient.email"].includes(key),

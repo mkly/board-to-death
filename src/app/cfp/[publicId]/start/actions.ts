@@ -12,6 +12,7 @@ import {
   type CfpSubmissionParticipantInput,
   CfpSubmissionRepository,
 } from "@/server/cfp/submissions";
+import { type CfpApplicantRecipient, CfpThankYouRepository, renderCfpApplicantMessage } from "@/server/cfp/thank-you";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 
@@ -20,6 +21,7 @@ export interface PublicCfpFormActionState {
   readonly message?: string;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
   readonly submissionId?: string;
+  readonly confirmationMarkdown?: string;
 }
 
 export interface SaveCfpDraftActionState {
@@ -156,6 +158,23 @@ function speakerValuesFromFormData(definition: CfpFormDefinition, formData: Form
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, participants };
 }
 
+function applicantRecipient(
+  definition: CfpFormDefinition,
+  answers: readonly { readonly questionId: string; readonly value: unknown }[],
+  participants: readonly CfpSubmissionParticipantInput[],
+): CfpApplicantRecipient | null {
+  const lead = participants[0];
+  if (lead) return { email: lead.email, name: `${lead.givenName} ${lead.familyName}` };
+
+  const answersByQuestion = new Map(answers.map(({ questionId, value }) => [questionId, value]));
+  for (const question of definition.sections.flatMap((section) => section.questions)) {
+    if (question.type !== "email") continue;
+    const email = answersByQuestion.get(question.id);
+    if (typeof email === "string" && email.trim() !== "") return { email, name: email };
+  }
+  return null;
+}
+
 export async function submitPublicCfpForm(
   publicId: string,
   _previousState: PublicCfpFormActionState,
@@ -196,6 +215,12 @@ export async function submitPublicCfpForm(
     if (categoryIds.length !== validation.categoryKeys.length) {
       return { status: "error", message: "This CFP has an invalid category configuration. Contact the organizer." };
     }
+    const recipient = applicantRecipient(lookup.form.definition, validation.answers, speakers.participants);
+    if (!recipient) {
+      return { status: "error", message: "This CFP has no applicant email field. Contact the organizer." };
+    }
+    const messageContext = { event: lookup.event, recipient };
+    const confirmation = renderCfpApplicantMessage(lookup.policy.messages.submissionConfirmation, messageContext);
     const submission = await new CfpSubmissionRepository(client).createFinalized({
       eventId: lookup.event.id,
       formVersionId: lookup.form.versionId,
@@ -204,6 +229,13 @@ export async function submitPublicCfpForm(
       answers: validation.answers,
       categoryIds,
       participants: speakers.participants,
+    });
+    await new CfpThankYouRepository(client).queue({
+      ...messageContext,
+      policyId: lookup.policy.id,
+      policyVersionNumber: lookup.policy.versionNumber,
+      submissionId: submission.id,
+      bodyTemplate: lookup.policy.messages.thankYou ?? lookup.policy.messages.submissionConfirmation,
     });
 
     const draftToken = formData.get("draftToken");
@@ -217,6 +249,7 @@ export async function submitPublicCfpForm(
       status: "success",
       message: "Your proposal was submitted.",
       submissionId: submission.id,
+      confirmationMarkdown: confirmation.previewMarkdown,
     };
   } catch {
     return { status: "error", message: "Your proposal could not be submitted. Try again." };

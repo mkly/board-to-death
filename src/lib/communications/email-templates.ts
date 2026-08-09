@@ -232,10 +232,11 @@ export function renderEmailTemplate(
       ),
       html,
       previewMarkdown: replaceVariables(validation.definition.bodyTemplate, resolved, escapeMarkdown),
-      text:
-        validation.definition.textTemplate === null
-          ? null
-          : replaceVariables(validation.definition.textTemplate, resolved, (value) => value),
+      text: replaceVariables(
+        validation.definition.textTemplate ?? validation.definition.bodyTemplate,
+        resolved,
+        (value) => value,
+      ),
       variables,
     },
   };

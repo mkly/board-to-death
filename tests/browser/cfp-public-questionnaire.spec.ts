@@ -142,7 +142,12 @@ test("finalizes one published submission and shows it in the correct event dashb
       new Date(Date.now() - 86_400_000),
       new Date(Date.now() + 86_400_000),
       JSON.stringify({ maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 }),
-      JSON.stringify({ introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" }),
+      JSON.stringify({
+        introduction: "Welcome",
+        submissionConfirmation: "Thanks **{{recipient.email}}** — your proposal for {{event.name}} is in.",
+        closed: "Closed",
+        thankYou: "Thank you, {{recipient.email}}, for sharing your proposal with {{event.name}}.",
+      }),
     ],
   );
 
@@ -183,6 +188,9 @@ test("finalizes one published submission and shows it in the correct event dashb
     });
 
     await expect(page.getByRole("heading", { name: "Proposal submitted" })).toBeVisible();
+    await expect(
+      page.getByText("Thanks speaker@example.com — your proposal for Plan Screen 20 Conference is in."),
+    ).toBeVisible();
     const submission = await database.query(
       `SELECT s."id", s."kind", s."status", s."submittedAt", r."kind" AS "revisionKind"
        FROM "cfp_submissions" s
@@ -219,6 +227,20 @@ test("finalizes one published submission and shows it in the correct event dashb
       [eventId],
     );
     expect(routedCategory.rows).toEqual([{ categoryId }]);
+    const thankYou = await database.query(
+      `SELECT d."idempotencyKey", r."email", r."subjectSnapshot", r."textSnapshot"
+       FROM "message_deliveries" d
+       JOIN "message_recipients" r ON r."deliveryId" = d."id"
+       WHERE d."eventId" = $1`,
+      [eventId],
+    );
+    expect(thankYou.rows).toHaveLength(1);
+    expect(thankYou.rows[0]).toMatchObject({
+      email: "speaker@example.com",
+      subjectSnapshot: "Thank you for submitting to Plan Screen 20 Conference",
+      textSnapshot: "Thank you, speaker@example.com, for sharing your proposal with Plan Screen 20 Conference.",
+    });
+    expect(thankYou.rows[0].idempotencyKey).toBe(`cfp-thank-you:${submission.rows[0].id}`);
 
     await signInAsAdmin(page);
     await context.addCookies([{ name: "board_to_death_active_event", value: eventId, url: baseURL }]);

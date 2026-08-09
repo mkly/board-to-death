@@ -61,6 +61,18 @@ describe("email templates", () => {
     expect(result.rendered.html).not.toContain("<img");
     expect(result.rendered.html).not.toContain('href="javascript:');
     expect(result.rendered.previewMarkdown).toContain("\\[Click me\\]\\(javascript:alert\\(1\\)\\) &amp; learn");
+
+    const bodyFallback = renderEmailTemplate(
+      { ...template, textTemplate: null },
+      {
+        ...EMAIL_TEMPLATE_PREVIEW_VALUES,
+        "speaker.name": '<img src=x onerror="alert(1)">',
+        "session.title": "[Click me](javascript:alert(1)) & learn",
+      },
+    );
+    expect(bodyFallback.ok).toBe(true);
+    if (!bodyFallback.ok) return;
+    expect(bodyFallback.rendered.text).toContain("[Click me](javascript:alert(1)) & learn");
   });
 
   it("normalizes untrusted line breaks out of rendered subjects", () => {
