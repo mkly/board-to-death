@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test("redirects an unauthenticated administrator to the login screen", async ({ page }) => {
   await page.goto("/dashboard");
 
-  await expect(page).toHaveURL(/\/auth\/v1\/login\?returnTo=%2Fdashboard%2Fdefault$/);
+  await expect(page).toHaveURL(/\/auth\/v1\/login\?returnTo=%2Fdashboard$/);
   await expect(page.getByRole("heading", { name: "Hello again" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
 });

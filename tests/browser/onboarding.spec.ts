@@ -47,11 +47,11 @@ test("assigns an accepted-speaker cohort, deduplicates it, changes a due date, a
   await expect(page.getByLabel("Active assignment count")).toHaveText("2");
 
   const adaRow = page.getByRole("row", { name: /Ada Lovelace/ });
-  await adaRow.getByLabel("Due date for Ada Lovelace").fill("2027-05-02");
+  await adaRow.getByLabel("Due date for Ada Lovelace", { exact: true }).fill("2027-05-02");
   await adaRow.getByRole("button", { name: "Save due date for Ada Lovelace" }).click();
-  await expect(page.getByRole("row", { name: /Ada Lovelace/ }).getByLabel("Due date for Ada Lovelace")).toHaveValue(
-    "2027-05-02",
-  );
+  await expect(
+    page.getByRole("row", { name: /Ada Lovelace/ }).getByLabel("Due date for Ada Lovelace", { exact: true }),
+  ).toHaveValue("2027-05-02");
 
   await page
     .getByRole("row", { name: /Ada Lovelace/ })
