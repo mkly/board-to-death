@@ -1,4 +1,5 @@
 import { type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
+import { Pool } from "pg";
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -13,14 +14,22 @@ interface SpeakerPortalFixture {
   readonly eventSlug: string;
   readonly populatedAuthHref: string;
   readonly emptyAuthHref: string;
+  readonly emptyResourceAuthHref: string;
   readonly expiredSessionToken: string;
   readonly ownSubmissionId: string;
   readonly outsiderSubmissionId: string;
   readonly textTaskId: string;
   readonly fileTaskId: string;
   readonly outsiderTaskId: string;
+  readonly rehearsalVersionId: string;
   readonly adminSessionCookie: string;
 }
+
+const database = new Pool({ connectionString: databaseUrl });
+
+test.afterAll(async () => {
+  await database.end();
+});
 
 async function preparePortal(): Promise<SpeakerPortalFixture> {
   const { stdout } = await runFile(
@@ -222,6 +231,68 @@ test("renders an empty dashboard without exposing populated-speaker data", async
   await expect(page.getByText("No sessions scheduled")).toBeVisible();
   await expect(page.getByText("Speaker arrival guide")).toBeVisible();
   await expect(page.getByText("Ada Lovelace")).toHaveCount(0);
+});
+
+test("navigates ordered published resources and reflects publication changes", async ({ page }) => {
+  const fixture = await preparePortal();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(fixture.populatedAuthHref);
+
+  const resourcesNavigation = page.getByRole("navigation", { name: "Speaker portal" }).getByRole("link", {
+    name: "Resources",
+  });
+  await resourcesNavigation.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/resources`);
+  await expect(page.getByRole("heading", { name: "Speaker resources" })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]')).toHaveText([
+    "1. Technical rehearsal",
+    "2. Speaker arrival guide",
+  ]);
+  await expect(page.getByText("Draft resource")).toHaveCount(0);
+
+  const firstResource = page.getByRole("listitem").filter({ hasText: "Technical rehearsal" });
+  await firstResource.getByRole("link", { name: "Open" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/resources/technical-rehearsal`);
+  await expect(page.getByRole("heading", { name: "Before you arrive", level: 1 })).toBeVisible();
+  await expect(page.getByTitle("Allowed recording")).toBeVisible();
+  await expect(page.getByTitle("Not configured")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "venue map" })).toHaveAttribute("href", "https://example.test/venue");
+
+  await page.getByRole("link", { name: "Speaker arrival guide" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/resources/arrival-guide`);
+  await expect(page.getByTitle("Unconfigured allowlist")).toBeVisible();
+
+  for (const hiddenSlug of ["draft-resource", "unpublished-resource", "archived-resource", "other-event-only"]) {
+    const response = await page.goto(`/portal/${fixture.eventSlug}/resources/${hiddenSlug}`);
+    expect(response?.status()).toBe(404);
+  }
+
+  await page.goto(`/portal/${fixture.eventSlug}/resources/technical-rehearsal`);
+  await database.query(
+    `UPDATE speaker_resource_page_versions SET "unpublishedAt" = '2027-03-01T18:00:00.000Z' WHERE id = $1`,
+    [fixture.rehearsalVersionId],
+  );
+  const unpublished = await page.reload();
+  expect(unpublished?.status()).toBe(404);
+
+  await database.query(`UPDATE speaker_resource_page_versions SET "unpublishedAt" = NULL WHERE id = $1`, [
+    fixture.rehearsalVersionId,
+  ]);
+  await page.goto(`/portal/${fixture.eventSlug}/resources/technical-rehearsal`);
+  await expect(page.getByRole("heading", { name: "Before you arrive", level: 1 })).toBeVisible();
+});
+
+test("shows a useful resource empty state for an event without publications", async ({ page }) => {
+  const fixture = await preparePortal();
+  await page.goto(fixture.emptyResourceAuthHref);
+  await page.getByRole("navigation", { name: "Speaker portal" }).getByRole("link", { name: "Resources" }).click();
+
+  await expect(page.getByRole("heading", { name: "Speaker resources" })).toBeVisible();
+  await expect(page.getByText("No resources published")).toBeVisible();
+  await expect(page.getByText("Event guidance and speaker materials will appear here.")).toBeVisible();
 });
 
 test("validates, saves, and reloads only speaker-editable profile fields", async ({ page }) => {

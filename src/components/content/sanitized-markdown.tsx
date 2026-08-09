@@ -8,6 +8,7 @@ import { CONTENT_SANITIZE_SCHEMA } from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 
 interface SanitizedMarkdownProps {
+  allowedEmbedUrls?: readonly string[];
   content: string;
   className?: string;
 }
@@ -20,12 +21,16 @@ interface SanitizedMarkdownProps {
  * `renderMarkdownToSafeHtml` — there is no separate "preview" or
  * "published" sanitization path to drift out of sync.
  */
-export function SanitizedMarkdown({ content, className }: SanitizedMarkdownProps) {
+export function SanitizedMarkdown({ allowedEmbedUrls, content, className }: SanitizedMarkdownProps) {
   return (
     <div className={cn("max-w-none text-sm leading-relaxed", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, CONTENT_SANITIZE_SCHEMA], allowlistEmbeds]}
+        rehypePlugins={[
+          rehypeRaw,
+          [rehypeSanitize, CONTENT_SANITIZE_SCHEMA],
+          [allowlistEmbeds, { allowedUrls: allowedEmbedUrls }],
+        ]}
       >
         {content}
       </ReactMarkdown>

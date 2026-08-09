@@ -44,6 +44,18 @@ function questionLabelsFromSnapshot(snapshot: Prisma.JsonValue): Map<string, str
   );
 }
 
+/**
+ * `allowedEmbedUrls` is nullable, and `SpeakerResourceRepository` keeps the
+ * distinction: SQL NULL means the version never configured an allowlist, an
+ * empty array means it configured one that permits nothing. Collapsing NULL to
+ * `[]` here would strip every embed from resources authored before (or without)
+ * per-resource configuration, so leave those to the global host allowlist.
+ */
+function embedUrls(value: Prisma.JsonValue): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((url): url is string => typeof url === "string");
+}
+
 export class SpeakerPortalRepository {
   readonly #database: PrismaClient;
 
@@ -132,22 +144,7 @@ export class SpeakerPortalRepository {
         },
         orderBy: [{ dueAt: "asc" }, { assignedAt: "asc" }, { id: "asc" }],
       }),
-      this.#database.speakerResourcePage.findMany({
-        where: {
-          eventId: identity.eventId,
-          archivedAt: null,
-          versions: { some: { publishedAt: { not: null }, unpublishedAt: null } },
-        },
-        select: {
-          id: true,
-          versions: {
-            where: { publishedAt: { not: null }, unpublishedAt: null },
-            orderBy: { sortOrder: "asc" },
-            take: 1,
-            select: { slug: true, title: true, summary: true, sortOrder: true },
-          },
-        },
-      }),
+      this.listResources(identity.eventId),
     ]);
 
     return {
@@ -172,12 +169,24 @@ export class SpeakerPortalRepository {
         ];
       }),
       tasks,
-      resources: resources
-        .flatMap(({ id, versions }) => {
-          const version = versions[0];
-          return version ? [{ id, ...version }] : [];
-        })
-        .sort((left, right) => left.sortOrder - right.sortOrder),
+      resources,
+    };
+  }
+
+  async getResources(identity: SpeakerPortalIdentity) {
+    return this.listResources(identity.eventId);
+  }
+
+  async getResource(identity: SpeakerPortalIdentity, slug: string) {
+    const resources = await this.listResources(identity.eventId);
+    const index = resources.findIndex((resource) => resource.slug === slug);
+    const resource = resources[index];
+    if (!resource) return null;
+
+    return {
+      resource,
+      previous: resources[index - 1] ?? null,
+      next: resources[index + 1] ?? null,
     };
   }
 
@@ -256,6 +265,39 @@ export class SpeakerPortalRepository {
         label: questionLabels.get(answer.questionId) ?? answer.questionId,
       })),
     };
+  }
+
+  private async listResources(eventId: string) {
+    const pages = await this.#database.speakerResourcePage.findMany({
+      where: {
+        eventId,
+        archivedAt: null,
+        versions: { some: { publishedAt: { not: null }, unpublishedAt: null } },
+      },
+      select: {
+        id: true,
+        versions: {
+          where: { publishedAt: { not: null }, unpublishedAt: null },
+          orderBy: { sortOrder: "asc" },
+          take: 1,
+          select: {
+            slug: true,
+            title: true,
+            summary: true,
+            bodyMarkdown: true,
+            allowedEmbedUrls: true,
+            sortOrder: true,
+          },
+        },
+      },
+    });
+
+    return pages
+      .flatMap(({ id, versions }) => {
+        const version = versions[0];
+        return version ? [{ id, ...version, allowedEmbedUrls: embedUrls(version.allowedEmbedUrls) }] : [];
+      })
+      .sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
   async getTask(identity: SpeakerPortalIdentity, assignmentId: string) {

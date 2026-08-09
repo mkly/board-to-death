@@ -316,8 +316,13 @@ export function PortalDashboard({ dashboard }: { readonly dashboard: SpeakerPort
                     <li key={resource.id} className="rounded-lg border p-4">
                       <div className="flex items-start gap-3">
                         <CheckCircle2Icon className="mt-0.5 text-muted-foreground" aria-hidden="true" />
-                        <div>
-                          <p className="font-medium">{resource.title}</p>
+                        <div className="min-w-0">
+                          <Link
+                            href={portalHref(event.slug, `/resources/${encodeURIComponent(resource.slug)}`)}
+                            className="font-medium underline-offset-4 hover:underline"
+                          >
+                            {resource.title}
+                          </Link>
                           {resource.summary ? (
                             <p className="mt-1 text-muted-foreground text-sm">{resource.summary}</p>
                           ) : null}
@@ -328,6 +333,13 @@ export function PortalDashboard({ dashboard }: { readonly dashboard: SpeakerPort
                 </ul>
               )}
             </CardContent>
+            {resources.length > 0 ? (
+              <CardFooter>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={portalHref(event.slug, "/resources")}>Browse all resources</Link>
+                </Button>
+              </CardFooter>
+            ) : null}
           </Card>
         </section>
       </div>

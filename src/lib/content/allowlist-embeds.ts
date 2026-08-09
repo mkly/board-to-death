@@ -3,7 +3,19 @@ import { visit } from "unist-util-visit";
 
 import { EMBED_HOST_ALLOWLIST } from "./schema.ts";
 
-function isAllowedEmbedSrc(src: unknown): boolean {
+interface AllowlistEmbedOptions {
+  readonly allowedUrls?: readonly string[];
+}
+
+function normalizedUrl(value: string): string | null {
+  try {
+    return new URL(value).href;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedEmbedSrc(src: unknown, allowedUrls?: ReadonlySet<string>): boolean {
   if (typeof src !== "string") return false;
 
   let url: URL;
@@ -15,7 +27,8 @@ function isAllowedEmbedSrc(src: unknown): boolean {
 
   if (url.protocol !== "https:" && url.protocol !== "http:") return false;
 
-  return EMBED_HOST_ALLOWLIST.includes(url.hostname.toLowerCase());
+  if (!EMBED_HOST_ALLOWLIST.includes(url.hostname.toLowerCase())) return false;
+  return allowedUrls === undefined || allowedUrls.has(url.href);
 }
 
 /**
@@ -25,11 +38,14 @@ function isAllowedEmbedSrc(src: unknown): boolean {
  * no concept of per-hostname allowlisting and would otherwise let an
  * `iframe` pointing anywhere through as long as the protocol matched.
  */
-export function allowlistEmbeds() {
+export function allowlistEmbeds({ allowedUrls }: AllowlistEmbedOptions = {}) {
+  const normalizedAllowedUrls =
+    allowedUrls === undefined ? undefined : new Set(allowedUrls.flatMap((value) => normalizedUrl(value.trim()) ?? []));
+
   return (tree: Root) => {
     visit<Root, "element">(tree, "element", (node, index, parent) => {
       if (node.tagName !== "iframe") return;
-      if (isAllowedEmbedSrc(node.properties?.src)) return;
+      if (isAllowedEmbedSrc(node.properties?.src, normalizedAllowedUrls)) return;
       if (parent && typeof index === "number") {
         parent.children.splice(index, 1);
         return index;
