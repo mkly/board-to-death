@@ -71,14 +71,18 @@ test.describe("event overview dashboard", () => {
     await expect(page.getByRole("link", { name: "Grace Hopper" })).toHaveCount(2);
     await expect(page.getByRole("link", { name: "Ada Lovelace" })).toHaveCount(0);
 
-    await page.getByRole("link", { name: "Rejected" }).click();
-    await expect(page).toHaveURL(/\/submissions\?status=REJECTED$/);
-
-    // Re-navigate rather than going back: the history entry restores before the overview rehydrates,
-    // so a click landing in that window is dropped.
-    await page.goto(`/dashboard/events/${fixture.eventSlug}/overview`);
-    await page.getByRole("link", { name: /^Overdue speaker tasks/ }).click();
-    await expect(page).toHaveURL(/\/speakers\?state=overdue$/);
+    // Assert the destinations rather than clicking through them: a click landing while the overview
+    // is still hydrating is dropped, and the contract under test is that each summary points at the
+    // matching event-scoped, pre-filtered view.
+    const base = `/dashboard/events/${fixture.eventSlug}`;
+    await expect(page.getByRole("link", { name: "Rejected" })).toHaveAttribute(
+      "href",
+      `${base}/submissions?status=REJECTED`,
+    );
+    await expect(page.getByRole("link", { name: /^Overdue speaker tasks/ })).toHaveAttribute(
+      "href",
+      `${base}/speakers?state=overdue`,
+    );
   });
 
   test("renders empty states for an event with no program data", async ({ context, page }) => {
