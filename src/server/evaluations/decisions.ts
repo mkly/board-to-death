@@ -8,6 +8,7 @@ import {
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { promoteAcceptedSubmission } from "../sessions/repositories.ts";
 
 export interface RecordEvaluationDecisionInput {
   readonly eventId: string;
@@ -114,6 +115,9 @@ export class EvaluationDecisionRepository {
           latest.decidedBy === actorId &&
           latest.rationale === rationale
         ) {
+          if (input.outcome === EvaluationDecisionOutcome.ACCEPTED) {
+            await promoteAcceptedSubmission(transaction, input.eventId, submission.id);
+          }
           return latest;
         }
 
@@ -184,6 +188,9 @@ export class EvaluationDecisionRepository {
             occurredAt: decidedAt,
           },
         });
+        if (input.outcome === EvaluationDecisionOutcome.ACCEPTED) {
+          await promoteAcceptedSubmission(transaction, input.eventId, submission.id);
+        }
         return decision;
       });
     } catch (error) {

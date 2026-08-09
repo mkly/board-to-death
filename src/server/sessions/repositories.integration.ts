@@ -1,9 +1,16 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { CfpSubmissionKind, EventType, PrismaClient, ProgramSessionKind } from "../../generated/prisma/client.ts";
+import {
+  CfpSubmissionKind,
+  CfpSubmissionRevisionKind,
+  CfpSubmissionStatus,
+  EventType,
+  type Prisma,
+  PrismaClient,
+  ProgramSessionKind,
+} from "../../generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { CfpFormRepository } from "../cfp/repositories.ts";
-import { CfpSubmissionRepository } from "../cfp/submissions.ts";
 import { EventRepository, RepositoryError, TrackRepository } from "../events/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
 import { ProgramSessionRepository } from "./repositories.ts";
@@ -17,15 +24,25 @@ const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: data
 const events = new EventRepository(client);
 const tracks = new TrackRepository(client);
 const forms = new CfpFormRepository(client);
-const submissions = new CfpSubmissionRepository(client);
 const speakers = new SpeakerRepository(client);
 const sessions = new ProgramSessionRepository(client);
 
 const definition: CfpFormDefinition = {
   version: 1,
   title: "Program CFP",
-  sections: [{ id: "proposal", kind: "questions", title: "Proposal", questions: [] }],
+  sections: [
+    {
+      id: "proposal",
+      kind: "questions",
+      title: "Proposal",
+      questions: [
+        { id: "title", type: "short_text", label: "Proposal title", required: true },
+        { id: "abstract", type: "long_text", label: "Abstract", required: true },
+      ],
+    },
+  ],
 };
+const definitionSnapshot = JSON.parse(JSON.stringify(definition)) as Prisma.InputJsonValue;
 
 async function createEvent(slug: string): Promise<string> {
   const event = await events.create({
@@ -39,18 +56,44 @@ async function createEvent(slug: string): Promise<string> {
   return event.id;
 }
 
-async function createSubmission(eventId: string): Promise<string> {
+async function createSubmission(eventId: string, speakerIds: readonly string[] = []) {
   const form = await forms.create({ eventId, key: "main-cfp", definition });
   const version = await client.cfpFormVersion.findUniqueOrThrow({
     where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
   });
-  const submission = await submissions.createDraft({
-    eventId,
-    formVersionId: version.id,
-    kind: CfpSubmissionKind.ABSTRACT,
-    answers: [],
+  const category = await client.cfpCategory.create({
+    data: { eventId, key: "design", label: "Game design" },
   });
-  return submission.id;
+  const submission = await client.cfpSubmission.create({
+    data: {
+      eventId,
+      formVersionId: version.id,
+      kind: CfpSubmissionKind.ABSTRACT,
+      status: CfpSubmissionStatus.ACCEPTED,
+      submittedAt: new Date("2027-01-01T12:00:00.000Z"),
+      reviewStartedAt: new Date("2027-01-02T12:00:00.000Z"),
+      decidedAt: new Date("2027-01-03T12:00:00.000Z"),
+      categories: { create: { categoryId: category.id, sortOrder: 0 } },
+      participants: {
+        create: speakerIds.map((speakerId, sortOrder) => ({ speakerId, sortOrder })),
+      },
+      revisions: {
+        create: {
+          versionNumber: 1,
+          kind: CfpSubmissionRevisionKind.FINAL,
+          formVersionId: version.id,
+          definitionSnapshot,
+          answers: {
+            create: [
+              { questionId: "title", sortOrder: 0, value: "From Abstract to Program" },
+              { questionId: "abstract", sortOrder: 1, value: "Copied from the accepted submission." },
+            ],
+          },
+        },
+      },
+    },
+  });
+  return { submissionId: submission.id, categoryId: category.id };
 }
 
 async function createSpeaker(eventId: string, email: string, givenName: string) {
@@ -131,28 +174,29 @@ describe("program session persistence", () => {
 
   test("links one promoted session to its source while allowing independent later edits", async () => {
     const eventId = await createEvent("promoted-session");
-    const sourceSubmissionId = await createSubmission(eventId);
-    const speaker = await createSpeaker(eventId, "promoted@example.test", "Promoted");
-    const promoted = await sessions.promote({
-      eventId,
-      sourceSubmissionId,
-      title: "From Abstract to Program",
-      description: "Copied from the accepted submission.",
-      durationMinutes: 45,
-      speakerIds: [speaker.id],
-    });
+    const primary = await createSpeaker(eventId, "primary-promoted@example.test", "Primary");
+    const coSpeaker = await createSpeaker(eventId, "co-promoted@example.test", "Co");
+    const { submissionId: sourceSubmissionId, categoryId } = await createSubmission(eventId, [
+      coSpeaker.id,
+      primary.id,
+    ]);
+    const promotedSessions = await Promise.all(
+      Array.from({ length: 4 }, () => sessions.promote({ eventId, sourceSubmissionId })),
+    );
+    const promoted = promotedSessions[0];
+    assert.ok(promoted);
 
     assert.equal(promoted.kind, ProgramSessionKind.PROMOTED);
     assert.equal(promoted.sourceSubmissionId, sourceSubmissionId);
-    await expectRepositoryError(
-      sessions.promote({
-        eventId,
-        sourceSubmissionId,
-        title: "Duplicate promotion",
-        durationMinutes: 45,
-      }),
-      "conflict",
+    assert.equal(promoted.version.title, "From Abstract to Program");
+    assert.equal(promoted.version.description, "Copied from the accepted submission.");
+    assert.equal(promoted.version.categoryId, categoryId);
+    assert.deepEqual(promoted.version.speakerIds, [coSpeaker.id, primary.id]);
+    assert.deepEqual(
+      promotedSessions.map(({ id }) => id),
+      Array.from({ length: 4 }, () => promoted.id),
     );
+    assert.equal(await client.programSession.count({ where: { sourceSubmissionId } }), 1);
 
     const edited = await sessions.update(eventId, promoted.id, {
       title: "An Independently Edited Program Title",
@@ -180,7 +224,7 @@ describe("program session persistence", () => {
   test("rejects source submissions, speakers, and tracks from another event", async () => {
     const eventId = await createEvent("session-event");
     const otherEventId = await createEvent("other-session-event");
-    const sourceSubmissionId = await createSubmission(eventId);
+    const { submissionId: sourceSubmissionId } = await createSubmission(eventId);
     const outsider = await createSpeaker(otherEventId, "outsider@example.test", "Outsider");
     const otherTrack = await tracks.create({ eventId: otherEventId, name: "Other", color: "red" });
 
@@ -206,8 +250,6 @@ describe("program session persistence", () => {
       sessions.promote({
         eventId: otherEventId,
         sourceSubmissionId,
-        title: "Cross-event promotion",
-        durationMinutes: 30,
       }),
       "not-found",
     );

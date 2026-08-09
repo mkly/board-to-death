@@ -1,9 +1,11 @@
 import {
   CfpSubmissionKind,
+  CfpSubmissionStatus,
   type Prisma,
   type PrismaClient,
   ProgramSessionKind,
 } from "../../generated/prisma/client.ts";
+import { parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
@@ -17,11 +19,12 @@ export interface ProgramSessionVersionInput {
   readonly title: string;
   readonly description?: string | null;
   readonly durationMinutes: number;
+  readonly categoryId?: string | null;
   readonly trackId?: string | null;
   readonly speakerIds?: readonly string[];
 }
 
-export interface PromoteProgramSessionInput extends ProgramSessionVersionInput {
+export interface PromoteProgramSessionInput {
   readonly eventId: string;
   readonly sourceSubmissionId: string;
 }
@@ -44,6 +47,7 @@ export interface PersistedProgramSessionVersion {
   readonly title: string;
   readonly description: string | null;
   readonly durationMinutes: number;
+  readonly categoryId: string | null;
   readonly trackId: string | null;
   readonly speakerIds: readonly string[];
   readonly createdAt: Date;
@@ -74,6 +78,7 @@ interface ValidatedVersion {
   readonly title: string;
   readonly description: string | null;
   readonly durationMinutes: number;
+  readonly categoryId: string | null;
   readonly trackId: string | null;
   readonly speakerIds: readonly string[];
 }
@@ -106,6 +111,7 @@ function validateVersion(input: ProgramSessionVersionInput): ValidatedVersion {
     title: requiredText(input.title, "title"),
     description: optionalText(input.description),
     durationMinutes: input.durationMinutes,
+    categoryId: input.categoryId ?? null,
     trackId: input.trackId ?? null,
     speakerIds,
   };
@@ -116,9 +122,12 @@ async function requireVersionReferences(
   eventId: string,
   version: ValidatedVersion,
 ): Promise<void> {
-  const [event, speakerCount, trackCount] = await Promise.all([
+  const [event, speakerCount, categoryCount, trackCount] = await Promise.all([
     transaction.event.findUnique({ where: { id: eventId }, select: { id: true } }),
     transaction.speaker.count({ where: { eventId, id: { in: [...version.speakerIds] } } }),
+    version.categoryId === null
+      ? Promise.resolve(1)
+      : transaction.cfpCategory.count({ where: { eventId, id: version.categoryId } }),
     version.trackId === null
       ? Promise.resolve(1)
       : transaction.track.count({ where: { eventId, id: version.trackId } }),
@@ -127,6 +136,7 @@ async function requireVersionReferences(
   if (speakerCount !== version.speakerIds.length) {
     throw new RepositoryError("not-found", "Every participant must be a speaker in the session event.");
   }
+  if (categoryCount !== 1) throw new RepositoryError("not-found", "The event-owned category was not found.");
   if (trackCount !== 1) throw new RepositoryError("not-found", "The event-owned track was not found.");
 }
 
@@ -151,6 +161,7 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
     title: version.title,
     description: version.description,
     durationMinutes: version.durationMinutes,
+    categoryId: version.categoryId,
     trackId: version.trackId,
     speakerIds: version.participants.map(({ speakerId }) => speakerId),
     createdAt: version.createdAt,
@@ -170,6 +181,121 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
   };
 }
 
+const titleQuestionIds = new Set(["title", "proposal-title", "session-title", "talk-title"]);
+const titleQuestionLabels = new Set(["title", "proposal title", "session title", "talk title"]);
+const descriptionQuestionIds = new Set(["abstract", "description", "proposal-description", "session-description"]);
+const descriptionQuestionLabels = new Set(["abstract", "description", "proposal description", "session description"]);
+
+function normalizedLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, " ");
+}
+
+function snapshotAnswer(
+  revision: {
+    readonly definitionSnapshot: Prisma.JsonValue;
+    readonly answers: readonly { readonly questionId: string; readonly value: Prisma.JsonValue }[];
+  },
+  questionIds: ReadonlySet<string>,
+  labels: ReadonlySet<string>,
+): string | null {
+  const definition = parseCfpDefinition(revision.definitionSnapshot);
+  if (!definition.ok) invalid("The stored submission definition snapshot is invalid.");
+  const matchingQuestion = definition.definition.sections
+    .flatMap(({ questions }) => questions)
+    .find(({ id, label }) => questionIds.has(id) || labels.has(normalizedLabel(label)));
+  const answer = revision.answers.find(({ questionId }) => questionId === matchingQuestion?.id)?.value;
+  return typeof answer === "string" && answer.trim() !== "" ? answer.trim() : null;
+}
+
+async function createVersion(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  sessionId: string,
+  versionNumber: number,
+  version: ValidatedVersion,
+): Promise<void> {
+  const created = await transaction.programSessionVersion.create({
+    data: {
+      eventId,
+      sessionId,
+      versionNumber,
+      title: version.title,
+      description: version.description,
+      durationMinutes: version.durationMinutes,
+      categoryId: version.categoryId,
+      trackId: version.trackId,
+    },
+    select: { id: true },
+  });
+  if (version.speakerIds.length > 0) {
+    await transaction.programSessionParticipant.createMany({
+      data: version.speakerIds.map((speakerId, sortOrder) => ({
+        eventId,
+        sessionVersionId: created.id,
+        speakerId,
+        sortOrder,
+      })),
+    });
+  }
+}
+
+export async function promoteAcceptedSubmission(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  sourceSubmissionId: string,
+): Promise<string> {
+  await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`program-session-promotion:${sourceSubmissionId}`}))`;
+
+  const existing = await transaction.programSession.findFirst({
+    where: { eventId, sourceSubmissionId },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const source = await transaction.cfpSubmission.findFirst({
+    where: { eventId, id: sourceSubmissionId },
+    select: {
+      id: true,
+      kind: true,
+      status: true,
+      categories: { orderBy: { sortOrder: "asc" }, take: 1, select: { categoryId: true } },
+      participants: { orderBy: { sortOrder: "asc" }, select: { speakerId: true } },
+      revisions: {
+        orderBy: { versionNumber: "desc" },
+        take: 1,
+        select: {
+          definitionSnapshot: true,
+          answers: { orderBy: { sortOrder: "asc" }, select: { questionId: true, value: true } },
+        },
+      },
+    },
+  });
+  if (!source) throw new RepositoryError("not-found", "The event-owned source submission was not found.");
+  if (source.kind !== CfpSubmissionKind.ABSTRACT) invalid("Only an abstract submission can be promoted.");
+  if (source.status !== CfpSubmissionStatus.ACCEPTED) invalid("Only an accepted submission can be promoted.");
+  const revision = source.revisions[0];
+  if (!revision) invalid("The accepted submission does not have a revision to promote.");
+  const title = snapshotAnswer(revision, titleQuestionIds, titleQuestionLabels);
+  if (!title) invalid("The accepted submission does not have a title answer to promote.");
+  const version = validateVersion({
+    title,
+    description: snapshotAnswer(revision, descriptionQuestionIds, descriptionQuestionLabels),
+    durationMinutes: 45,
+    categoryId: source.categories[0]?.categoryId,
+    speakerIds: source.participants.map(({ speakerId }) => speakerId),
+  });
+  await requireVersionReferences(transaction, eventId, version);
+  const session = await transaction.programSession.create({
+    data: { eventId, kind: ProgramSessionKind.PROMOTED, sourceSubmissionId: source.id },
+    select: { id: true },
+  });
+  await createVersion(transaction, eventId, session.id, 1, version);
+  return session.id;
+}
+
 export class ProgramSessionRepository {
   private readonly client: PrismaClient;
 
@@ -187,26 +313,9 @@ export class ProgramSessionRepository {
 
   async promote(input: PromoteProgramSessionInput): Promise<PersistedProgramSession> {
     try {
-      const version = validateVersion(input);
-      const sessionId = await this.client.$transaction(async (transaction) => {
-        const source = await transaction.cfpSubmission.findFirst({
-          where: { eventId: input.eventId, id: input.sourceSubmissionId },
-          select: { id: true, kind: true },
-        });
-        if (!source) throw new RepositoryError("not-found", "The event-owned source submission was not found.");
-        if (source.kind !== CfpSubmissionKind.ABSTRACT) invalid("Only an abstract submission can be promoted.");
-        await requireVersionReferences(transaction, input.eventId, version);
-        const session = await transaction.programSession.create({
-          data: {
-            eventId: input.eventId,
-            kind: ProgramSessionKind.PROMOTED,
-            sourceSubmissionId: source.id,
-          },
-          select: { id: true },
-        });
-        await this.createVersion(transaction, input.eventId, session.id, 1, version);
-        return session.id;
-      });
+      const sessionId = await this.client.$transaction((transaction) =>
+        promoteAcceptedSubmission(transaction, input.eventId, input.sourceSubmissionId),
+      );
       return await this.require(input.eventId, sessionId);
     } catch (error) {
       return mapDatabaseError(error);
@@ -233,11 +342,12 @@ export class ProgramSessionRepository {
           title: input.title ?? previous.title,
           description: input.description === undefined ? previous.description : input.description,
           durationMinutes: input.durationMinutes ?? previous.durationMinutes,
+          categoryId: previous.categoryId,
           trackId: input.trackId === undefined ? previous.trackId : input.trackId,
           speakerIds: input.speakerIds ?? previous.participants.map(({ speakerId }) => speakerId),
         });
         await requireVersionReferences(transaction, eventId, version);
-        await this.createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
+        await createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
       });
       return await this.require(eventId, sessionId);
     } catch (error) {
@@ -304,43 +414,12 @@ export class ProgramSessionRepository {
           data: { eventId: input.eventId, kind },
           select: { id: true },
         });
-        await this.createVersion(transaction, input.eventId, session.id, 1, version);
+        await createVersion(transaction, input.eventId, session.id, 1, version);
         return session.id;
       });
       return await this.require(input.eventId, sessionId);
     } catch (error) {
       return mapDatabaseError(error);
-    }
-  }
-
-  private async createVersion(
-    transaction: Prisma.TransactionClient,
-    eventId: string,
-    sessionId: string,
-    versionNumber: number,
-    version: ValidatedVersion,
-  ): Promise<void> {
-    const created = await transaction.programSessionVersion.create({
-      data: {
-        eventId,
-        sessionId,
-        versionNumber,
-        title: version.title,
-        description: version.description,
-        durationMinutes: version.durationMinutes,
-        trackId: version.trackId,
-      },
-      select: { id: true },
-    });
-    if (version.speakerIds.length > 0) {
-      await transaction.programSessionParticipant.createMany({
-        data: version.speakerIds.map((speakerId, sortOrder) => ({
-          eventId,
-          sessionVersionId: created.id,
-          speakerId,
-          sortOrder,
-        })),
-      });
     }
   }
 

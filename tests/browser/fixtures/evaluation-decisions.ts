@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import {
   CfpSubmissionKind,
+  CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
   EvaluationAssignmentStatus,
   EvaluationPlanVersionStatus,
@@ -18,6 +19,22 @@ const databaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 const database = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+
+const decisionDefinition = {
+  version: 1,
+  title: "Decision CFP",
+  sections: [
+    {
+      id: "proposal",
+      kind: "questions",
+      title: "Proposal",
+      questions: [
+        { id: "title", type: "short_text", label: "Proposal title", required: true },
+        { id: "abstract", type: "long_text", label: "Abstract", required: true },
+      ],
+    },
+  ],
+} as const;
 
 async function createAdministratorSession(): Promise<string> {
   const links: string[] = [];
@@ -85,6 +102,20 @@ async function setup() {
           submittedAt: new Date(`2027-04-0${index + 1}T18:00:00.000Z`),
           reviewStartedAt: new Date("2027-04-04T18:00:00.000Z"),
           intakeClientIdentifier: `browser-${label}`,
+          revisions: {
+            create: {
+              versionNumber: 1,
+              kind: CfpSubmissionRevisionKind.FINAL,
+              formVersionId: formVersion.id,
+              definitionSnapshot: decisionDefinition,
+              answers: {
+                create: [
+                  { questionId: "title", sortOrder: 0, value: `${label} proposal` },
+                  { questionId: "abstract", sortOrder: 1, value: `${label} abstract` },
+                ],
+              },
+            },
+          },
         },
       }),
     ),
