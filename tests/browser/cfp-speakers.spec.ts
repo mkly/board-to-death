@@ -176,6 +176,11 @@ test("collects one or two ordered speakers and preserves their state through val
       },
     ]);
 
+    const sessionsBeforeResubmission = await database.query(
+      `SELECT ss."id", ss."tokenHash" FROM "speaker_sessions" ss WHERE ss."eventId" = $1 ORDER BY ss."id"`,
+      [eventId],
+    );
+
     await database.query(
       `UPDATE "cfp_policy_versions"
        SET "messages" = jsonb_set("messages", '{portalHandoff,autoRedirect}', 'false')
@@ -197,6 +202,14 @@ test("collects one or two ordered speakers and preserves their state through val
     await expect(page.getByRole("link", { name: "Continue to speaker portal" })).toBeVisible();
     await expect(page.getByText(/Opening the speaker portal in \d+ seconds\./)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Cancel automatic redirect" })).toHaveCount(0);
+
+    // The public form never verifies the submitted address, so a submission naming a speaker who
+    // already exists must not mint or rotate that speaker's session.
+    const sessionsAfterResubmission = await database.query(
+      `SELECT ss."id", ss."tokenHash" FROM "speaker_sessions" ss WHERE ss."eventId" = $1 ORDER BY ss."id"`,
+      [eventId],
+    );
+    expect(sessionsAfterResubmission.rows).toEqual(sessionsBeforeResubmission.rows);
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [eventId]);
   }

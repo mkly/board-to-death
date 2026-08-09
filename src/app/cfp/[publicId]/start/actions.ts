@@ -257,7 +257,15 @@ export async function submitPublicCfpForm(
       orderBy: { sortOrder: "asc" },
       select: { speakerId: true },
     });
-    if (leadParticipant) {
+    // This form is public and unauthenticated, so the submitted address is unverified. Handing an
+    // automatic session to a speaker who already existed would let anyone take over that speaker's
+    // portal — and rotating the session would sign the real speaker out — simply by typing their
+    // address. A speaker this submission just created carries no prior data, so only that case gets
+    // a session; everyone else continues through the emailed sign-in link.
+    const leadIsNewSpeaker =
+      leadParticipant !== null &&
+      (await client.speakerProfileVersion.count({ where: { speakerId: leadParticipant.speakerId } })) === 1;
+    if (leadParticipant && leadIsNewSpeaker) {
       const session = await new SpeakerAuthService({ database: client }).issueSession({
         eventId: lookup.event.id,
         speakerId: leadParticipant.speakerId,
@@ -286,7 +294,9 @@ export async function submitPublicCfpForm(
       ...(leadParticipant
         ? {
             portalHref: speakerPortalHref,
-            ...(lookup.policy.messages.portalHandoff?.autoRedirect
+            // Without a session the portal bounces to sign-in, so only count down when the redirect
+            // actually lands the applicant in their portal.
+            ...(leadIsNewSpeaker && lookup.policy.messages.portalHandoff?.autoRedirect
               ? { autoRedirectDelaySeconds: lookup.policy.messages.portalHandoff.redirectDelaySeconds }
               : {}),
           }
