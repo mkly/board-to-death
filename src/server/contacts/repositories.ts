@@ -72,6 +72,15 @@ export type ContactGroupWithDetails = Prisma.ContactGroupGetPayload<{
   include: { tier: true; primaryContact: true; members: { include: { contact: true } } };
 }>;
 
+const contactProgramSessionParticipationInclude = {
+  sessionVersion: { include: { session: true } },
+  speaker: true,
+} as const satisfies Prisma.ProgramSessionParticipantInclude;
+
+export type ContactProgramSessionParticipation = Prisma.ProgramSessionParticipantGetPayload<{
+  include: typeof contactProgramSessionParticipationInclude;
+}>;
+
 function invalid(message: string): never {
   throw new RepositoryError("invalid-input", message);
 }
@@ -301,6 +310,151 @@ export async function listContacts(
     where: { eventId, ...(options.includeArchived === true ? {} : { archivedAt: null }) },
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
   });
+}
+
+export async function listContactProgramSessionParticipations(
+  client: Prisma.TransactionClient,
+  eventId: string,
+  contactId: string,
+): Promise<readonly ContactProgramSessionParticipation[]> {
+  const contact = await client.contact.findUnique({
+    where: { eventId_id: { eventId, id: contactId } },
+    select: { personId: true },
+  });
+  if (!contact) throw new RepositoryError("not-found", "The event-owned contact was not found.");
+  if (!contact.personId) return [];
+
+  const participations = await client.programSessionParticipant.findMany({
+    where: { eventId, speaker: { personId: contact.personId } },
+    include: contactProgramSessionParticipationInclude,
+    orderBy: [{ sessionVersion: { createdAt: "asc" } }, { sortOrder: "asc" }],
+  });
+  if (participations.length === 0) return [];
+
+  // Editing a session writes a new version and keeps the superseded ones, so a participant row
+  // survives for every version the person ever appeared in. Only the highest-numbered version of
+  // each session describes the current lineup; without this filter one edited session reports
+  // several participations and a removed speaker keeps reporting one.
+  const currentVersionIds = await currentSessionVersionIds(
+    client,
+    eventId,
+    participations.map(({ sessionVersion }) => sessionVersion.sessionId),
+  );
+  return participations.filter(({ sessionVersionId }) => currentVersionIds.has(sessionVersionId));
+}
+
+async function currentSessionVersionIds(
+  client: Prisma.TransactionClient,
+  eventId: string,
+  sessionIds: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const versions = await client.programSessionVersion.findMany({
+    where: { eventId, sessionId: { in: [...new Set(sessionIds)] } },
+    select: { id: true, sessionId: true, versionNumber: true },
+  });
+  const current = new Map<string, { id: string; versionNumber: number }>();
+  for (const version of versions) {
+    const previous = current.get(version.sessionId);
+    if (!previous || version.versionNumber > previous.versionNumber) current.set(version.sessionId, version);
+  }
+  return new Set([...current.values()].map(({ id }) => id));
+}
+
+/**
+ * Move the source contact's program participation identity to the target contact.
+ * When both identities already occur in one session version, the target row wins;
+ * deleting the source row avoids both participant-key and participant-order conflicts.
+ */
+export async function reassignContactProgramSessionParticipations(
+  client: PrismaClient,
+  eventId: string,
+  sourceContactId: string,
+  targetContactId: string,
+): Promise<number> {
+  if (sourceContactId === targetContactId) invalid("Source and target contacts must be different.");
+
+  try {
+    return await client.$transaction(
+      async (transaction) => {
+        const [sourceContact, targetContact] = await Promise.all([
+          transaction.contact.findUnique({
+            where: { eventId_id: { eventId, id: sourceContactId } },
+            select: { personId: true },
+          }),
+          transaction.contact.findUnique({
+            where: { eventId_id: { eventId, id: targetContactId } },
+            select: { personId: true },
+          }),
+        ]);
+        if (!sourceContact || !targetContact) {
+          throw new RepositoryError("not-found", "An event-owned source or target contact was not found.");
+        }
+        if (!sourceContact.personId || !targetContact.personId) {
+          invalid("Source and target contacts must be linked to directory people.");
+        }
+
+        const [sourceSpeaker, targetSpeaker] = await Promise.all([
+          transaction.speaker.findUnique({
+            where: { eventId_personId: { eventId, personId: sourceContact.personId } },
+            select: { id: true },
+          }),
+          transaction.speaker.findUnique({
+            where: { eventId_personId: { eventId, personId: targetContact.personId } },
+            select: { id: true },
+          }),
+        ]);
+        if (!sourceSpeaker || sourceSpeaker.id === targetSpeaker?.id) return 0;
+
+        const sourceParticipations = await transaction.programSessionParticipant.findMany({
+          where: { eventId, speakerId: sourceSpeaker.id },
+          select: { sessionVersionId: true },
+        });
+        if (!targetSpeaker) {
+          await transaction.speaker.update({
+            where: { eventId_id: { eventId, id: sourceSpeaker.id } },
+            data: { personId: targetContact.personId },
+          });
+          return sourceParticipations.length;
+        }
+
+        for (const participation of sourceParticipations) {
+          const targetParticipation = await transaction.programSessionParticipant.findUnique({
+            where: {
+              sessionVersionId_speakerId: {
+                sessionVersionId: participation.sessionVersionId,
+                speakerId: targetSpeaker.id,
+              },
+            },
+            select: { speakerId: true },
+          });
+          if (targetParticipation) {
+            await transaction.programSessionParticipant.delete({
+              where: {
+                sessionVersionId_speakerId: {
+                  sessionVersionId: participation.sessionVersionId,
+                  speakerId: sourceSpeaker.id,
+                },
+              },
+            });
+          } else {
+            await transaction.programSessionParticipant.update({
+              where: {
+                sessionVersionId_speakerId: {
+                  sessionVersionId: participation.sessionVersionId,
+                  speakerId: sourceSpeaker.id,
+                },
+              },
+              data: { speakerId: targetSpeaker.id },
+            });
+          }
+        }
+        return sourceParticipations.length;
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    mapDatabaseError(error);
+  }
 }
 
 export async function createContactGroup(
