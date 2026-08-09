@@ -11,6 +11,7 @@ import { AuthorizationError } from "@/server/authorization/policy";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
+import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
 
 function fieldValue(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -28,6 +29,21 @@ function eventDueDate(value: string, timezone: string): Date | undefined {
   } catch {
     throw new RepositoryError("invalid-input", "The due date is invalid for the event time zone.");
   }
+}
+
+function integerField(formData: FormData, name: string): number {
+  const value = Number(fieldValue(formData, name));
+  if (!Number.isInteger(value)) throw new RepositoryError("invalid-input", `${name} must be an integer.`);
+  return value;
+}
+
+function timeField(formData: FormData, name: string): number {
+  const match = /^(\d{2}):(\d{2})$/.exec(fieldValue(formData, name));
+  if (!match) throw new RepositoryError("invalid-input", "The reminder time is invalid.");
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) throw new RepositoryError("invalid-input", "The reminder time is invalid.");
+  return hour * 60 + minute;
 }
 
 async function requireAdminEvent(eventSlug: string) {
@@ -76,5 +92,46 @@ export async function withdrawSpeakerTask(eventSlug: string, assignmentId: strin
     assignmentId,
     "Withdrawn by an administrator.",
   );
+  revalidateOnboarding(event.slug);
+}
+
+export async function saveSpeakerTaskReminderRule(
+  eventSlug: string,
+  ruleId: string | null,
+  formData: FormData,
+): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  const repository = new SpeakerTaskReminderRepository(getDatabaseClient());
+  const input = {
+    eventId: event.id,
+    templateId: fieldValue(formData, "templateId"),
+    name: fieldValue(formData, "name"),
+    daysBeforeDue: integerField(formData, "daysBeforeDue"),
+    sendAtMinute: timeField(formData, "sendAt"),
+  };
+  if (ruleId) await repository.update({ ...input, ruleId });
+  else await repository.create(input);
+  revalidateOnboarding(event.slug);
+}
+
+export async function activateSpeakerTaskReminderRule(eventSlug: string, ruleId: string): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  await new SpeakerTaskReminderRepository(getDatabaseClient()).activate(event.id, ruleId);
+  revalidateOnboarding(event.slug);
+}
+
+export async function cancelSpeakerTaskReminderRule(eventSlug: string, ruleId: string): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  await new SpeakerTaskReminderRepository(getDatabaseClient()).cancel(event.id, ruleId);
+  revalidateOnboarding(event.slug);
+}
+
+export async function setSpeakerTaskReminderOptOut(
+  eventSlug: string,
+  assignmentId: string,
+  optedOut: boolean,
+): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  await new SpeakerTaskReminderRepository(getDatabaseClient()).setAssignmentOptOut(event.id, assignmentId, optedOut);
   revalidateOnboarding(event.slug);
 }

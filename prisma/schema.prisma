@@ -259,6 +259,7 @@ model Event {
   speakers            Speaker[]
   speakerTaskDefinitions SpeakerTaskDefinition[]
   speakerTaskAssignments SpeakerTaskAssignment[]
+  speakerTaskReminderRules SpeakerTaskReminderRule[]
   programSessions     ProgramSession[]
   programSessionVersions ProgramSessionVersion[]
   integrationConfigurations IntegrationConfiguration[]
@@ -550,6 +551,7 @@ model SpeakerTaskAssignment {
   submittedAt         DateTime?                   @db.Timestamptz(3)
   completedAt         DateTime?                   @db.Timestamptz(3)
   withdrawnAt         DateTime?                   @db.Timestamptz(3)
+  remindersOptedOut   Boolean                     @default(false)
   updatedAt           DateTime                    @updatedAt @db.Timestamptz(3)
   event               Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   definition          SpeakerTaskDefinition       @relation(fields: [eventId, definitionId], references: [eventId, id], onDelete: Restrict)
@@ -562,6 +564,27 @@ model SpeakerTaskAssignment {
   @@unique([eventId, id])
   @@index([eventId, speakerId, status])
   @@map("speaker_task_assignments")
+}
+
+model SpeakerTaskReminderRule {
+  id             String                @id @default(uuid()) @db.Uuid
+  eventId        String                @db.Uuid
+  templateId     String                @db.Uuid
+  name           String
+  daysBeforeDue  Int
+  sendAtMinute   Int
+  enabledAt      DateTime?             @db.Timestamptz(3)
+  cancelledAt    DateTime?             @db.Timestamptz(3)
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
+  event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template       CommunicationTemplate @relation(fields: [templateId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@unique([eventId, name])
+  @@unique([eventId, id])
+  @@index([eventId, enabledAt, cancelledAt])
+  @@index([templateId])
+  @@map("speaker_task_reminder_rules")
 }
 
 model SpeakerTaskSubmission {
@@ -1127,6 +1150,7 @@ model CommunicationTemplate {
   updatedAt DateTime                       @updatedAt @db.Timestamptz(3)
   event     Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   versions  CommunicationTemplateVersion[]
+  reminderRules SpeakerTaskReminderRule[]
 
   @@unique([id, eventId])
   @@unique([eventId, key])

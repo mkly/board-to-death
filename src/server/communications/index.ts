@@ -20,6 +20,7 @@ export type {
   MessageRecipientDeliveryStatus,
 } from "./delivery.ts";
 export { EmailDeliveryCoordinator, InMemoryDeliveryAuditRepository } from "./delivery.ts";
+export { PrismaDeliveryAuditRepository } from "./persistence.ts";
 export type {
   SessionCalendarAttendee,
   SessionCalendarEvent,
