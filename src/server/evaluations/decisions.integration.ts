@@ -118,11 +118,7 @@ describe("final evaluation decisions", () => {
     const [waitlistedSubmission, acceptedSubmission, rejectedSubmission, incompleteSubmission, guaranteedSubmission] =
       submissions;
     assert.ok(
-      waitlistedSubmission &&
-        acceptedSubmission &&
-        rejectedSubmission &&
-        incompleteSubmission &&
-        guaranteedSubmission,
+      waitlistedSubmission && acceptedSubmission && rejectedSubmission && incompleteSubmission && guaranteedSubmission,
     );
 
     const plan = await client.evaluationPlan.create({
@@ -246,10 +242,7 @@ describe("final evaluation decisions", () => {
       (await client.cfpSubmission.findUniqueOrThrow({ where: { id: guaranteedSubmission.id } })).status,
       CfpSubmissionStatus.ACCEPTED,
     );
-    assert.equal(
-      await client.programSession.count({ where: { sourceSubmissionId: guaranteedSubmission.id } }),
-      0,
-    );
+    assert.equal(await client.programSession.count({ where: { sourceSubmissionId: guaranteedSubmission.id } }), 0);
     assert.equal(
       await client.programSession.count({
         where: { sourceSubmissionId: { in: [waitlistedSubmission.id, acceptedSubmission.id] } },
