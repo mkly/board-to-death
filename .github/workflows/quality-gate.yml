@@ -35,6 +35,7 @@ jobs:
       BETTER_AUTH_URL: http://127.0.0.1:3100
       AUTH_ALLOWED_EMAILS: admin@example.test
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      FILE_STORAGE_PATH: ./.data/files
       CI: true
     steps:
       - name: Check out repository
