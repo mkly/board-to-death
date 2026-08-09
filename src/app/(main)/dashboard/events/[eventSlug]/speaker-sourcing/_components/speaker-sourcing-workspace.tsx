@@ -118,7 +118,10 @@ function ProspectCard({
           <ol className="flex flex-col gap-2">
             {prospect.activities.slice(0, 5).map((activity) => (
               <li className="text-muted-foreground text-xs" key={activity.id}>
-                <Badge className="me-1 align-middle" variant={activity.actor === "AUTOMATION" ? "outline" : "secondary"}>
+                <Badge
+                  className="me-1 align-middle"
+                  variant={activity.actor === "AUTOMATION" ? "outline" : "secondary"}
+                >
                   {activity.actor === "AUTOMATION" ? "Automated" : "Team member"}
                 </Badge>
                 <span className="text-foreground">{activity.actorLabel}</span> · {activityDescription(activity)}
