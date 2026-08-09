@@ -12,7 +12,7 @@ import { authClient } from "@/lib/auth-client";
 
 const emailSchema = z.email({ message: "Enter a valid email address." });
 
-export function LoginForm() {
+export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL?: string }) {
   const [error, setError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
   const [isSent, setIsSent] = useState(false);
@@ -31,7 +31,7 @@ export function LoginForm() {
     setIsPending(true);
     const result = await authClient.signIn.magicLink({
       email: parsedEmail.data,
-      callbackURL: "/dashboard",
+      callbackURL,
       errorCallbackURL: "/auth/v1/login?error=invalid-link",
     });
     setIsPending(false);
@@ -70,7 +70,7 @@ export function LoginForm() {
             disabled={isPending}
             required
           />
-          <FieldDescription>Use an email address authorized for this admin workspace.</FieldDescription>
+          <FieldDescription>Use an email address authorized for an admin or reviewer workspace.</FieldDescription>
           {error && <FieldError>{error}</FieldError>}
         </Field>
       </FieldGroup>

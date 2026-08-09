@@ -2,7 +2,15 @@ import { Command } from "lucide-react";
 
 import { LoginForm } from "../../_components/login-form";
 
-export default function LoginV1() {
+interface LoginV1Props {
+  readonly searchParams: Promise<{ callbackURL?: string | string[] }>;
+}
+
+export default async function LoginV1({ searchParams }: LoginV1Props) {
+  const query = await searchParams;
+  const requestedCallback = typeof query.callbackURL === "string" ? query.callbackURL : "/dashboard";
+  const callbackURL =
+    requestedCallback.startsWith("/") && !requestedCallback.startsWith("//") ? requestedCallback : "/dashboard";
   return (
     <div className="flex h-dvh">
       <div className="hidden bg-primary lg:block lg:w-1/3">
@@ -26,7 +34,7 @@ export default function LoginV1() {
             </div>
           </div>
           <div className="space-y-4">
-            <LoginForm />
+            <LoginForm callbackURL={callbackURL} />
           </div>
         </div>
       </div>
