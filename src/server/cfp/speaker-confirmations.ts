@@ -8,7 +8,7 @@ import { RepositoryError } from "../events/repositories.ts";
 import type { ClockService, TokenGeneratorService } from "../infrastructure/index.ts";
 import { createHash, randomBytes } from "node:crypto";
 
-const DEFAULT_INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+export const DEFAULT_SPEAKER_INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface SpeakerConfirmationOptions {
@@ -106,7 +106,7 @@ export class SpeakerConfirmationService {
     this.#clock = options.clock ?? systemClock;
     this.#database = options.database;
     this.#invitationLifetimeMs = positiveDuration(
-      options.invitationLifetimeMs ?? DEFAULT_INVITATION_LIFETIME_MS,
+      options.invitationLifetimeMs ?? DEFAULT_SPEAKER_INVITATION_LIFETIME_MS,
       "invitationLifetimeMs",
     );
     this.#sessionLifetimeMs = positiveDuration(

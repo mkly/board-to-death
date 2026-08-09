@@ -11,7 +11,7 @@ import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/pr
 import { getAllowedAdminEmails, isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
-import { SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
+import { DEFAULT_SPEAKER_INVITATION_LIFETIME_MS, SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
 import { getDatabaseClient } from "@/server/database/client";
 import {
   EvaluationDecisionRepository,
@@ -36,11 +36,20 @@ const decisionSchema = actionSchema.extend({
 });
 const allowedAdminEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
 const runtimeConfig = getRuntimeConfig().server;
+const invitationLifetimeDays = Math.round(DEFAULT_SPEAKER_INVITATION_LIFETIME_MS / 86_400_000);
+const confirmationExpiry = `This link expires in ${invitationLifetimeDays} days`;
 const sendConfirmationLink = createConfiguredMagicLinkSender({
   resendApiKey: runtimeConfig.RESEND_API_KEY,
   resendFromEmail: runtimeConfig.RESEND_FROM_EMAIL,
   webhookToken: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_TOKEN,
   webhookUrl: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_URL,
+  wording: {
+    subject: "Confirm your speaking participation",
+    textIntro: `Use this single-use link to confirm your speaking participation. ${confirmationExpiry}:`,
+    htmlIntro: "Use this single-use link to confirm your speaking participation:",
+    linkLabel: "Confirm your participation",
+    htmlExpiry: `${confirmationExpiry}.`,
+  },
 });
 
 function destination(
