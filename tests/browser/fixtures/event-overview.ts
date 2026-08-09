@@ -84,6 +84,9 @@ const otherForm = await createFormVersion(otherEvent.id, "other", "Other event C
 
 const ada = await createSpeaker("ada@example.test", "Ada", "Lovelace", true);
 const grace = await createSpeaker("grace@example.test", "Grace", "Hopper", false);
+await database.track.create({
+  data: { eventId: event.id, name: "Game Design", color: "neutral", sortOrder: 0 },
+});
 
 // 2026-01-05T02:30:00Z is 2026-01-04 18:30 in America/Los_Angeles, so the rendered timestamp proves
 // the dashboard formats submission times in the event's own time zone rather than the server's.

@@ -17,6 +17,7 @@ export interface EventOverviewSpeaker {
 export interface EventOverviewSession {
   readonly id: string;
   readonly title: string;
+  readonly trackId: string | null;
 }
 
 export interface EventOverviewMetrics {
@@ -152,7 +153,7 @@ export class EventOverviewRepository {
         },
         select: {
           id: true,
-          versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { title: true } },
+          versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { title: true, trackId: true } },
         },
       }),
     ]);
@@ -205,6 +206,7 @@ export class EventOverviewRepository {
         unscheduled: unscheduledSessions.map((session) => ({
           id: session.id,
           title: session.versions[0]?.title ?? "Untitled session",
+          trackId: session.versions[0]?.trackId ?? null,
         })),
       },
     };
