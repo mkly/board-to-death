@@ -135,6 +135,11 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await page.getByRole("option", { name: "Custom type" }).click();
   await page.getByLabel("Custom type identifier").fill("audience_scale");
   await page.getByRole("switch", { name: "Required answer" }).last().click();
+  await page.getByRole("switch", { name: "Conditional visibility" }).last().click();
+  await page.getByLabel("Source question").click();
+  await page.getByRole("option", { name: "Format" }).click();
+  await page.getByLabel("Comparison value").click();
+  await page.getByRole("option", { name: "Workshop" }).click();
 
   await page.getByRole("button", { name: "Move Audience experience up" }).click();
   await page.getByRole("button", { name: "Remove Abstract" }).click();
@@ -153,6 +158,9 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await expect(page.getByLabel("Label").nth(1)).toHaveValue("Format");
   await expect(page.getByLabel("Custom type identifier")).toHaveValue("audience_scale");
   await expect(page.getByRole("switch", { name: "Required answer" }).first()).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Conditional visibility" }).first()).toBeChecked();
+  await expect(page.getByLabel("Source question")).toHaveText("Format");
+  await expect(page.getByLabel("Comparison value")).toHaveText("Workshop");
   await expect(page.getByText("Abstract", { exact: true })).toHaveCount(0);
 
   const persisted = await database.query<{
@@ -163,8 +171,9 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
     title: string;
     type: string;
     versionNumber: number;
+    visibleWhen: unknown;
   }>(
-    `SELECT v."versionNumber", v."title", v."customTypes", q."key", q."type", q."required", q."sortOrder"
+    `SELECT v."versionNumber", v."title", v."customTypes", q."key", q."type", q."required", q."sortOrder", q."visibleWhen"
        FROM "cfp_form_versions" v
        JOIN "cfp_form_steps" s ON s."versionId" = v."id"
        JOIN "cfp_form_questions" q ON q."stepId" = s."id"
@@ -180,4 +189,8 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
     versionNumber: 3,
   });
   expect(persisted.rows[0]?.customTypes).toContain("audience_scale");
+  expect(persisted.rows[0]?.visibleWhen).toEqual({
+    logic: "all",
+    conditions: [{ questionId: "format", operator: "equals", value: "workshop" }],
+  });
 });

@@ -26,3 +26,10 @@ export {
   type CfpSubmissionKind,
   type CfpVisibilityRule,
 } from "./types.ts";
+export {
+  CFP_CONDITION_OPERATOR_LABELS,
+  conditionOperatorsForQuestion,
+  evaluateCfpCondition,
+  evaluateCfpVisibilityRule,
+  validateConditionForQuestion,
+} from "./visibility.ts";
