@@ -49,9 +49,19 @@ const JPEG_BYTES = payload([0xff, 0xd8, 0xff, 0xe0]);
 const PDF_BYTES = payload([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
 const ELF_BYTES = payload([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]);
 
-async function uploadTo(control: Locator, inputId: string, file: { name: string; mimeType: string; buffer: Buffer }) {
+// Replacing a file changes no visible control state — the Download link is
+// already there — so wait on the Server Action response instead of the DOM
+// before reading the stored bytes back.
+async function uploadTo(
+  page: Page,
+  control: Locator,
+  inputId: string,
+  file: { name: string; mimeType: string; buffer: Buffer },
+) {
   await control.locator(`#${inputId}`).setInputFiles(file);
+  const submitted = page.waitForResponse((response) => response.request().method() === "POST");
   await control.getByRole("button", { name: /^(Upload|Replace)$/ }).click();
+  await submitted;
 }
 
 test("uploads, replaces, downloads, and removes speaker profile files", async ({ page }) => {
@@ -65,7 +75,7 @@ test("uploads, replaces, downloads, and removes speaker profile files", async ({
   expect((await page.request.get(downloadHref)).status()).toBe(404);
 
   // Executable content wearing an allowed content type is rejected server-side.
-  await uploadTo(headshot, "profile-file-headshot", {
+  await uploadTo(page, headshot, "profile-file-headshot", {
     name: "headshot.png",
     mimeType: "image/png",
     buffer: ELF_BYTES,
@@ -73,7 +83,11 @@ test("uploads, replaces, downloads, and removes speaker profile files", async ({
   await expect(headshot.getByText("The file's contents do not match its declared type.")).toBeVisible();
   expect((await page.request.get(downloadHref)).status()).toBe(404);
 
-  await uploadTo(headshot, "profile-file-headshot", { name: "headshot.png", mimeType: "image/png", buffer: PNG_BYTES });
+  await uploadTo(page, headshot, "profile-file-headshot", {
+    name: "headshot.png",
+    mimeType: "image/png",
+    buffer: PNG_BYTES,
+  });
   await expect(headshot.getByRole("link", { name: "Download" })).toBeVisible();
   const stored = await page.request.get(downloadHref);
   expect(stored.status()).toBe(200);
@@ -83,7 +97,11 @@ test("uploads, replaces, downloads, and removes speaker profile files", async ({
   expect(Buffer.from(await stored.body()).equals(PNG_BYTES)).toBe(true);
 
   // Replacing swaps the stored bytes rather than adding a second file.
-  await uploadTo(headshot, "profile-file-headshot", { name: "new.jpg", mimeType: "image/jpeg", buffer: JPEG_BYTES });
+  await uploadTo(page, headshot, "profile-file-headshot", {
+    name: "new.jpg",
+    mimeType: "image/jpeg",
+    buffer: JPEG_BYTES,
+  });
   await expect(headshot.getByRole("link", { name: "Download" })).toBeVisible();
   const replaced = await page.request.get(downloadHref);
   expect(replaced.headers()["content-type"]).toBe("image/jpeg");
@@ -95,13 +113,13 @@ test("uploads, replaces, downloads, and removes speaker profile files", async ({
 
   // The agreement control enforces its own type list independently.
   const agreement = fileControl(page, "profile-file-agreement");
-  await uploadTo(agreement, "profile-file-agreement", {
+  await uploadTo(page, agreement, "profile-file-agreement", {
     name: "agreement.pdf",
     mimeType: "application/pdf",
     buffer: ELF_BYTES,
   });
   await expect(agreement.getByText("The file's contents do not match its declared type.")).toBeVisible();
-  await uploadTo(agreement, "profile-file-agreement", {
+  await uploadTo(page, agreement, "profile-file-agreement", {
     name: "agreement.pdf",
     mimeType: "application/pdf",
     buffer: PDF_BYTES,
@@ -123,14 +141,14 @@ test("manages submission slides and supporting documents per speaker", async ({ 
   const slidesHref = `/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}/files/slides`;
   expect((await page.request.get(slidesHref)).status()).toBe(404);
 
-  await uploadTo(slides, "submission-file-slides", {
+  await uploadTo(page, slides, "submission-file-slides", {
     name: "deck.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("not a pdf at all", "utf8"),
   });
   await expect(slides.getByText("The file's contents do not match its declared type.")).toBeVisible();
 
-  await uploadTo(slides, "submission-file-slides", {
+  await uploadTo(page, slides, "submission-file-slides", {
     name: "deck.pdf",
     mimeType: "application/pdf",
     buffer: PDF_BYTES,
@@ -140,7 +158,7 @@ test("manages submission slides and supporting documents per speaker", async ({ 
 
   const supporting = fileControl(page, "submission-file-supporting-document");
   const supportingHref = `/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}/files/supportingDocument`;
-  await uploadTo(supporting, "submission-file-supporting-document", {
+  await uploadTo(page, supporting, "submission-file-supporting-document", {
     name: "notes.txt",
     mimeType: "text/plain",
     buffer: Buffer.from("Session notes for the organizers.", "utf8"),
