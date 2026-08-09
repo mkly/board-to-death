@@ -10,7 +10,7 @@ import type { SendMagicLink } from "./magic-link-email";
 interface CreateAuthOptions {
   readonly baseURL: string;
   readonly database: PrismaClient;
-  readonly isAllowedEmail: (email: string) => boolean;
+  readonly isAllowedEmail: (email: string) => boolean | Promise<boolean>;
   readonly secret: string;
   readonly sendMagicLink: SendMagicLink;
 }
@@ -30,7 +30,7 @@ export function createAuth({ baseURL, database, isAllowedEmail, secret, sendMagi
         expiresIn: 60 * 10,
         storeToken: "hashed",
         sendMagicLink: async ({ email, url }) => {
-          if (isAllowedEmail(email)) {
+          if (await isAllowedEmail(email)) {
             await sendMagicLink({ email, url });
           }
         },
