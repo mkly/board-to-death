@@ -23,7 +23,7 @@ export default async function SpeakerSourcingPage({ params, searchParams }: Spea
   const [stages, forms, people] = await Promise.all([
     repository.listBoard(event.id),
     repository.listInterestForms(event.id),
-    searchDirectoryPeople(client, ""),
+    searchDirectoryPeople(client, event.id, ""),
   ]);
   const enrolledPersonIds = new Set(stages.flatMap(({ prospects }) => prospects.map(({ personId }) => personId)));
 

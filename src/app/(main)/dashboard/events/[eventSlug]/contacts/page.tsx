@@ -46,7 +46,7 @@ export default async function ContactsPage({
   const customFields = new CustomFieldRepository(client);
   const [contacts, people, definitions] = await Promise.all([
     listContacts(client, event.id),
-    searchDirectoryPeople(client, query.q ?? ""),
+    searchDirectoryPeople(client, event.id, query.q ?? ""),
     customFields.listDefinitions(event.id, CustomFieldEntityType.CONTACT),
   ]);
   const values = await client.customFieldValue.findMany({

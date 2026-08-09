@@ -166,16 +166,20 @@ export async function createContact(client: Prisma.TransactionClient, input: Cre
   }
 }
 
+/** Search the person directory of the organization that owns the given event. */
 export async function searchDirectoryPeople(
   client: Prisma.TransactionClient,
+  eventId: string,
   query: string,
 ): Promise<readonly DirectoryPersonSummary[]> {
+  const event = await client.event.findUniqueOrThrow({ where: { id: eventId }, select: { orgId: true } });
   const normalized = query.trim();
   const people = await client.person.findMany({
     where:
       normalized === ""
-        ? undefined
+        ? { orgId: event.orgId }
         : {
+            orgId: event.orgId,
             OR: [
               { email: { contains: normalized, mode: "insensitive" } },
               { givenName: { contains: normalized, mode: "insensitive" } },
