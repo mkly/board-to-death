@@ -73,7 +73,10 @@ test.describe("event overview dashboard", () => {
 
     await page.getByRole("link", { name: "Rejected" }).click();
     await expect(page).toHaveURL(/\/submissions\?status=REJECTED$/);
-    await page.goBack();
+
+    // Re-navigate rather than going back: the history entry restores before the overview rehydrates,
+    // so a click landing in that window is dropped.
+    await page.goto(`/dashboard/events/${fixture.eventSlug}/overview`);
     await page.getByRole("link", { name: /^Overdue speaker tasks/ }).click();
     await expect(page).toHaveURL(/\/speakers\?state=overdue$/);
   });
