@@ -43,6 +43,7 @@ export interface PublishedProgramSessionSnapshot {
   readonly durationMinutes: number;
   readonly trackId: string | null;
   readonly speakerIds: readonly string[];
+  readonly parentSessionId?: string | null;
 }
 
 export interface PublishedProgramPlacementSnapshot {
@@ -202,6 +203,7 @@ function buildSnapshot(event: StoredSnapshotEvent): PublishedProgramSnapshot {
       speakerIds: version.participants
         .map(({ speakerId }) => speakerId)
         .filter((speakerId) => publishedSpeakerIds.has(speakerId)),
+      parentSessionId: session.parentSessionId,
     };
   });
   const roomIds = new Set(event.agendaPlacements.map(({ roomId }) => roomId));

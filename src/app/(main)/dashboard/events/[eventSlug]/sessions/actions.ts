@@ -30,14 +30,21 @@ const sessionFormSchema = z
       .min(1, "Duration must be at least one minute.")
       .max(1_440, "Duration cannot exceed 1,440 minutes."),
     trackId: z.string().trim(),
+    parentSessionId: z.string().trim(),
     speakerIds: z.array(z.string().uuid("A selected speaker is invalid.")),
   })
-  .superRefine(({ sessionId, speakerIds, trackId }, context) => {
+  .superRefine(({ parentSessionId, sessionId, speakerIds, trackId }, context) => {
     if (sessionId !== "" && !z.uuid().safeParse(sessionId).success) {
       context.addIssue({ code: "custom", path: ["sessionId"], message: "The selected session is invalid." });
     }
     if (trackId !== "" && trackId !== "unassigned" && !z.uuid().safeParse(trackId).success) {
       context.addIssue({ code: "custom", path: ["trackId"], message: "The selected track is invalid." });
+    }
+    if (parentSessionId !== "" && parentSessionId !== "standalone" && !z.uuid().safeParse(parentSessionId).success) {
+      context.addIssue({ code: "custom", path: ["parentSessionId"], message: "The parent session is invalid." });
+    }
+    if (parentSessionId === sessionId) {
+      context.addIssue({ code: "custom", path: ["parentSessionId"], message: "A session cannot be its own parent." });
     }
     if (new Set(speakerIds).size !== speakerIds.length) {
       context.addIssue({ code: "custom", path: ["speakerIds"], message: "Select each participant once." });
@@ -80,6 +87,7 @@ export async function saveProgramSession(
     description: stringValue(formData, "description"),
     durationMinutes: stringValue(formData, "durationMinutes"),
     trackId: stringValue(formData, "trackId"),
+    parentSessionId: stringValue(formData, "parentSessionId"),
     speakerIds: formData.getAll("speakerIds").filter((value): value is string => typeof value === "string"),
   });
   if (!parsed.success) {
@@ -99,6 +107,10 @@ export async function saveProgramSession(
     description: parsed.data.description === "" ? null : parsed.data.description,
     durationMinutes: parsed.data.durationMinutes,
     trackId: parsed.data.trackId === "unassigned" || parsed.data.trackId === "" ? null : parsed.data.trackId,
+    parentSessionId:
+      parsed.data.parentSessionId === "standalone" || parsed.data.parentSessionId === ""
+        ? null
+        : parsed.data.parentSessionId,
     speakerIds: parsed.data.speakerIds,
   };
 

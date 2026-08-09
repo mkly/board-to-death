@@ -57,6 +57,8 @@ export interface SessionWorkspaceSession {
   readonly durationMinutes: number;
   readonly trackId: string | null;
   readonly trackName: string | null;
+  readonly parentSessionId: string | null;
+  readonly parentSessionTitle: string | null;
   readonly speakerIds: readonly string[];
   readonly speakerNames: readonly string[];
   readonly versionNumber: number;
@@ -101,12 +103,14 @@ function SessionForm({
   session,
   speakers,
   tracks,
+  sessions,
   onSaved,
 }: {
   readonly eventSlug: string;
   readonly session: SessionWorkspaceSession | null;
   readonly speakers: SessionWorkspaceProps["speakers"];
   readonly tracks: SessionWorkspaceProps["tracks"];
+  readonly sessions: SessionWorkspaceProps["sessions"];
   readonly onSaved: (sessionId: string) => void;
 }) {
   const [state, formAction, pending] = useActionState(
@@ -118,6 +122,9 @@ function SessionForm({
     INITIAL_MUTATION_STATE,
   );
   const isNew = session === null;
+  const parentOptions = sessions.filter(
+    (candidate) => !candidate.archived && candidate.parentSessionId === null && candidate.id !== session?.id,
+  );
 
   return (
     <form action={formAction}>
@@ -203,6 +210,37 @@ function SessionForm({
                 <FieldError>{fieldError(state, "trackId")}</FieldError>
               </Field>
             </div>
+            <Field data-invalid={Boolean(fieldError(state, "parentSessionId")) || undefined}>
+              <FieldLabel htmlFor="session-parent">Program structure</FieldLabel>
+              <Select
+                name="parentSessionId"
+                defaultValue={session?.parentSessionId ?? "standalone"}
+                disabled={session?.archived}
+              >
+                <SelectTrigger
+                  id="session-parent"
+                  className="w-full"
+                  aria-invalid={Boolean(fieldError(state, "parentSessionId")) || undefined}
+                >
+                  <SelectValue placeholder="Standalone session" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="standalone">Standalone session</SelectItem>
+                    {parentOptions.map((candidate) => (
+                      <SelectItem key={candidate.id} value={candidate.id}>
+                        Subsession of {candidate.title}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Subsessions must fit inside their parent’s agenda placement. Their participants are also added to the
+                parent.
+              </FieldDescription>
+              <FieldError>{fieldError(state, "parentSessionId")}</FieldError>
+            </Field>
             <FieldSet>
               <FieldLegend variant="label">Participants</FieldLegend>
               <FieldDescription>Select speakers from this event in display order.</FieldDescription>
@@ -367,6 +405,9 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
                       <TableCell>
                         <div className="flex min-w-48 flex-col gap-1 whitespace-normal">
                           <span className="font-medium">{session.title}</span>
+                          {session.parentSessionTitle ? (
+                            <span className="text-muted-foreground text-xs">Subsession of {session.parentSessionTitle}</span>
+                          ) : null}
                           <span className="text-muted-foreground text-xs">
                             {session.speakerNames.length === 0 ? "No participants" : session.speakerNames.join(", ")}
                           </span>
@@ -406,6 +447,7 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
               session={selectedSession}
               speakers={speakers}
               tracks={tracks}
+              sessions={sessions}
               onSaved={(sessionId) => {
                 setSelectedSessionId(sessionId);
                 setCreating(false);

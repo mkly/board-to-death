@@ -85,6 +85,15 @@ async function setup() {
     trackId: community.id,
     speakerIds: [grace.id],
   });
+  const keynoteDemo = await sessions.createManual({
+    eventId: event.id,
+    title: "Keynote mechanics demo",
+    description: "A focused demonstration inside the keynote.",
+    durationMinutes: 20,
+    trackId: strategy.id,
+    speakerIds: [grace.id],
+    parentSessionId: opening.id,
+  });
   const dstLab = await sessions.createManual({
     eventId: event.id,
     title: "Daylight saving design lab",
@@ -101,6 +110,15 @@ async function setup() {
     durationMinutes: 45,
     trackIds: [strategy.id],
     speakerIds: [ada.id],
+  });
+  await placements.place({
+    eventId: event.id,
+    sessionId: keynoteDemo.id,
+    roomId: mainHall.id,
+    startsAt: new Date("2027-03-13T18:10:00.000Z"),
+    durationMinutes: 20,
+    trackIds: [strategy.id],
+    speakerIds: [grace.id],
   });
   await placements.place({
     eventId: event.id,

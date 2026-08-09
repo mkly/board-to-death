@@ -138,6 +138,13 @@ export class SpeakerPortalRepository {
         take: LIST_BOUNDS.speakerPortalSessions,
         select: {
           id: true,
+          parentSessionId: true,
+          parentSession: {
+            select: {
+              id: true,
+              versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { title: true } },
+            },
+          },
           agendaPlacement: { select: { startsAt: true, endsAt: true, room: { select: { name: true } } } },
           versions: {
             orderBy: { versionNumber: "desc" },
@@ -178,19 +185,33 @@ export class SpeakerPortalRepository {
         title: formVersion.title,
         categories: categories.map(({ category }) => category),
       })),
-      sessions: storedSessions.flatMap((session) => {
+      sessions: storedSessions
+        .flatMap((session) => {
         const version = session.versions[0];
         if (!version?.participants.some(({ speakerId }) => speakerId === identity.speakerId)) return [];
         return [
           {
             id: session.id,
+            parentSessionId: session.parentSessionId,
+            parentSessionTitle: session.parentSession?.versions[0]?.title ?? null,
             agendaPlacement: session.agendaPlacement,
             title: version.title,
             description: version.description,
             durationMinutes: version.durationMinutes,
           },
         ];
-      }),
+        })
+        .toSorted((left, right) => {
+          const leftRoot = left.parentSessionId ?? left.id;
+          const rightRoot = right.parentSessionId ?? right.id;
+          const rootOrder = leftRoot.localeCompare(rightRoot);
+          if (rootOrder !== 0) return rootOrder;
+          if (left.parentSessionId === null) return -1;
+          if (right.parentSessionId === null) return 1;
+          const leftTime = left.agendaPlacement?.startsAt.getTime() ?? Number.MAX_SAFE_INTEGER;
+          const rightTime = right.agendaPlacement?.startsAt.getTime() ?? Number.MAX_SAFE_INTEGER;
+          return leftTime - rightTime;
+        }),
       tasks,
       resources,
     };

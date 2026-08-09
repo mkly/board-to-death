@@ -240,6 +240,8 @@ function agendaData(snapshot: PublishedProgramSnapshot) {
           sessionId: session.id,
           title: session.title,
           description: session.description,
+          parentSessionId: session.parentSessionId ?? null,
+          parentSessionTitle: session.parentSessionId ? (sessions.get(session.parentSessionId)?.title ?? null) : null,
           startsAt: placement.startsAt,
           endsAt: placement.endsAt,
           room: { id: room.id, name: room.name },

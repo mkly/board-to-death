@@ -6,7 +6,7 @@ import { CfpFormRepository } from "../cfp/repositories.ts";
 import { CfpSubmissionRepository } from "../cfp/submissions.ts";
 import { EventRepository, RepositoryError, TrackRepository } from "../events/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
-import { ProgramSessionRepository } from "./repositories.ts";
+import { MAX_SUBSESSIONS_PER_PARENT, ProgramSessionRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -210,6 +210,51 @@ describe("program session persistence", () => {
         durationMinutes: 30,
       }),
       "not-found",
+    );
+  });
+
+  test("converts and reverts subsessions while propagating participants and enforcing event-scoped limits", async () => {
+    const eventId = await createEvent("nested-sessions");
+    const otherEventId = await createEvent("nested-sessions-other");
+    const parentSpeaker = await createSpeaker(eventId, "parent@example.test", "Parent");
+    const childSpeaker = await createSpeaker(eventId, "child@example.test", "Child");
+    const parent = await sessions.createManual({
+      eventId,
+      title: "Workshop block",
+      durationMinutes: 120,
+      speakerIds: [parentSpeaker.id],
+    });
+    const child = await sessions.createManual({
+      eventId,
+      title: "Focused exercise",
+      durationMinutes: 30,
+      speakerIds: [childSpeaker.id],
+    });
+
+    const nested = await sessions.update(eventId, child.id, { parentSessionId: parent.id });
+    assert.equal(nested.parentSessionId, parent.id);
+    assert.deepEqual((await sessions.get(eventId, parent.id))?.version.speakerIds, [parentSpeaker.id, childSpeaker.id]);
+
+    const standalone = await sessions.update(eventId, child.id, { parentSessionId: null });
+    assert.equal(standalone.parentSessionId, null);
+    await expectRepositoryError(sessions.update(otherEventId, child.id, { parentSessionId: parent.id }), "not-found");
+
+    for (let index = 0; index < MAX_SUBSESSIONS_PER_PARENT; index += 1) {
+      await sessions.createManual({
+        eventId,
+        title: `Subsession ${index + 1}`,
+        durationMinutes: 5,
+        parentSessionId: parent.id,
+      });
+    }
+    await expectRepositoryError(
+      sessions.createManual({
+        eventId,
+        title: "One subsession too many",
+        durationMinutes: 5,
+        parentSessionId: parent.id,
+      }),
+      "invalid-input",
     );
   });
 });

@@ -971,6 +971,7 @@ model ProgramSession {
   eventId            String                  @db.Uuid
   kind               ProgramSessionKind
   sourceSubmissionId String?                 @unique @db.Uuid
+  parentSessionId    String?                 @db.Uuid
   archivedAt         DateTime?               @db.Timestamptz(3)
   intakeClientIdentifier String?
   intakePayloadHash      String?
@@ -981,6 +982,8 @@ model ProgramSession {
   updatedAt          DateTime                @updatedAt @db.Timestamptz(3)
   event              Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sourceSubmission   CfpSubmission?          @relation("ProgramSessionSourceSubmission", fields: [eventId, sourceSubmissionId], references: [eventId, id], onDelete: NoAction)
+  parentSession      ProgramSession?          @relation("ProgramSessionSubsessions", fields: [eventId, parentSessionId], references: [eventId, id], onDelete: NoAction)
+  subsessions        ProgramSession[]         @relation("ProgramSessionSubsessions")
   versions           ProgramSessionVersion[]
   agendaPlacement    AgendaPlacement?
 
@@ -988,6 +991,7 @@ model ProgramSession {
   @@unique([eventId, intakeClientIdentifier])
   @@unique([eventId, sourceSubmissionId])
   @@index([eventId, kind, archivedAt])
+  @@index([eventId, parentSessionId])
   @@map("program_sessions")
 }
 
