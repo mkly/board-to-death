@@ -16,6 +16,7 @@ in the example links.
 | Reviewer | `/reviews` | A reviewer sees active assignments issued to that identity and cannot open another reviewer's assignment. |
 | Applicant | `/cfp/{publicId}` | The published policy controls dates, access, drafts, limits, questions, and messages. No admin session is required. |
 | Speaker | `/portal/{eventSlug}/sign-in` | A short-lived, event-scoped speaker link grants access only to that speaker's submissions, tasks, profile, and files. |
+| Prospective speaker | `/speaker-interest/{publicId}` | A published interest form accepts contact details for the event's sourcing pipeline. No admin session is required. |
 | Attendee | `/embed/{eventSlug}` or `/events/{eventSlug}/resources` | Attendees see the latest published program snapshot and published resource pages. |
 
 The admin magic-link login checks `AUTH_ALLOWED_EMAILS` before granting dashboard access. Event authorization then
@@ -254,11 +255,28 @@ link expires, return to `/portal/{eventSlug}/sign-in` and request a new link. Si
   download authorized files; export status.
 - Communications: create email templates, filter an audience, confirm a bulk delivery, inspect attempts, and cancel
   queued recipients.
-- Bulk edit: preview and apply event-scoped contact, session, or group changes.
+- Bulk edit: preview and apply event-scoped contact, session, or group changes in
+  `/dashboard/events/{eventSlug}/records`.
 - Reports: create saved reports over sessions, contacts, groups, or evaluation plans; filter rows; duplicate a report;
   export the displayed result as CSV or XLSX.
 - Custom dashboards: start from an event, submissions, speaker, review, evaluation, or schedule template and arrange
   metric, chart, or list widgets. The dashboard uses stored definitions and does not generate layouts from prompts.
+
+## Speaker sourcing
+
+Use `/dashboard/events/{eventSlug}/speaker-sourcing` to build a pipeline of prospective speakers before or alongside
+the CFP. Configure the ordered stages the event needs; each event keeps exactly one stage per behavior, covering open,
+nurture, won, and lost.
+
+Publish an interest form to collect prospects from outside the dashboard. The public link is
+`/speaker-interest/{publicId}`; an unpublished or unknown form returns not found. Organizers can also enroll a
+directory person directly. Each prospect records its source form or manual label, and a person can appear once per
+event pipeline.
+
+Move a prospect between stages, add notes, and assign the prospect to the event. Every creation, stage change, note,
+and assignment is stored as prospect activity, so the pipeline keeps its own history. Assignment links the prospect to
+this event; it does not create a submission or a speaker portal session, which still come from the CFP and invitation
+flow described above.
 
 ## Scope and deliberate exclusions
 

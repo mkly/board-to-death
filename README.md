@@ -14,6 +14,7 @@ English-language workflow for organizers, applicants, reviewers, and speakers.
 - Organizers create an event, including its time zone, rooms, tracks, CFP categories, and access settings.
 - Applicants submit an abstract or guaranteed session through a published CFP link. Form versions preserve the exact
   questions and answers used for each submission.
+- Organizers track prospective speakers in a stage pipeline and collect leads through a published interest form.
 - Reviewers score assigned submissions in identified, blind, or anonymized rounds. Organizers compare weighted results,
   advance submissions, and record waitlist, acceptance, or rejection decisions.
 - Accepted participants confirm their invitation and enter the speaker portal. They update profiles, upload files,
@@ -28,9 +29,9 @@ exports, and the complete program journey. Operators should also read [productio
 
 ## Product scope
 
-The current release includes event-scoped CFPs, evaluation, speaker onboarding, contacts and sponsor or exhibitor
-groups, scheduling, communications, file requests, reports, public resources, published-program APIs, embeds, and the
-deterministic Accelevents adapter.
+The current release includes event-scoped CFPs, evaluation, speaker sourcing, speaker onboarding, contacts and
+sponsor or exhibitor groups, scheduling, communications, file requests, reports, public resources, published-program
+APIs, embeds, and the deterministic Accelevents adapter.
 
 The following capabilities are outside the supported release:
 
