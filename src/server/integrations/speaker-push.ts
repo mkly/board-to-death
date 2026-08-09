@@ -10,6 +10,13 @@ import { RepositoryError } from "../events/repositories.ts";
 import type { InfrastructureFailure } from "../infrastructure/index.ts";
 import type { AcceleventsAdapter, AcceleventsConnection, AcceleventsSpeakerInput } from "./accelevents.ts";
 import { type SpeakerFieldMapping, type SpeakerMappingSource, speakerMappingSources } from "./speaker-mapping.ts";
+import {
+  assertNoConcurrentSyncRun,
+  cancellationRequested,
+  cancelSyncRun,
+  lockEventSyncRuns,
+  retryableRecords,
+} from "./sync-run-control.ts";
 import { createHash } from "node:crypto";
 
 export interface PushAcceleventsSpeakersInput {
@@ -18,6 +25,7 @@ export interface PushAcceleventsSpeakersInput {
   readonly confirmed: boolean;
   readonly adapter: AcceleventsAdapter;
   readonly connection: AcceleventsConnection;
+  readonly retryOfRunId?: string;
 }
 
 export interface SpeakerPushRecordResult {
@@ -259,11 +267,11 @@ export class AcceleventsSpeakerPushService {
       throw new RepositoryError("invalid-input", "The Accelevents connection does not match this event configuration.");
     }
 
-    const existing = await this.#client.integrationSyncRun.findUnique({
+    const replayed = await this.#client.integrationSyncRun.findUnique({
       where: { configurationId_idempotencyKey: { configurationId: state.id, idempotencyKey } },
       include: { records: { orderBy: [{ startedAt: "asc" }, { localId: "asc" }] } },
     });
-    if (existing) return resultFor(existing, true);
+    if (replayed) return resultFor(replayed, true);
 
     const speakers = await this.#client.speaker.findMany({
       where: { eventId },
@@ -287,39 +295,100 @@ export class AcceleventsSpeakerPushService {
     });
     const mapping = mappingDefinition(mappingVersion.definition);
     const remoteByLocalId = new Map(state.remoteRecords.map((record) => [record.localId, record]));
-    const candidates = speakers.map((speaker) =>
-      candidateFor(speaker, mapping, remoteByLocalId.get(speaker.id) ?? null),
-    );
+    const retryOfRunId = input.retryOfRunId ? requiredText(input.retryOfRunId, "retryOfRunId") : undefined;
+    const retryRecords = retryOfRunId
+      ? await retryableRecords(this.#client, {
+          eventId,
+          configurationId: state.id,
+          runId: retryOfRunId,
+          resourceType: "speaker",
+          now: this.#now(),
+        })
+      : undefined;
+    const candidates = speakers
+      .map((speaker) => candidateFor(speaker, mapping, remoteByLocalId.get(speaker.id) ?? null))
+      .filter((candidate) => !retryRecords || retryRecords.has(candidate.localId));
     const startedAt = this.#now();
-    const run = await this.#client.integrationSyncRun.create({
-      data: {
-        eventId,
-        configurationId: state.id,
-        configurationVersionId: configurationVersion.id,
-        mappingVersionId: mappingVersion.id,
-        idempotencyKey,
-        status: IntegrationSyncRunStatus.RUNNING,
-        startedAt,
-        records: {
-          create: candidates.map((candidate) => ({
-            resourceType: "speaker",
-            localId: candidate.localId,
-            remoteId: candidate.remoteRecord?.remoteId,
-            inputHash: candidate.inputHash,
-            status: candidate.initialStatus,
-            errorCode: candidate.errorCode,
-            redactedRequestContext: { action: candidate.action, fields: ["email", "firstName", "lastName"] },
-            startedAt,
-            completedAt: candidate.initialStatus === IntegrationSyncRecordStatus.PENDING ? undefined : startedAt,
-          })),
+    const created = await this.#client.$transaction(async (transaction) => {
+      await lockEventSyncRuns(transaction, eventId);
+      const existing = await transaction.integrationSyncRun.findUnique({
+        where: { configurationId_idempotencyKey: { configurationId: state.id, idempotencyKey } },
+        include: { records: { orderBy: [{ startedAt: "asc" }, { localId: "asc" }] } },
+      });
+      if (existing) return { replayed: true, run: existing } as const;
+      await assertNoConcurrentSyncRun(transaction, eventId);
+      const run = await transaction.integrationSyncRun.create({
+        data: {
+          eventId,
+          configurationId: state.id,
+          configurationVersionId: configurationVersion.id,
+          mappingVersionId: mappingVersion.id,
+          retryOfRunId,
+          idempotencyKey,
+          status: IntegrationSyncRunStatus.RUNNING,
+          startedAt,
+          records: {
+            create: candidates.map((candidate) => {
+              const retryRecord = retryRecords?.get(candidate.localId);
+              return {
+                resourceType: "speaker",
+                localId: candidate.localId,
+                remoteId: candidate.remoteRecord?.remoteId,
+                inputHash: candidate.inputHash,
+                retryOfRecordId: retryRecord?.id,
+                attemptNumber: retryRecord ? retryRecord.attemptNumber + 1 : 1,
+                status: candidate.initialStatus,
+                errorCode: candidate.errorCode,
+                redactedRequestContext: { action: candidate.action, fields: ["email", "firstName", "lastName"] },
+                startedAt,
+                completedAt: candidate.initialStatus === IntegrationSyncRecordStatus.PENDING ? undefined : startedAt,
+              };
+            }),
+          },
         },
-      },
-      include: { records: true },
+        include: { records: true },
+      });
+      return { replayed: false, run } as const;
     });
+    if (created.replayed) return resultFor(created.run, true);
+    const run = created.run;
+
+    const credential = await input.adapter.checkCredentials(input.connection);
+    if (!credential.ok) {
+      const completedAt = this.#now();
+      const status = failureStatus(credential.error);
+      await this.#client.integrationSyncRecord.updateMany({
+        where: { runId: run.id, status: IntegrationSyncRecordStatus.PENDING },
+        data: {
+          status,
+          errorCode: credential.error.code,
+          retryAfter:
+            status === IntegrationSyncRecordStatus.RETRIABLE_FAILED
+              ? new Date(completedAt.getTime() + (credential.error.retryAfterMs ?? 0))
+              : null,
+          completedAt,
+        },
+      });
+      const failed = await this.#client.integrationSyncRun.update({
+        where: { id: run.id },
+        data: { status: IntegrationSyncRunStatus.FAILED, completedAt },
+        include: { records: { orderBy: [{ startedAt: "asc" }, { localId: "asc" }] } },
+      });
+      return resultFor(failed, false);
+    }
 
     const recordsByLocalId = new Map(run.records.map((record) => [record.localId, record]));
     for (const candidate of candidates) {
       if (candidate.initialStatus !== IntegrationSyncRecordStatus.PENDING || !candidate.outbound) continue;
+      if (await cancellationRequested(this.#client, eventId, run.id)) {
+        const completedAt = this.#now();
+        await cancelSyncRun(this.#client, eventId, run.id, completedAt);
+        const cancelled = await this.#client.integrationSyncRun.findUniqueOrThrow({
+          where: { id: run.id },
+          include: { records: { orderBy: [{ startedAt: "asc" }, { localId: "asc" }] } },
+        });
+        return resultFor(cancelled, false);
+      }
       const syncRecord = recordsByLocalId.get(candidate.localId);
       if (!syncRecord) throw new Error(`Missing sync record for speaker ${candidate.localId}.`);
 

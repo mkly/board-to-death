@@ -60,3 +60,4 @@ export type {
   SpeakerPushResult,
 } from "./speaker-push.ts";
 export { AcceleventsSpeakerPushService } from "./speaker-push.ts";
+export { AcceleventsSyncRunService } from "./sync-run-control.ts";

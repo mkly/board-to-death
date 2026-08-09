@@ -9,10 +9,12 @@ import {
   PrismaClient,
   PublishedProgramState,
 } from "../../generated/prisma/client.ts";
+import { RepositoryError } from "../events/repositories.ts";
 import type { PublishedProgramSnapshot } from "../published-program/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
-import { DeterministicAcceleventsAdapter } from "./accelevents.ts";
+import { type AcceleventsAdapter, DeterministicAcceleventsAdapter } from "./accelevents.ts";
 import { AcceleventsProgramPushService, AcceleventsSessionPushService } from "./session-push.ts";
+import { AcceleventsSyncRunService } from "./sync-run-control.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -311,8 +313,9 @@ describe("Accelevents session push", () => {
       ],
       sessions: [{ remoteId: "remote-update", title: "Old", description: "", speakerRemoteIds: ["remote-speaker"] }],
     });
-    adapter.failNext("create-session", "unavailable");
-    const service = new AcceleventsSessionPushService(client, () => new Date("2027-02-01T17:00:00.000Z"));
+    adapter.failNext("create-session", "rate-limited", 300_000);
+    let now = new Date("2027-02-01T17:00:00.000Z");
+    const service = new AcceleventsSessionPushService(client, () => now);
     const input = {
       eventId: fixture.event.id,
       idempotencyKey: "published-program:1:sessions",
@@ -327,24 +330,49 @@ describe("Accelevents session push", () => {
     assert.equal(byLocalId(first).get(fixture.createId)?.status, IntegrationSyncRecordStatus.RETRIABLE_FAILED);
     assert.deepEqual(
       adapter.requests.map(({ operation }) => operation),
-      ["update-session", "create-session"],
+      ["check-credentials", "update-session", "create-session"],
     );
 
     const replay = await service.push(input);
     assert.equal(replay.runId, first.runId);
     assert.equal(replay.replayed, true);
-    assert.equal(adapter.requests.length, 2);
-
-    const retry = await service.push({ ...input, idempotencyKey: "manual-retry:1:sessions" });
-    assert.equal(byLocalId(retry).get(fixture.updateId)?.status, IntegrationSyncRecordStatus.SKIPPED);
-    assert.equal(byLocalId(retry).get(fixture.createId)?.status, IntegrationSyncRecordStatus.SUCCEEDED);
     assert.equal(adapter.requests.length, 3);
+
+    await assert.rejects(
+      service.push({
+        ...input,
+        idempotencyKey: "manual-retry:early:sessions",
+        retryOfRunId: first.runId,
+      }),
+      (error: unknown) => error instanceof RepositoryError && error.code === "invalid-input",
+    );
+    now = new Date("2027-02-01T17:05:01.000Z");
+    const retry = await service.push({
+      ...input,
+      idempotencyKey: "manual-retry:1:sessions",
+      retryOfRunId: first.runId,
+    });
+    assert.equal(retry.records.length, 1);
+    assert.equal(byLocalId(retry).get(fixture.createId)?.status, IntegrationSyncRecordStatus.SUCCEEDED);
+    assert.equal(adapter.requests.length, 5);
     assert.equal(adapter.requests.at(-1)?.operation, "create-session");
+    const retryRecord = await client.integrationSyncRecord.findFirstOrThrow({ where: { runId: retry.runId } });
+    assert.equal(retryRecord.attemptNumber, 2);
+    assert.ok(retryRecord.retryOfRecordId);
+
+    const retryReplay = await service.push({
+      ...input,
+      idempotencyKey: "manual-retry:1:sessions",
+      retryOfRunId: first.runId,
+    });
+    assert.equal(retryReplay.replayed, true);
+    assert.equal(retryReplay.runId, retry.runId);
+    assert.equal(adapter.requests.length, 5);
 
     const unchanged = await service.push({ ...input, idempotencyKey: "manual-retry:2:sessions" });
     assert.equal(byLocalId(unchanged).get(fixture.updateId)?.status, IntegrationSyncRecordStatus.SKIPPED);
     assert.equal(byLocalId(unchanged).get(fixture.createId)?.status, IntegrationSyncRecordStatus.SKIPPED);
-    assert.equal(adapter.requests.length, 3);
+    assert.equal(adapter.requests.length, 6);
     const persisted = await client.integrationSyncRecord.findFirst({
       where: { runId: retry.runId, localId: fixture.createId },
     });
@@ -356,6 +384,107 @@ describe("Accelevents session push", () => {
       }),
       2,
     );
+    assert.equal(await client.integrationSyncRun.count({ where: { eventId: fixture.event.id } }), 3);
+  });
+
+  test("records credential failure without exposing credentials", async () => {
+    const fixture = await createFixture();
+    const adapter = new DeterministicAcceleventsAdapter({ ...connection });
+    adapter.failNext("check-credentials", "unauthorized");
+
+    const result = await new AcceleventsSessionPushService(client).push({
+      eventId: fixture.event.id,
+      idempotencyKey: "invalid-credentials",
+      confirmed: true,
+      adapter,
+      connection,
+    });
+
+    assert.equal(result.status, IntegrationSyncRunStatus.FAILED);
+    assert.equal(
+      result.records.every(({ status }) => status !== IntegrationSyncRecordStatus.PENDING),
+      true,
+    );
+    assert.equal(
+      result.records
+        .filter(({ status }) => status === IntegrationSyncRecordStatus.TERMINAL_FAILED)
+        .every(({ errorCode }) => errorCode === "unauthorized"),
+      true,
+    );
+    const persisted = await client.integrationSyncRun.findUniqueOrThrow({
+      where: { id: result.runId },
+      include: { records: true },
+    });
+    assert.equal(JSON.stringify(persisted).includes(connection.apiKey), false);
+    assert.deepEqual(
+      adapter.requests.map(({ operation }) => operation),
+      ["check-credentials"],
+    );
+  });
+
+  test("prevents concurrent event runs and stops at a requested cancellation boundary", async () => {
+    const fixture = await createFixture();
+    const baseAdapter = new DeterministicAcceleventsAdapter({ ...connection });
+    let releaseCredentialCheck!: () => void;
+    const credentialGate = new Promise<void>((resolve) => {
+      releaseCredentialCheck = resolve;
+    });
+    let signalCredentialCheck!: () => void;
+    const credentialStarted = new Promise<void>((resolve) => {
+      signalCredentialCheck = resolve;
+    });
+    const adapter = new Proxy(baseAdapter, {
+      get(target, property, receiver) {
+        if (property === "checkCredentials") {
+          return async (...args: Parameters<AcceleventsAdapter["checkCredentials"]>) => {
+            signalCredentialCheck();
+            await credentialGate;
+            return target.checkCredentials(...args);
+          };
+        }
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as AcceleventsAdapter;
+    const pushService = new AcceleventsSessionPushService(client);
+    const controlService = new AcceleventsSyncRunService(client);
+    const firstPush = pushService.push({
+      eventId: fixture.event.id,
+      idempotencyKey: "cancelled-run",
+      confirmed: true,
+      adapter,
+      connection,
+    });
+    await credentialStarted;
+
+    await assert.rejects(
+      pushService.push({
+        eventId: fixture.event.id,
+        idempotencyKey: "concurrent-run",
+        confirmed: true,
+        adapter: baseAdapter,
+        connection,
+      }),
+      (error: unknown) => error instanceof Error && error.message.includes("already active"),
+    );
+    const running = await client.integrationSyncRun.findFirstOrThrow({
+      where: { eventId: fixture.event.id, status: IntegrationSyncRunStatus.RUNNING },
+    });
+    assert.equal(await controlService.requestCancellation(fixture.event.id, running.id), true);
+    assert.equal(await controlService.requestCancellation("00000000-0000-0000-0000-000000000000", running.id), false);
+    releaseCredentialCheck();
+    const cancelled = await firstPush;
+
+    assert.equal(cancelled.status, IntegrationSyncRunStatus.CANCELLED);
+    assert.equal(
+      cancelled.records.every(({ status }) => status !== IntegrationSyncRecordStatus.SUCCEEDED),
+      true,
+    );
+    assert.deepEqual(
+      baseAdapter.requests.map(({ operation }) => operation),
+      ["check-credentials"],
+    );
+    await assert.rejects(controlService.get("00000000-0000-0000-0000-000000000000", running.id));
   });
 
   test("preserves a stale remote identifier when the remote update fails", async () => {
@@ -411,7 +540,7 @@ describe("Accelevents session push", () => {
     assert.equal(result.sessions.status, IntegrationSyncRunStatus.SUCCEEDED);
     assert.deepEqual(
       adapter.requests.map(({ operation }) => operation),
-      ["create-speaker", "create-session"],
+      ["check-credentials", "create-speaker", "check-credentials", "create-session"],
     );
 
     const speakerRemoteId = byLocalId(result.speakers).get(fixture.speaker.id)?.remoteId;
