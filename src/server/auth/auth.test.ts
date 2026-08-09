@@ -74,6 +74,17 @@ async function postAuth(path: string, cookie: string, body: object): Promise<Res
   );
 }
 
+/**
+ * Requests a magic link and follows it, expecting the verify response itself to
+ * carry the pending two-factor challenge instead of a session.
+ */
+async function startTwoFactorChallenge(callbackURL: string): Promise<Response> {
+  await requestMagicLink(testEmail, callbackURL);
+  const link = deliveredLinks.at(-1);
+  if (!link) throw new Error("Expected a challenged sign-in link");
+  return auth.handler(new Request(link, { redirect: "manual" }));
+}
+
 function sessionCookie(response: Response): string {
   const setCookie = response.headers.get("set-cookie") ?? "";
   const match = setCookie.match(/better-auth\.session_token=([^;]+)/);
@@ -216,30 +227,19 @@ databaseDescribe("admin magic-link authentication", () => {
     expect(unverifiedDisable.status).toBe(401);
 
     await new Promise((resolve) => setTimeout(resolve, 1_100));
-    await requestMagicLink(testEmail, "/api/auth/two-factor/start-passwordless?callbackURL=%2Fdashboard%2Fevents");
-    const challengedLink = deliveredLinks.at(-1);
-    if (!challengedLink) throw new Error("Expected a challenged sign-in link");
-    const passwordlessSession = await auth.handler(new Request(challengedLink, { redirect: "manual" }));
-    const startURL = passwordlessSession.headers.get("location");
-    if (!startURL) throw new Error("Expected the challenge start redirect");
-    const challengeStart = await auth.handler(
-      new Request(startURL, { headers: { cookie: sessionCookie(passwordlessSession) }, redirect: "manual" }),
-    );
+    const sessionsBeforeChallenge = await database.session.count();
+    const challengeStart = await startTwoFactorChallenge("/dashboard/events");
     expect(challengeStart.headers.get("location")).toContain("/auth/v1/two-factor?callbackURL=%2Fdashboard%2Fevents");
+    // The magic link itself must never hand back a usable session while 2FA is
+    // pending, however the client treats the redirect.
+    expect(() => sessionCookie(challengeStart)).toThrow();
+    expect(await database.session.count()).toBe(sessionsBeforeChallenge);
     const challengeCookie = namedCookie(challengeStart, "better-auth.two_factor");
     const signInCode = (await auth.api.generateTOTP({ body: { secret } })).code;
     const verified = await postAuth("/two-factor/verify-totp", challengeCookie, { code: signInCode });
     expect(verified.status).toBe(200);
 
-    await requestMagicLink(testEmail, "/api/auth/two-factor/start-passwordless?callbackURL=%2Fdashboard");
-    const reuseLink = deliveredLinks.at(-1);
-    if (!reuseLink) throw new Error("Expected a code-reuse sign-in link");
-    const reuseSession = await auth.handler(new Request(reuseLink, { redirect: "manual" }));
-    const reuseStartURL = reuseSession.headers.get("location");
-    if (!reuseStartURL) throw new Error("Expected the code-reuse challenge start redirect");
-    const reuseStart = await auth.handler(
-      new Request(reuseStartURL, { headers: { cookie: sessionCookie(reuseSession) }, redirect: "manual" }),
-    );
+    const reuseStart = await startTwoFactorChallenge("/dashboard");
     const reuseChallengeCookie = namedCookie(reuseStart, "better-auth.two_factor");
     const reused = await postAuth("/two-factor/verify-totp", reuseChallengeCookie, { code: signInCode });
     expect(reused.status).toBe(401);
@@ -247,15 +247,7 @@ databaseDescribe("admin magic-link authentication", () => {
       expect((await postAuth("/two-factor/verify-totp", reuseChallengeCookie, { code: invalidCode })).status).toBe(401);
     }
 
-    await requestMagicLink(testEmail, "/api/auth/two-factor/start-passwordless?callbackURL=%2Fdashboard");
-    const lockedLink = deliveredLinks.at(-1);
-    if (!lockedLink) throw new Error("Expected a locked-account sign-in link");
-    const lockedSession = await auth.handler(new Request(lockedLink, { redirect: "manual" }));
-    const lockedStartURL = lockedSession.headers.get("location");
-    if (!lockedStartURL) throw new Error("Expected the locked-account challenge start redirect");
-    const lockedStart = await auth.handler(
-      new Request(lockedStartURL, { headers: { cookie: sessionCookie(lockedSession) }, redirect: "manual" }),
-    );
+    const lockedStart = await startTwoFactorChallenge("/dashboard");
     const lockedChallengeCookie = namedCookie(lockedStart, "better-auth.two_factor");
     const rateLimited = await postAuth("/two-factor/verify-totp", lockedChallengeCookie, { code: "000003" });
     expect(rateLimited.status).toBe(429);

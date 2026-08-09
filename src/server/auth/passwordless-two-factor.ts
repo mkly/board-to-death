@@ -1,9 +1,8 @@
 import type { HookEndpointContext } from "@better-auth/core";
 import { createAuthMiddleware } from "@better-auth/core/api";
 import { APIError } from "@better-auth/core/error";
-import { createAuthEndpoint, getSessionFromCtx, sessionMiddleware } from "better-auth/api";
+import { getSessionFromCtx } from "better-auth/api";
 import { deleteSessionCookie, expireCookie } from "better-auth/cookies";
-import { z } from "zod";
 
 import { createHash, randomBytes } from "node:crypto";
 
@@ -11,7 +10,15 @@ const CHALLENGE_MAX_AGE_SECONDS = 10 * 60;
 const REAUTH_MAX_AGE_SECONDS = 5 * 60;
 const USED_CODE_MAX_AGE_SECONDS = 90;
 const REAUTH_COOKIE_NAME = "two_factor_reauth";
-const callbackQuery = z.object({ callbackURL: z.string().optional() });
+
+function decodeCallbackURL(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
 
 function safeCallbackURL(value: string | undefined): string {
   return value?.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
@@ -30,66 +37,54 @@ function usedCodeIdentifier(userId: string, code: string): string {
 
 /**
  * Better Auth deliberately does not challenge passwordless sign-ins with its
- * two-factor plugin. This endpoint converts the short-lived session created by
- * a magic link into the plugin's standard pending 2FA challenge.
+ * two-factor plugin: its own challenge hook only matches the credential
+ * sign-in paths. This hook mirrors that handler for `/magic-link/verify`, so
+ * the session the magic link just created is destroyed inside the same request
+ * that created it and the response carries the pending 2FA challenge instead.
+ * Doing it here rather than behind a redirect the client has to follow is what
+ * makes the second factor mandatory — a client that ignores the redirect never
+ * receives a usable session token.
  */
 export function passwordlessTwoFactor() {
   return {
     id: "passwordless-two-factor",
-    endpoints: {
-      startPasswordlessTwoFactor: createAuthEndpoint(
-        "/two-factor/start-passwordless",
-        {
-          method: "GET",
-          query: callbackQuery,
-          use: [sessionMiddleware],
-        },
-        async (ctx) => {
-          const { session, user } = ctx.context.session;
-          const callbackURL = safeCallbackURL(ctx.query.callbackURL);
-
-          if (!user.twoFactorEnabled) {
-            throw ctx.redirect(new URL(callbackURL, ctx.context.baseURL).toString());
-          }
-
-          deleteSessionCookie(ctx, true);
-          await ctx.context.internalAdapter.deleteSession(session.token);
-
-          const identifier = `2fa-${randomBytes(20).toString("hex")}`;
-          const expiresAt = new Date(Date.now() + CHALLENGE_MAX_AGE_SECONDS * 1_000);
-          await Promise.all([
-            ctx.context.internalAdapter.createVerificationValue({
-              identifier,
-              value: user.id,
-              expiresAt,
-            }),
-            ctx.context.internalAdapter.createVerificationValue({
-              identifier: `2fa-attempts-${identifier}`,
-              value: "0",
-              expiresAt,
-            }),
-          ]);
-
-          const challengeCookie = ctx.context.createAuthCookie("two_factor", {
-            maxAge: CHALLENGE_MAX_AGE_SECONDS,
-          });
-          await ctx.setSignedCookie(challengeCookie.name, identifier, ctx.context.secret, challengeCookie.attributes);
-
-          const verificationURL = new URL("/auth/v1/two-factor", ctx.context.baseURL);
-          verificationURL.searchParams.set("callbackURL", callbackURL);
-          throw ctx.redirect(verificationURL.toString());
-        },
-      ),
-    },
-    rateLimit: [
-      {
-        pathMatcher: (path: string) => path === "/two-factor/start-passwordless",
-        window: 60,
-        max: 5,
-      },
-    ],
     hooks: {
       after: [
+        {
+          matcher: (context: HookEndpointContext) => context.path === "/magic-link/verify",
+          handler: createAuthMiddleware(async (ctx) => {
+            const created = ctx.context.newSession;
+            if (!created?.user.twoFactorEnabled) return;
+
+            deleteSessionCookie(ctx, true);
+            await ctx.context.internalAdapter.deleteSession(created.session.token);
+            ctx.context.setNewSession(null);
+
+            const identifier = `2fa-${randomBytes(20).toString("hex")}`;
+            const expiresAt = new Date(Date.now() + CHALLENGE_MAX_AGE_SECONDS * 1_000);
+            await Promise.all([
+              ctx.context.internalAdapter.createVerificationValue({
+                identifier,
+                value: created.user.id,
+                expiresAt,
+              }),
+              ctx.context.internalAdapter.createVerificationValue({
+                identifier: `2fa-attempts-${identifier}`,
+                value: "0",
+                expiresAt,
+              }),
+            ]);
+
+            const challengeCookie = ctx.context.createAuthCookie("two_factor", {
+              maxAge: CHALLENGE_MAX_AGE_SECONDS,
+            });
+            await ctx.setSignedCookie(challengeCookie.name, identifier, ctx.context.secret, challengeCookie.attributes);
+
+            const verificationURL = new URL("/auth/v1/two-factor", ctx.context.baseURL);
+            verificationURL.searchParams.set("callbackURL", safeCallbackURL(decodeCallbackURL(ctx.query?.callbackURL)));
+            throw ctx.redirect(verificationURL.toString());
+          }),
+        },
         {
           matcher: (context: HookEndpointContext) => context.path === "/two-factor/verify-totp",
           handler: createAuthMiddleware(async (ctx) => {
