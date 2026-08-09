@@ -82,11 +82,16 @@ export default async function AgendaPage({ params }: AgendaPageProps) {
       speaker.profile.preferredName ?? `${speaker.profile.givenName} ${speaker.profile.familyName}`,
     ]),
   );
+  const sessionTitles = new Map(sessions.map((session) => [session.id, session.version.title]));
   const agendaSessions: readonly AgendaWorkspaceSession[] = sessions.map((session) => {
     const placement = placementBySession.get(session.id);
     return {
       id: session.id,
       title: session.version.title,
+      parentSessionId: session.parentSessionId,
+      parentSessionTitle: session.parentSessionId
+        ? (sessionTitles.get(session.parentSessionId) ?? "Unknown parent")
+        : null,
       durationMinutes: session.version.durationMinutes,
       trackId: session.version.trackId,
       trackName: session.version.trackId ? (trackNames.get(session.version.trackId) ?? "Unknown track") : null,
@@ -114,7 +119,16 @@ export default async function AgendaPage({ params }: AgendaPageProps) {
   const conflicts = validateAgendaConflicts(
     { startsAt: event.startsAt, endsAt: event.endsAt, timezone: event.timezone },
     placements,
-  );
+  ).filter(({ placementIds }) => {
+    if (placementIds.length !== 2) return true;
+    const [leftPlacementId, rightPlacementId] = placementIds;
+    const leftSessionId = placements.find(({ id }) => id === leftPlacementId)?.sessionId;
+    const rightSessionId = placements.find(({ id }) => id === rightPlacementId)?.sessionId;
+    if (!leftSessionId || !rightSessionId) return true;
+    const left = sessions.find(({ id }) => id === leftSessionId);
+    const right = sessions.find(({ id }) => id === rightSessionId);
+    return left?.parentSessionId !== rightSessionId && right?.parentSessionId !== leftSessionId;
+  });
   const timeFormatter = new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",

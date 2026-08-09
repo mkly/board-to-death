@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
 import { z } from "zod";
 
@@ -9,13 +10,15 @@ import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
-import { createContact, createContactGroup, updateContact, updateContactGroup } from "@/server/contacts/repositories";
+import { createContact, linkDirectoryPersonToEvent, updateContact } from "@/server/contacts/repositories";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, type CustomFieldTarget } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 import { contentDisposition, createFileStorage, safeFileName } from "@/server/infrastructure";
 
+import { getDashboardShellData } from "../../../_lib/dashboard-data";
+import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 import { randomUUID } from "node:crypto";
 
 export interface ContactRecordMutationState {
@@ -34,14 +37,6 @@ const contactSchema = z.object({
   organization: z.string().trim().max(200),
   jobTitle: z.string().trim().max(200),
   phone: z.string().trim().max(50),
-});
-
-const groupSchema = z.object({
-  eventSlug: z.string().trim().min(1),
-  groupId: z.union([z.literal(""), z.uuid("The selected group is invalid.")]),
-  kind: z.enum(["SPONSOR", "EXHIBITOR"]),
-  name: z.string().trim().min(1, "Enter a group name.").max(200),
-  slug: z.string().trim().max(200),
 });
 
 function stringValue(formData: FormData, name: string): string {
@@ -182,55 +177,22 @@ export async function saveContactRecord(
   }
 }
 
-export async function saveContactGroupRecord(
-  _previousState: ContactRecordMutationState,
-  formData: FormData,
-): Promise<ContactRecordMutationState> {
-  const parsed = groupSchema.safeParse({
-    eventSlug: stringValue(formData, "eventSlug"),
-    groupId: stringValue(formData, "groupId"),
-    kind: stringValue(formData, "kind"),
-    name: stringValue(formData, "name"),
-    slug: stringValue(formData, "slug"),
-  });
-  if (!parsed.success) {
-    return { status: "error", message: "Review the highlighted group fields.", errors: errors(parsed.error) };
-  }
-  const event = await authorizedEvent(parsed.data.eventSlug);
-  if (!event) return { status: "error", message: "This event is not available." };
+function contactsPath(eventSlug: string): string {
+  return `/dashboard/events/${encodeURIComponent(eventSlug)}/contacts`;
+}
+
+export async function linkDirectoryPersonAction(eventSlug: string, personId: string): Promise<never> {
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
 
   try {
-    const client = getDatabaseClient();
-    const definitions = await new CustomFieldRepository(client).listDefinitions(
-      event.id,
-      CustomFieldEntityType.CONTACT_GROUP,
-    );
-    const group =
-      parsed.data.groupId === ""
-        ? await createContactGroup(client, {
-            eventId: event.id,
-            kind: parsed.data.kind,
-            name: parsed.data.name,
-            ...(parsed.data.slug ? { slug: parsed.data.slug } : {}),
-          })
-        : await updateContactGroup(client, event.id, parsed.data.groupId, {
-            name: parsed.data.name,
-            ...(parsed.data.slug ? { slug: parsed.data.slug } : {}),
-          });
-    await saveCustomFields({
-      eventId: event.id,
-      target: { entityType: CustomFieldEntityType.CONTACT_GROUP, groupId: group.id },
-      definitions,
-      formData,
-      pathSegment: `groups/${group.id}`,
-    });
-    revalidatePath(`/dashboard/events/${event.slug}/contacts`);
-    return {
-      status: "success",
-      message: parsed.data.groupId === "" ? "Group created." : "Group changes saved.",
-      recordId: group.id,
-    };
+    await linkDirectoryPersonToEvent(getDatabaseClient(), event.id, personId);
   } catch (error) {
-    return actionError(error);
+    const message = error instanceof RepositoryError ? error.message : "The directory contact could not be linked.";
+    redirect(`${contactsPath(event.slug)}?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath(contactsPath(event.slug));
+  redirect(`${contactsPath(event.slug)}?notice=${encodeURIComponent("Contact added from the directory.")}`);
 }

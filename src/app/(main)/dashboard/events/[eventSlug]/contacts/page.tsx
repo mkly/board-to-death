@@ -1,42 +1,19 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
+import type { CustomFieldInputDefinition } from "@/components/custom-fields/custom-field-inputs";
 import { CustomFieldEntityType } from "@/generated/prisma/client";
-import { listContactGroups, listContacts } from "@/server/contacts/repositories";
+import { listContacts, searchDirectoryPeople } from "@/server/contacts/repositories";
 import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
-import { ContactRecordsWorkspace } from "./_components/contact-records-workspace";
+import { ContactsWorkspace } from "./_components/contacts-workspace";
 
-interface ContactsPageProps {
-  readonly params: Promise<{ eventSlug: string }>;
-}
-
-export default async function ContactsPage({ params }: ContactsPageProps) {
-  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
-  const event = findAuthorizedEvent(shell.events, eventSlug);
-  if (!event) notFound();
-
-  const client = getDatabaseClient();
-  const customFields = new CustomFieldRepository(client);
-  const [contacts, groups, contactDefinitions, groupDefinitions] = await Promise.all([
-    listContacts(client, event.id),
-    listContactGroups(client, event.id),
-    customFields.listDefinitions(event.id, CustomFieldEntityType.CONTACT),
-    customFields.listDefinitions(event.id, CustomFieldEntityType.CONTACT_GROUP),
-  ]);
-  const [contactValues, groupValues] = await Promise.all([
-    client.customFieldValue.findMany({
-      where: { eventId: event.id, contactId: { in: contacts.map(({ id }) => id) } },
-      select: { contactId: true, definitionId: true, value: true },
-    }),
-    client.customFieldValue.findMany({
-      where: { eventId: event.id, groupId: { in: groups.map(({ id }) => id) } },
-      select: { groupId: true, definitionId: true, value: true },
-    }),
-  ]);
-  const definition = (field: (typeof contactDefinitions)[number]) => ({
+function inputDefinition(
+  field: Awaited<ReturnType<CustomFieldRepository["listDefinitions"]>>[number],
+): CustomFieldInputDefinition {
+  return {
     id: field.id,
     label: field.label,
     description: field.description,
@@ -45,34 +22,59 @@ export default async function ContactsPage({ params }: ContactsPageProps) {
     characterLimit: field.characterLimit,
     options:
       Array.isArray(field.options) && field.options.every((option) => typeof option === "string") ? field.options : [],
+  };
+}
+
+export default async function ContactsPage({
+  params,
+  searchParams,
+}: {
+  readonly params: Promise<{ eventSlug: string }>;
+  readonly searchParams: Promise<{ q?: string; notice?: string; error?: string }>;
+}) {
+  const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+
+  if (!event) notFound();
+  if (shell.activeEvent?.id !== event.id) {
+    redirect(
+      shell.activeEvent ? `/dashboard/events/${encodeURIComponent(shell.activeEvent.slug)}/contacts` : "/dashboard",
+    );
+  }
+
+  const client = getDatabaseClient();
+  const customFields = new CustomFieldRepository(client);
+  const [contacts, people, definitions] = await Promise.all([
+    listContacts(client, event.id),
+    searchDirectoryPeople(client, query.q ?? ""),
+    customFields.listDefinitions(event.id, CustomFieldEntityType.CONTACT),
+  ]);
+  const values = await client.customFieldValue.findMany({
+    where: { eventId: event.id, contactId: { in: contacts.map(({ id }) => id) } },
+    select: { contactId: true, definitionId: true, value: true },
   });
 
   return (
-    <ContactRecordsWorkspace
-      event={{ name: event.name, slug: event.slug }}
-      contactDefinitions={contactDefinitions.map(definition)}
-      groupDefinitions={groupDefinitions.map(definition)}
+    <ContactsWorkspace
       contacts={contacts.map((contact) => ({
         id: contact.id,
+        personId: contact.personId,
         email: contact.email,
         givenName: contact.givenName,
         familyName: contact.familyName,
         organization: contact.organization,
         jobTitle: contact.jobTitle,
         phone: contact.phone,
-        customFieldValues: contactValues
+        customFieldValues: values
           .filter(({ contactId }) => contactId === contact.id)
           .map(({ definitionId, value }) => ({ definitionId, value })),
       }))}
-      groups={groups.map((group) => ({
-        id: group.id,
-        kind: group.kind,
-        name: group.name,
-        slug: group.slug,
-        customFieldValues: groupValues
-          .filter(({ groupId }) => groupId === group.id)
-          .map(({ definitionId, value }) => ({ definitionId, value })),
-      }))}
+      customFieldDefinitions={definitions.map(inputDefinition)}
+      error={query.error}
+      event={event}
+      notice={query.notice}
+      people={people}
+      query={query.q ?? ""}
     />
   );
 }

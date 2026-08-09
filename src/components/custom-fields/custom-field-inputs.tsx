@@ -45,10 +45,12 @@ export function CustomFieldInputs({
   definitions,
   values = [],
   disabled = false,
+  idPrefix = "",
 }: {
   readonly definitions: readonly CustomFieldInputDefinition[];
   readonly values?: readonly CustomFieldInputValue[];
   readonly disabled?: boolean;
+  readonly idPrefix?: string;
 }) {
   if (definitions.length === 0) return null;
   return (
@@ -57,7 +59,7 @@ export function CustomFieldInputs({
       <FieldGroup>
         {definitions.map((definition) => {
           const name = `${customFieldFormPrefix}${definition.id}`;
-          const id = `custom-field-${definition.id}`;
+          const id = `${idPrefix}custom-field-${definition.id}`;
           const stored = storedValue(values, definition.id);
           if (definition.type === CustomFieldType.LONG_TEXT) {
             return (

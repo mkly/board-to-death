@@ -43,6 +43,7 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
     where: { eventId: event.id, sessionId: { in: sessions.map(({ id }) => id) } },
     select: { sessionId: true, definitionId: true, value: true },
   });
+  const sessionTitles = new Map(sessions.map((session) => [session.id, session.version.title]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -85,8 +86,15 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
           durationMinutes: session.version.durationMinutes,
           trackId: session.version.trackId,
           trackName: session.version.trackId ? (trackNames.get(session.version.trackId) ?? "Unknown track") : null,
-          speakerIds: session.version.speakerIds,
-          speakerNames: session.version.speakerIds.map((speakerId) => speakerNames.get(speakerId) ?? "Unknown speaker"),
+          parentSessionId: session.parentSessionId,
+          parentSessionTitle: session.parentSessionId
+            ? (sessionTitles.get(session.parentSessionId) ?? "Unknown parent")
+            : null,
+          participants: session.version.participants.map(({ speakerId, role }) => ({
+            speakerId,
+            speakerName: speakerNames.get(speakerId) ?? "Unknown speaker",
+            role,
+          })),
           versionNumber: session.version.versionNumber,
           customFieldValues: customFieldValues
             .filter((value) => value.sessionId === session.id)

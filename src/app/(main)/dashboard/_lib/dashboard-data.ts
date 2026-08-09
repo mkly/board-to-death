@@ -30,7 +30,10 @@ export const getDashboardShellData = cache(async (): Promise<DashboardShellData>
     redirect("/auth/v1/login");
   }
 
-  const events = await getDatabaseClient().event.findMany({ orderBy: [{ startsAt: "asc" }, { name: "asc" }] });
+  const events = await getDatabaseClient().event.findMany({
+    where: { archivedAt: null },
+    orderBy: [{ startsAt: "asc" }, { name: "asc" }],
+  });
 
   return {
     user: {

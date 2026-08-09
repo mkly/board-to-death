@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { PrismaClient } from "../../generated/prisma/client.ts";
+import { PrismaClient, ProgramSessionParticipantRole } from "../../generated/prisma/client.ts";
 import { createSpeakerTaskMatrixCsv, SpeakerTaskMatrixRepository } from "./task-matrix.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
@@ -108,6 +108,26 @@ describe("speaker task matrix", () => {
     const biographyVersion = biography.versions[0];
     assert.ok(biographyVersion);
 
+    await client.programSession.create({
+      data: {
+        eventId: event.id,
+        kind: "MANUAL",
+        versions: {
+          create: {
+            versionNumber: 1,
+            title: "Role-aware panel",
+            durationMinutes: 45,
+            participants: {
+              create: [
+                { speakerId: ada.id, role: ProgramSessionParticipantRole.MODERATOR, sortOrder: 0 },
+                { speakerId: grace.id, role: ProgramSessionParticipantRole.CHAIRPERSON, sortOrder: 1 },
+              ],
+            },
+          },
+        },
+      },
+    });
+
     await client.speakerTaskAssignment.createMany({
       data: [
         {
@@ -160,6 +180,14 @@ describe("speaker task matrix", () => {
     });
     assert.equal(filtered.rows.length, 1);
     assert.equal(filtered.rows[0]?.speakerId, ada.id);
+    const moderators = await repository.list(event.id, event.timezone, {
+      participantRole: ProgramSessionParticipantRole.MODERATOR,
+    });
+    assert.equal(moderators.rows.length, 2);
+    assert.equal(
+      moderators.rows.every(({ speakerId }) => speakerId === ada.id),
+      true,
+    );
     assert.equal(
       filtered.tasks.some(({ id }) => id === agreement.id),
       true,
@@ -179,6 +207,7 @@ describe("speaker task matrix", () => {
             speakerId: "speaker",
             speakerName: "=Ada Lovelace",
             speakerEmail: "+ada@example.test",
+            participantRoles: [ProgramSessionParticipantRole.MODERATOR],
             taskId: "task",
             taskTitle: "Review biography",
             assignmentId: "assignment",
@@ -191,7 +220,7 @@ describe("speaker task matrix", () => {
         "America/Los_Angeles",
       ),
     );
-    assert.match(csv, /^"speakerId","speaker","email","taskId","task","state"/);
+    assert.match(csv, /^"speakerId","speaker","email","participantRoles","taskId","task","state"/);
     assert.match(csv, /"'=Ada Lovelace","'\+ada@example\.test"/);
     assert.match(csv, /"2027-03-13"/);
   });

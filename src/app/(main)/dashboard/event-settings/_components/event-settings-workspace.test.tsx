@@ -7,6 +7,8 @@ import { EventType } from "@/generated/prisma/client";
 import type { EventSettingsSnapshot, MutationResult } from "../types";
 
 const actionMocks = vi.hoisted(() => ({
+  archiveEvent: vi.fn(),
+  cloneEvent: vi.fn(),
   createEvent: vi.fn(),
   createRoom: vi.fn(),
   createTrack: vi.fn(),
@@ -14,6 +16,7 @@ const actionMocks = vi.hoisted(() => ({
   deleteTrack: vi.fn(),
   moveRoom: vi.fn(),
   moveTrack: vi.fn(),
+  restoreEvent: vi.fn(),
   updateEvent: vi.fn(),
   updateRoom: vi.fn(),
   updateTrack: vi.fn(),
@@ -61,6 +64,7 @@ const firstSnapshot: EventSettingsSnapshot = {
     sponsorsEnabled: false,
     logoObjectKey: null,
     backgroundObjectKey: null,
+    archivedAt: null,
   },
   rooms: [
     { id: "room-2", name: "Workshop Stage", sortOrder: 0 },
@@ -73,8 +77,8 @@ const firstSnapshot: EventSettingsSnapshot = {
 };
 
 const eventOptions = [
-  { id: firstSnapshot.event.id, name: firstSnapshot.event.name },
-  { id: "22222222-2222-4222-8222-222222222222", name: "Side Quest Summit" },
+  { id: firstSnapshot.event.id, name: firstSnapshot.event.name, archived: false },
+  { id: "22222222-2222-4222-8222-222222222222", name: "Side Quest Summit", archived: false },
 ];
 
 describe("EventSettingsWorkspace", () => {

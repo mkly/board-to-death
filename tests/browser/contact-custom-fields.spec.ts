@@ -36,7 +36,7 @@ test("captures and displays event-scoped custom values for contacts and groups",
   await page.goto(`/dashboard/events/${fixture.eventSlug}/contacts`);
 
   await expect(page.getByRole("heading", { name: "Contacts", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Dana Reed" })).toBeVisible();
+  await expect(page.getByText("Dana Reed", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Dietary notes")).toHaveValue("Vegan");
   await expect(page.getByText("Vegan", { exact: true })).toBeVisible();
   await expect(page.getByText("Private Person")).toHaveCount(0);
@@ -50,15 +50,21 @@ test("captures and displays event-scoped custom values for contacts and groups",
   await expect(page.getByLabel("Dietary notes")).toHaveValue("Vegetarian");
   await expect(page.getByText("Vegetarian", { exact: true })).toBeVisible();
 
-  await waitForHydration(page.getByRole("tab", { name: "Groups" }));
-  await page.getByRole("tab", { name: "Groups" }).click();
-  await expect(page.getByRole("button", { name: "Tabletop Partners" })).toBeVisible();
-  await expect(page.getByLabel("Booth location")).toHaveValue("Hall A");
-  await page.getByLabel("Booth location").fill("Hall B");
-  await page.getByRole("button", { name: "Save group" }).click();
-  await expect(page.getByText("Group changes saved.")).toBeVisible();
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/groups`);
+  await expect(page.getByRole("heading", { name: "Sponsors and exhibitors" })).toBeVisible();
+  const groupForm = page.locator('input[name="name"][value="Tabletop Partners"]').locator("xpath=ancestor::form");
+  const boothLocation = groupForm.getByLabel("Booth location");
+  await expect(boothLocation).toHaveValue("Hall A");
+  await waitForHydration(boothLocation);
+  await boothLocation.fill("Hall B");
+  await groupForm.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Group updated.")).toBeVisible();
   await page.reload();
-  await page.getByRole("tab", { name: "Groups" }).click();
-  await expect(page.getByLabel("Booth location")).toHaveValue("Hall B");
+  await expect(
+    page
+      .locator('input[name="name"][value="Tabletop Partners"]')
+      .locator("xpath=ancestor::form")
+      .getByLabel("Booth location"),
+  ).toHaveValue("Hall B");
   await expect(page.getByText("Hall B", { exact: true })).toBeVisible();
 });

@@ -93,9 +93,47 @@ const fileDefinition = await database.speakerTaskDefinition.create({
   },
   include: { versions: true },
 });
+const formDefinition = await database.speakerTaskDefinition.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "travel-assistance",
+    versions: {
+      create: {
+        versionNumber: 1,
+        sortOrder: 3,
+        title: "Request travel assistance",
+        description: "Tell the event team whether you need help with travel.",
+        applicability: {},
+        responseRequired: true,
+        responseSchema: {
+          kind: "portal-form",
+          sections: [
+            {
+              id: "travel",
+              title: "Travel",
+              fields: [
+                { id: "needs-help", label: "I need travel help", type: "checkbox", required: false },
+                {
+                  id: "travel-details",
+                  label: "Travel details",
+                  type: "textarea",
+                  required: true,
+                  visibleWhen: { fieldId: "needs-help", equals: true },
+                },
+              ],
+            },
+          ],
+          confirmation: { subject: "Travel response received", message: "Travel response saved.", sendEmail: false },
+        },
+      },
+    },
+  },
+  include: { versions: true },
+});
 const textVersion = textDefinition.versions[0];
 const fileVersion = fileDefinition.versions[0];
-if (!textVersion || !fileVersion) throw new Error("Expected speaker task definition versions.");
+const formVersion = formDefinition.versions[0];
+if (!textVersion || !fileVersion || !formVersion) throw new Error("Expected speaker task definition versions.");
 const textTask = await database.speakerTaskAssignment.create({
   data: {
     eventId: fixture.eventId,
@@ -112,6 +150,17 @@ const fileTask = await database.speakerTaskAssignment.create({
     eventId: fixture.eventId,
     definitionId: fileDefinition.id,
     definitionVersionId: fileVersion.id,
+    speakerId: fixture.speakerId,
+    assignedAt: new Date("2027-02-21T18:00:00.000Z"),
+    dueAt: new Date("2027-03-10T18:00:00.000Z"),
+    transitions: { create: { toStatus: "PENDING", occurredAt: new Date("2027-02-21T18:00:00.000Z") } },
+  },
+});
+const formTask = await database.speakerTaskAssignment.create({
+  data: {
+    eventId: fixture.eventId,
+    definitionId: formDefinition.id,
+    definitionVersionId: formVersion.id,
     speakerId: fixture.speakerId,
     assignedAt: new Date("2027-02-21T18:00:00.000Z"),
     dueAt: new Date("2027-03-10T18:00:00.000Z"),
@@ -321,6 +370,7 @@ process.stdout.write(
     outsiderSubmissionId: outsiderSubmission.id,
     textTaskId: textTask.id,
     fileTaskId: fileTask.id,
+    formTaskId: formTask.id,
     outsiderTaskId: outsiderTask.id,
     adminSessionCookie,
   }),

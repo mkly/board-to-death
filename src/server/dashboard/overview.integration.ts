@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import {
   CfpSubmissionKind,
+  CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
   EvaluationAssignmentStatus,
   EvaluationPlanVersionStatus,
@@ -11,7 +12,7 @@ import {
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
 import { AgendaPlacementRepository } from "../agenda/placements.ts";
-import { EventRepository, RoomRepository } from "../events/repositories.ts";
+import { EventRepository, RepositoryError, RoomRepository } from "../events/repositories.ts";
 import { ProgramSessionRepository } from "../sessions/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
 import { EventOverviewRepository } from "./overview.ts";
@@ -29,6 +30,21 @@ const rooms = new RoomRepository(client);
 const speakers = new SpeakerRepository(client);
 const sessions = new ProgramSessionRepository(client);
 const placements = new AgendaPlacementRepository(client);
+const submissionDefinition = {
+  version: 1,
+  title: "Program CFP",
+  sections: [
+    {
+      id: "proposal",
+      kind: "questions",
+      title: "Proposal",
+      questions: [
+        { id: "title", type: "short_text", label: "Proposal title", required: true },
+        { id: "abstract", type: "long_text", label: "Abstract", required: true },
+      ],
+    },
+  ],
+} as const;
 
 async function createEvent(slug: string, timezone = "America/Los_Angeles") {
   return events.create({
@@ -77,6 +93,20 @@ async function createSubmission(
       decidedAt,
       confirmedAt,
       participants: { create: speakerIds.map((speakerId, sortOrder) => ({ speakerId, sortOrder })) },
+      revisions: {
+        create: {
+          versionNumber: 1,
+          kind: CfpSubmissionRevisionKind.FINAL,
+          formVersionId: formVersion.id,
+          definitionSnapshot: submissionDefinition,
+          answers: {
+            create: [
+              { questionId: "title", sortOrder: 0, value: `${status} proposal` },
+              { questionId: "abstract", sortOrder: 1, value: `${status} abstract` },
+            ],
+          },
+        },
+      },
     },
   });
 }
@@ -293,15 +323,8 @@ describe("event overview metrics", () => {
     const acceptedSession = await sessions.promote({
       eventId: event.id,
       sourceSubmissionId: accepted.id,
-      title: "Promoted accepted talk",
-      durationMinutes: 30,
     });
-    await sessions.promote({
-      eventId: event.id,
-      sourceSubmissionId: rejected.id,
-      title: "Promoted rejected talk",
-      durationMinutes: 30,
-    });
+    await assert.rejects(sessions.promote({ eventId: event.id, sourceSubmissionId: rejected.id }), RepositoryError);
 
     const metrics = await repository.get(event.id, event.timezone);
 

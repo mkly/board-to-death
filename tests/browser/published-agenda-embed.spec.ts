@@ -45,6 +45,11 @@ test("filters a responsive, isolated agenda and follows publication state", asyn
   await expect(page.getByRole("heading", { name: "Saturday, March 13, 2027" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sunday, March 14, 2027" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Opening strategy keynote" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Keynote mechanics demo" })).toBeVisible();
+  await expect(page.getByText("Subsession of Opening strategy keynote")).toBeVisible();
+  await expect(
+    page.locator("[data-parent-session]").filter({ has: page.getByRole("link", { name: "Keynote mechanics demo" }) }),
+  ).toBeVisible();
   await expect(page.getByText("10:00 AM–10:45 AM").first()).toBeVisible();
   await expect(page.getByText("America/Los_Angeles", { exact: true })).toBeVisible();
 

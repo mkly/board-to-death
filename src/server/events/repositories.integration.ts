@@ -151,4 +151,98 @@ describe("event persistence repositories", () => {
     assert.equal(await client.room.count({ where: { eventId: event.id } }), 0);
     assert.equal(await client.track.count({ where: { eventId: event.id } }), 0);
   });
+
+  test("selectively clones configuration without operational records and preserves clone ancestry", async () => {
+    const source = await events.create(baseEvent);
+    await rooms.create({ eventId: source.id, name: "Main Hall" });
+    await tracks.create({ eventId: source.id, name: "Strategy", color: "blue" });
+    const form = await client.cfpForm.create({ data: { eventId: source.id, key: "main" } });
+    await client.cfpFormVersion.create({
+      data: {
+        formId: form.id,
+        versionNumber: 1,
+        schemaVersion: 1,
+        title: "Main CFP",
+        customTypes: {},
+        steps: {
+          create: {
+            key: "proposal",
+            kind: "questions",
+            title: "Proposal",
+            sortOrder: 0,
+            questions: {
+              create: { key: "title", type: "text", label: "Title", required: true, sortOrder: 0 },
+            },
+          },
+        },
+      },
+    });
+    const definition = await client.speakerTaskDefinition.create({ data: { eventId: source.id, key: "bio" } });
+    await client.speakerTaskDefinitionVersion.create({
+      data: {
+        eventId: source.id,
+        definitionId: definition.id,
+        versionNumber: 1,
+        sortOrder: 0,
+        title: "Submit bio",
+        applicability: {},
+      },
+    });
+    const template = await client.communicationTemplate.create({
+      data: { eventId: source.id, key: "welcome", name: "Welcome" },
+    });
+    await client.communicationTemplateVersion.create({
+      data: {
+        eventId: source.id,
+        templateId: template.id,
+        version: 1,
+        subjectTemplate: "Welcome",
+        htmlTemplate: "<p>Welcome</p>",
+      },
+    });
+    const page = await client.speakerResourcePage.create({ data: { eventId: source.id, key: "travel" } });
+    await client.speakerResourcePageVersion.create({
+      data: {
+        eventId: source.id,
+        pageId: page.id,
+        versionNumber: 1,
+        slug: "travel",
+        title: "Travel",
+        bodyMarkdown: "Bring a game.",
+        sortOrder: 0,
+      },
+    });
+
+    const cloned = await events.clone(source.id, {
+      name: "Board to Death 2027 copy",
+      slug: "board-to-death-2027-copy",
+      options: { rooms: true, tracks: true, forms: true, tasks: true, templates: true, portalSettings: true },
+    });
+
+    assert.equal(cloned.clonedFromEventId, source.id);
+    assert.equal(cloned.logoObjectKey, source.logoObjectKey);
+    assert.equal(await client.room.count({ where: { eventId: cloned.id } }), 1);
+    assert.equal(await client.track.count({ where: { eventId: cloned.id } }), 1);
+    assert.equal(
+      await client.cfpFormQuestion.count({ where: { step: { version: { form: { eventId: cloned.id } } } } }),
+      1,
+    );
+    assert.equal(await client.speakerTaskDefinition.count({ where: { eventId: cloned.id } }), 1);
+    assert.equal(await client.communicationTemplateVersion.count({ where: { eventId: cloned.id } }), 1);
+    assert.equal(await client.speakerResourcePageVersion.count({ where: { eventId: cloned.id } }), 1);
+    assert.equal(await client.contact.count({ where: { eventId: cloned.id } }), 0);
+    assert.equal(await client.cfpSubmission.count({ where: { eventId: cloned.id } }), 0);
+    assert.equal(await client.programSession.count({ where: { eventId: cloned.id } }), 0);
+  });
+
+  test("makes archived events read-only until they are restored", async () => {
+    const event = await events.create(baseEvent);
+    await events.archive(event.id, new Date("2027-04-01T00:00:00.000Z"));
+
+    await expectRepositoryError(events.update(event.id, { name: "Changed" }), "invalid-input");
+    await expectRepositoryError(rooms.create({ eventId: event.id, name: "Blocked room" }), "invalid-input");
+
+    await events.restore(event.id);
+    assert.equal((await events.update(event.id, { name: "Restored" })).name, "Restored");
+  });
 });

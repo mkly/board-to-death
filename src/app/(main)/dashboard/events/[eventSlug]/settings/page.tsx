@@ -30,7 +30,12 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
   if (!event) notFound();
 
   const initialSnapshot: EventSettingsSnapshot = {
-    event: { ...event, startsAt: event.startsAt.toISOString(), endsAt: event.endsAt.toISOString() },
+    event: {
+      ...event,
+      startsAt: event.startsAt.toISOString(),
+      endsAt: event.endsAt.toISOString(),
+      archivedAt: event.archivedAt?.toISOString() ?? null,
+    },
     rooms: rooms.map(({ id, name, sortOrder }) => ({ id, name, sortOrder })),
     tracks: tracks.map(({ id, name, color, sortOrder }) => ({ id, name, color, sortOrder })),
   };
@@ -38,7 +43,7 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
   return (
     <EventSettingsWorkspace
       key={initialSnapshot.event.id}
-      eventOptions={shell.events.map(({ id, name }) => ({ id, name }))}
+      eventOptions={shell.events.map(({ id, name }) => ({ id, name, archived: false }))}
       eventScoped
       initialSnapshot={initialSnapshot}
     />

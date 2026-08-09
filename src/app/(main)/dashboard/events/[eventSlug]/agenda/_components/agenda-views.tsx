@@ -76,7 +76,10 @@ function AgendaItem({
 }) {
   const placement = session.placement;
   return (
-    <article className="flex min-w-0 flex-col gap-2 rounded-lg border p-3">
+    <article
+      className="flex min-w-0 flex-col gap-2 rounded-lg border p-3"
+      data-parent-session={session.parentSessionId ?? undefined}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1">
           <Link
@@ -90,6 +93,11 @@ function AgendaItem({
               ? `${formatTime(placement.startsAt, event.timezone)}–${formatTime(placement.endsAt, event.timezone)} ${event.timezone}`
               : `${session.durationMinutes} min · Not placed`}
           </p>
+          {session.parentSessionTitle ? (
+            <Badge variant="outline" className="w-fit">
+              Subsession of {session.parentSessionTitle}
+            </Badge>
+          ) : null}
         </div>
         <Badge variant={placement ? "secondary" : "outline"}>{placement ? "Scheduled" : "Unscheduled"}</Badge>
       </div>
@@ -252,10 +260,20 @@ export function AgendaViews({
   const [roomId, setRoomId] = useState("all");
   const [trackId, setTrackId] = useState("all");
   const [focusDate, setFocusDate] = useState(() => localDate(event.startsAt, event.timezone));
-  const filteredSessions = useMemo(
-    () => sessions.filter((session) => matchesFilters(session, filter, roomId, trackId)),
-    [filter, roomId, sessions, trackId],
-  );
+  const filteredSessions = useMemo(() => {
+    const visible = sessions.filter((session) => matchesFilters(session, filter, roomId, trackId));
+    const byId = new Map(visible.map((session) => [session.id, session]));
+    return visible.toSorted((left, right) => {
+      const leftRoot = left.parentSessionId && byId.has(left.parentSessionId) ? left.parentSessionId : left.id;
+      const rightRoot = right.parentSessionId && byId.has(right.parentSessionId) ? right.parentSessionId : right.id;
+      const rootOrder =
+        sessions.findIndex(({ id }) => id === leftRoot) - sessions.findIndex(({ id }) => id === rightRoot);
+      if (rootOrder !== 0) return rootOrder;
+      if (left.parentSessionId === null) return -1;
+      if (right.parentSessionId === null) return 1;
+      return (left.placement?.startsAt ?? "").localeCompare(right.placement?.startsAt ?? "");
+    });
+  }, [filter, roomId, sessions, trackId]);
   const scheduledSessions = filteredSessions.filter((session) => session.placement);
   const weekStart = focusDate.subtract({ days: focusDate.dayOfWeek - 1 });
   const monthStart = focusDate.with({ day: 1 });

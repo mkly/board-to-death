@@ -1,5 +1,7 @@
 import {
+  CfpSubmissionStatus,
   EvaluationAssignmentStatus,
+  EvaluationDecisionOutcome,
   EvaluationPlanVersionStatus,
   EvaluationRoundStatus,
   EvaluationStatus,
@@ -26,6 +28,7 @@ export interface EvaluationCriterionAggregate {
 
 export interface EvaluationSubmissionResult {
   readonly id: string;
+  readonly status: CfpSubmissionStatus;
   readonly reference: string;
   readonly formTitle: string;
   readonly primarySpeaker: string | null;
@@ -34,12 +37,20 @@ export interface EvaluationSubmissionResult {
   readonly completedReviewerCount: number;
   readonly incompleteReviewerCount: number;
   readonly withdrawnReviewerCount: number;
+  readonly participantCount: number;
+  readonly confirmedParticipantCount: number;
   readonly criteria: readonly EvaluationCriterionAggregate[];
   readonly weightedAverage: number | null;
   readonly rank: number | null;
   readonly tied: boolean;
   readonly advancedAt: Date | null;
   readonly canAdvance: boolean;
+  readonly decision: {
+    readonly decisionNumber: number;
+    readonly outcome: EvaluationDecisionOutcome;
+    readonly decidedAt: Date;
+  } | null;
+  readonly availableDecisionOutcomes: readonly EvaluationDecisionOutcome[];
 }
 
 export interface EvaluationResultsWorkspace {
@@ -143,12 +154,13 @@ export class EvaluationResultsRepository {
       orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
+        status: true,
         formVersion: { select: { title: true } },
         categories: { orderBy: { sortOrder: "asc" }, select: { category: { select: { label: true } } } },
         participants: {
           orderBy: { sortOrder: "asc" },
-          take: 1,
           select: {
+            confirmedAt: true,
             speaker: {
               select: {
                 profileVersions: {
@@ -177,6 +189,17 @@ export class EvaluationResultsRepository {
           where: { sourceRoundId: selectedRound.id },
           take: 1,
           select: { occurredAt: true },
+        },
+        evaluationDecisions: {
+          orderBy: { decisionNumber: "desc" },
+          take: 1,
+          select: {
+            decisionNumber: true,
+            outcome: true,
+            decidedAt: true,
+            planVersionId: true,
+            roundId: true,
+          },
         },
       },
     });
@@ -217,9 +240,29 @@ export class EvaluationResultsRepository {
                 availableWeight,
             )
           : null;
+      const latestDecision = submission.evaluationDecisions[0];
+      const reviewsComplete = activeAssignments.length > 0 && completedReviewerCount === activeAssignments.length;
+      const isFinalRound = nextRound === null;
+      let availableDecisionOutcomes: readonly EvaluationDecisionOutcome[] = [];
+      if (isFinalRound && submission.status === CfpSubmissionStatus.UNDER_REVIEW && reviewsComplete) {
+        availableDecisionOutcomes = [
+          EvaluationDecisionOutcome.WAITLISTED,
+          EvaluationDecisionOutcome.ACCEPTED,
+          EvaluationDecisionOutcome.REJECTED,
+        ];
+      } else if (
+        isFinalRound &&
+        submission.status === CfpSubmissionStatus.WAITLISTED &&
+        latestDecision?.outcome === EvaluationDecisionOutcome.WAITLISTED &&
+        latestDecision.planVersionId === selectedRound.planVersionId &&
+        latestDecision.roundId === selectedRound.id
+      ) {
+        availableDecisionOutcomes = [EvaluationDecisionOutcome.ACCEPTED, EvaluationDecisionOutcome.REJECTED];
+      }
 
       return {
         id: submission.id,
+        status: submission.status,
         reference: `Submission ${submission.id.slice(0, 8).toUpperCase()}`,
         formTitle: submission.formVersion.title,
         primarySpeaker: speakerName(submission.participants[0]),
@@ -228,6 +271,8 @@ export class EvaluationResultsRepository {
         completedReviewerCount,
         incompleteReviewerCount: activeAssignments.length - completedReviewerCount,
         withdrawnReviewerCount: submission.evaluationAssignments.length - activeAssignments.length,
+        participantCount: submission.participants.length,
+        confirmedParticipantCount: submission.participants.filter(({ confirmedAt }) => confirmedAt !== null).length,
         criteria: calculatedCriteria.map(({ aggregate }) => aggregate),
         weightedAverage,
         rank: null,
@@ -239,6 +284,14 @@ export class EvaluationResultsRepository {
           activeAssignments.length > 0 &&
           completedReviewerCount === activeAssignments.length &&
           submission.evaluationAdvancements.length === 0,
+        decision: latestDecision
+          ? {
+              decisionNumber: latestDecision.decisionNumber,
+              outcome: latestDecision.outcome,
+              decidedAt: latestDecision.decidedAt,
+            }
+          : null,
+        availableDecisionOutcomes,
       };
     });
 

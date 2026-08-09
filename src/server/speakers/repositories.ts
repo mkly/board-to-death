@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import { resolvePersonIdentity } from "../contacts/person-identity.ts";
 import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
@@ -236,13 +237,17 @@ export class SpeakerRepository {
   async create(input: CreateSpeakerInput): Promise<PersistedSpeaker> {
     const profile = validateSpeakerProfileInput(input);
     try {
-      const speaker = await this.client.speaker.create({
-        data: {
-          eventId: input.eventId,
-          normalizedEmail: profile.email,
-          profileVersions: { create: { versionNumber: 1, ...profile } },
-        },
-        include: speakerInclude,
+      const speaker = await this.client.$transaction(async (transaction) => {
+        const person = await resolvePersonIdentity(transaction, profile);
+        return await transaction.speaker.create({
+          data: {
+            eventId: input.eventId,
+            personId: person.id,
+            normalizedEmail: profile.email,
+            profileVersions: { create: { versionNumber: 1, ...profile } },
+          },
+          include: speakerInclude,
+        });
       });
       return fromStored(speaker);
     } catch (error) {
@@ -292,9 +297,11 @@ export class SpeakerRepository {
           throw new RepositoryError("conflict", "The speaker profile changed after this form was loaded.");
         }
         const profile = validateSpeakerProfileInput({ ...profileInput(previous.profile), ...input });
+        const person = await resolvePersonIdentity(transaction, profile);
         await transaction.speaker.update({
           where: { id: speakerId },
           data: {
+            personId: person.id,
             normalizedEmail: profile.email,
             profileVersions: {
               create: { versionNumber: previous.profile.versionNumber + 1, ...profile },

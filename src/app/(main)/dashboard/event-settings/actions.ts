@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { EventType } from "@/generated/prisma/client";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
+import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database";
 import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "@/server/events";
 
@@ -53,6 +56,20 @@ const eventSchema = z
 const namedItemSchema = z.object({ name: z.string().trim().min(1, "Name is required.").max(120) });
 const trackSchema = namedItemSchema.extend({
   color: z.enum(["slate", "rose", "orange", "amber", "emerald", "sky", "indigo", "violet"]),
+});
+const cloneEventSchema = z.object({
+  name: z.string().trim().min(1, "Event name is required.").max(200),
+  slug: z
+    .string()
+    .trim()
+    .min(1, "Slug is required.")
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and single hyphens."),
+  rooms: z.boolean(),
+  tracks: z.boolean(),
+  forms: z.boolean(),
+  tasks: z.boolean(),
+  templates: z.boolean(),
+  portalSettings: z.boolean(),
 });
 
 function repositories() {
@@ -111,6 +128,10 @@ function failureResult(error: unknown): MutationResult {
   return { ok: false, message: "The settings could not be saved. Try again." };
 }
 
+async function isAuthorizedAdmin(): Promise<boolean> {
+  return isAuthorizedAdminSession(await auth.api.getSession({ headers: await headers() }));
+}
+
 async function snapshot(eventId: string): Promise<EventSettingsSnapshot> {
   const { events, rooms, tracks } = repositories();
   const [event, eventRooms, eventTracks] = await Promise.all([
@@ -122,10 +143,57 @@ async function snapshot(eventId: string): Promise<EventSettingsSnapshot> {
     throw new RepositoryError("not-found", "The event was not found.");
   }
   return {
-    event: { ...event, startsAt: event.startsAt.toISOString(), endsAt: event.endsAt.toISOString() },
+    event: {
+      ...event,
+      startsAt: event.startsAt.toISOString(),
+      endsAt: event.endsAt.toISOString(),
+      archivedAt: event.archivedAt?.toISOString() ?? null,
+    },
     rooms: eventRooms.map(({ id, name, sortOrder }) => ({ id, name, sortOrder })),
     tracks: eventTracks.map(({ id, name, color, sortOrder }) => ({ id, name, color, sortOrder })),
   };
+}
+
+export async function cloneEvent(sourceEventId: string, formData: FormData): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin())) return { ok: false, message: "You are not authorized to clone events." };
+  const parsed = cloneEventSchema.safeParse({
+    name: formData.get("name"),
+    slug: formData.get("slug"),
+    rooms: formData.get("rooms") === "on",
+    tracks: formData.get("tracks") === "on",
+    forms: formData.get("forms") === "on",
+    tasks: formData.get("tasks") === "on",
+    templates: formData.get("templates") === "on",
+    portalSettings: formData.get("portalSettings") === "on",
+  });
+  if (!parsed.success) return invalidResult(parsed.error);
+  try {
+    const { name, slug, ...options } = parsed.data;
+    const event = await repositories().events.clone(sourceEventId, { name, slug, options });
+    return success(event.id, "Event cloned. Submissions and contacts were not copied.");
+  } catch (error) {
+    return failureResult(error);
+  }
+}
+
+export async function archiveEvent(eventId: string): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin())) return { ok: false, message: "You are not authorized to archive events." };
+  try {
+    await repositories().events.archive(eventId);
+    return success(eventId, "Event archived and is now read-only.");
+  } catch (error) {
+    return failureResult(error);
+  }
+}
+
+export async function restoreEvent(eventId: string): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin())) return { ok: false, message: "You are not authorized to restore events." };
+  try {
+    await repositories().events.restore(eventId);
+    return success(eventId, "Event restored.");
+  } catch (error) {
+    return failureResult(error);
+  }
 }
 
 async function success(eventId: string, message: string): Promise<MutationResult> {

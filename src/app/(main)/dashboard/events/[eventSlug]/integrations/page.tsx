@@ -5,6 +5,7 @@ import { loadAcceleventsSyncHistory, loadSessionPreview, SpeakerMappingRepositor
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
+import { DeveloperAccessWorkspace } from "./_components/developer-access-workspace";
 import { SessionMappingPreview } from "./_components/session-mapping-preview";
 import { SpeakerMappingWorkspace } from "./_components/speaker-mapping-workspace";
 import { SyncStatusWorkspace } from "./_components/sync-status-workspace";
@@ -20,14 +21,62 @@ export default async function IntegrationsPage({ params, searchParams }: Integra
   if (!event) notFound();
   const client = getDatabaseClient();
   const page = Number.parseInt(query.page ?? "1", 10);
-  const [speakerPreview, sessions, syncRuns] = await Promise.all([
+  const [speakerPreview, sessions, syncRuns, tokens, webhookEndpoints, webhookDeliveries] = await Promise.all([
     new SpeakerMappingRepository(client).previewOffline(event.id, page, 10),
     loadSessionPreview(client, event.id),
     loadAcceleventsSyncHistory(client, event.id),
+    client.apiToken.findMany({ where: { eventId: event.id }, orderBy: { createdAt: "desc" } }),
+    client.webhookEndpoint.findMany({ where: { eventId: event.id }, orderBy: { createdAt: "desc" } }),
+    client.webhookDelivery.findMany({
+      where: { eventId: event.id },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: {
+        id: true,
+        endpointId: true,
+        eventType: true,
+        status: true,
+        attemptCount: true,
+        responseStatus: true,
+        error: true,
+        nextAttemptAt: true,
+        deliveredAt: true,
+        createdAt: true,
+      },
+    }),
   ]);
 
   return (
     <div className="flex flex-col gap-10">
+      <DeveloperAccessWorkspace
+        event={{ id: event.id, name: event.name, slug: event.slug }}
+        tokens={tokens.map((token) => ({
+          id: token.id,
+          name: token.name,
+          prefix: token.prefix,
+          scopes: Array.isArray(token.scopes)
+            ? token.scopes.filter((scope): scope is string => typeof scope === "string")
+            : [],
+          createdAt: token.createdAt.toISOString(),
+          lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+          revokedAt: token.revokedAt?.toISOString() ?? null,
+        }))}
+        endpoints={webhookEndpoints.map((endpoint) => ({
+          id: endpoint.id,
+          name: endpoint.name,
+          url: endpoint.url,
+          events: Array.isArray(endpoint.events)
+            ? endpoint.events.filter((eventType): eventType is string => typeof eventType === "string")
+            : [],
+          disabledAt: endpoint.disabledAt?.toISOString() ?? null,
+        }))}
+        deliveries={webhookDeliveries.map((delivery) => ({
+          ...delivery,
+          createdAt: delivery.createdAt.toISOString(),
+          nextAttemptAt: delivery.nextAttemptAt?.toISOString() ?? null,
+          deliveredAt: delivery.deliveredAt?.toISOString() ?? null,
+        }))}
+      />
       <SpeakerMappingWorkspace
         event={{ name: event.name, slug: event.slug }}
         preview={speakerPreview}

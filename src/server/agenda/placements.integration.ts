@@ -140,6 +140,56 @@ describe("agenda placement persistence", () => {
     );
   });
 
+  test("constrains subsessions to the parent placement window and permits their intentional overlap", async () => {
+    const fixture = await createFixture("subsession-window");
+    const parent = await placements.place({
+      eventId: fixture.event.id,
+      sessionId: fixture.session.id,
+      startsAt: new Date("2027-03-13T18:00:00.000Z"),
+      durationMinutes: 120,
+      roomId: fixture.room.id,
+      speakerIds: [fixture.speaker.id],
+    });
+    const child = await sessions.createManual({
+      eventId: fixture.event.id,
+      title: "Nested exercise",
+      durationMinutes: 30,
+      speakerIds: [fixture.speaker.id],
+      parentSessionId: fixture.session.id,
+    });
+    const nested = await placements.place({
+      eventId: fixture.event.id,
+      sessionId: child.id,
+      startsAt: new Date("2027-03-13T18:30:00.000Z"),
+      durationMinutes: 30,
+      roomId: fixture.room.id,
+      speakerIds: [fixture.speaker.id],
+    });
+    assert.equal(nested.sessionId, child.id);
+
+    await expectRepositoryError(
+      placements.update(fixture.event.id, nested.id, {
+        expectedVersion: nested.version,
+        startsAt: new Date("2027-03-13T19:45:00.000Z"),
+        durationMinutes: 30,
+      }),
+      "invalid-input",
+    );
+    await expectRepositoryError(
+      placements.update(fixture.event.id, parent.id, {
+        expectedVersion: parent.version,
+        startsAt: new Date("2027-03-13T18:00:00.000Z"),
+        durationMinutes: 15,
+      }),
+      "invalid-input",
+    );
+    await expectRepositoryError(placements.remove(fixture.event.id, parent.id, parent.version), "invalid-input");
+
+    await placements.remove(fixture.event.id, nested.id, nested.version);
+    await placements.remove(fixture.event.id, parent.id, parent.version);
+    assert.equal(await placements.get(fixture.event.id, parent.id), null);
+  });
+
   test("updates repeatedly, preserves omitted values, removes placements, and rejects stale writes", async () => {
     const fixture = await createFixture("placement-lifecycle");
     const placed = await placements.place({

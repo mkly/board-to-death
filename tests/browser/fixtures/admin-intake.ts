@@ -51,7 +51,30 @@ const event = await database.event.create({
                 questions: {
                   create: [
                     { key: "title", type: "short_text", label: "Proposal title", required: true, sortOrder: 0 },
-                    { key: "summary", type: "long_text", label: "Summary", required: true, sortOrder: 1 },
+                    {
+                      key: "format",
+                      type: "select",
+                      label: "Format",
+                      required: true,
+                      constraints: {
+                        options: [
+                          { label: "Talk", value: "talk" },
+                          { label: "Workshop", value: "workshop" },
+                        ],
+                      },
+                      sortOrder: 1,
+                    },
+                    {
+                      key: "summary",
+                      type: "long_text",
+                      label: "Summary",
+                      required: true,
+                      visibleWhen: {
+                        logic: "all",
+                        conditions: [{ questionId: "format", operator: "equals", value: "workshop" }],
+                      },
+                      sortOrder: 2,
+                    },
                   ],
                 },
               },

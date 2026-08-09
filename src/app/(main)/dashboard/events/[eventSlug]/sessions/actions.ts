@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
-import { CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
+import { CustomFieldEntityType, CustomFieldType, ProgramSessionParticipantRole } from "@/generated/prisma/client";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
@@ -37,17 +37,29 @@ const sessionFormSchema = z
       .min(1, "Duration must be at least one minute.")
       .max(1_440, "Duration cannot exceed 1,440 minutes."),
     trackId: z.string().trim(),
-    speakerIds: z.array(z.string().uuid("A selected speaker is invalid.")),
+    parentSessionId: z.string().trim(),
+    participants: z.array(
+      z.object({
+        speakerId: z.string().uuid("A selected participant is invalid."),
+        role: z.enum(ProgramSessionParticipantRole),
+      }),
+    ),
   })
-  .superRefine(({ sessionId, speakerIds, trackId }, context) => {
+  .superRefine(({ parentSessionId, sessionId, participants, trackId }, context) => {
     if (sessionId !== "" && !z.uuid().safeParse(sessionId).success) {
       context.addIssue({ code: "custom", path: ["sessionId"], message: "The selected session is invalid." });
     }
     if (trackId !== "" && trackId !== "unassigned" && !z.uuid().safeParse(trackId).success) {
       context.addIssue({ code: "custom", path: ["trackId"], message: "The selected track is invalid." });
     }
-    if (new Set(speakerIds).size !== speakerIds.length) {
-      context.addIssue({ code: "custom", path: ["speakerIds"], message: "Select each participant once." });
+    if (parentSessionId !== "" && parentSessionId !== "standalone" && !z.uuid().safeParse(parentSessionId).success) {
+      context.addIssue({ code: "custom", path: ["parentSessionId"], message: "The parent session is invalid." });
+    }
+    if (parentSessionId === sessionId) {
+      context.addIssue({ code: "custom", path: ["parentSessionId"], message: "A session cannot be its own parent." });
+    }
+    if (new Set(participants.map(({ speakerId }) => speakerId)).size !== participants.length) {
+      context.addIssue({ code: "custom", path: ["participants"], message: "Select each participant once." });
     }
   });
 
@@ -65,10 +77,20 @@ function validationErrors(error: z.ZodError): Readonly<Record<string, readonly s
   return errors;
 }
 
+function participantValues(formData: FormData) {
+  return [...formData.entries()].flatMap(([name, value]) => {
+    if (!name.startsWith("participantRole:") || typeof value !== "string" || value === "NONE") return [];
+    return [{ speakerId: name.slice("participantRole:".length), role: value }];
+  });
+}
+
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || !isAllowedAdminEmail(session.user.email)) return null;
-  return getDatabaseClient().event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });
+  return getDatabaseClient().event.findFirst({
+    where: { slug: eventSlug, archivedAt: null },
+    select: { id: true, slug: true },
+  });
 }
 
 function repositoryMessage(error: RepositoryError): string {
@@ -87,7 +109,8 @@ export async function saveProgramSession(
     description: stringValue(formData, "description"),
     durationMinutes: stringValue(formData, "durationMinutes"),
     trackId: stringValue(formData, "trackId"),
-    speakerIds: formData.getAll("speakerIds").filter((value): value is string => typeof value === "string"),
+    parentSessionId: stringValue(formData, "parentSessionId"),
+    participants: participantValues(formData),
   });
   if (!parsed.success) {
     return {
@@ -115,7 +138,11 @@ export async function saveProgramSession(
     description: parsed.data.description === "" ? null : parsed.data.description,
     durationMinutes: parsed.data.durationMinutes,
     trackId: parsed.data.trackId === "unassigned" || parsed.data.trackId === "" ? null : parsed.data.trackId,
-    speakerIds: parsed.data.speakerIds,
+    parentSessionId:
+      parsed.data.parentSessionId === "standalone" || parsed.data.parentSessionId === ""
+        ? null
+        : parsed.data.parentSessionId,
+    participants: parsed.data.participants,
   };
 
   try {
@@ -190,6 +217,23 @@ export async function archiveProgramSession(eventSlug: string, sessionId: string
     await new ProgramSessionRepository(getDatabaseClient()).archive(event.id, sessionId);
     revalidatePath(`/dashboard/events/${event.slug}/sessions`);
     return { status: "success", message: "Session archived.", sessionId };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
+    throw error;
+  }
+}
+
+export async function cloneProgramSession(eventSlug: string, sessionId: string): Promise<SessionMutationState> {
+  if (!z.uuid().safeParse(sessionId).success) {
+    return { status: "error", message: "The selected session is invalid." };
+  }
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  try {
+    const cloned = await new ProgramSessionRepository(getDatabaseClient()).clone(event.id, sessionId);
+    revalidatePath(`/dashboard/events/${event.slug}/sessions`);
+    return { status: "success", message: "Session cloned as an unscheduled manual session.", sessionId: cloned.id };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
     throw error;

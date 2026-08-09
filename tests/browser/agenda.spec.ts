@@ -31,6 +31,7 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
 }) => {
   const suffix = randomUUID().slice(0, 8);
   const event = { id: randomUUID(), slug: `browser-agenda-${suffix}` };
+  const foreignEvent = { id: randomUUID(), slug: `browser-agenda-foreign-${suffix}` };
   const roomId = randomUUID();
   const secondaryRoomId = randomUUID();
   const trackId = randomUUID();
@@ -39,14 +40,29 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
   const firstVersionId = randomUUID();
   const secondSessionId = randomUUID();
   const secondVersionId = randomUUID();
+  const moderatorId = randomUUID();
+  const moderatorProfileId = randomUUID();
+  const foreignSpeakerId = randomUUID();
+  const foreignProfileId = randomUUID();
+  const foreignSessionId = randomUUID();
+  const foreignVersionId = randomUUID();
   const now = new Date();
   const seedConnection = await database.connect();
   await seedConnection.query("BEGIN");
   try {
     await seedConnection.query(
       `INSERT INTO "events" ("id", "name", "slug", "type", "timezone", "startsAt", "endsAt", "updatedAt")
-       VALUES ($1, 'Browser agenda event', $2, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5)`,
-      [event.id, event.slug, new Date("2027-03-13T17:00:00.000Z"), new Date("2027-03-14T00:00:00.000Z"), now],
+       VALUES ($1, 'Browser agenda event', $2, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5),
+              ($6, 'Foreign role event', $7, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5)`,
+      [
+        event.id,
+        event.slug,
+        new Date("2027-03-13T17:00:00.000Z"),
+        new Date("2027-03-14T00:00:00.000Z"),
+        now,
+        foreignEvent.id,
+        foreignEvent.slug,
+      ],
     );
     await seedConnection.query(
       `INSERT INTO "rooms" ("id", "eventId", "name", "sortOrder", "updatedAt")
@@ -59,16 +75,47 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
       [trackId, event.id, secondaryTrackId, now],
     );
     await seedConnection.query(
+      `INSERT INTO "speakers" ("id", "eventId", "normalizedEmail", "updatedAt")
+       VALUES ($1, $2, 'moderator@example.test', $3),
+              ($4, $5, 'foreign-moderator@example.test', $3)`,
+      [moderatorId, event.id, now, foreignSpeakerId, foreignEvent.id],
+    );
+    await seedConnection.query(
+      `INSERT INTO "speaker_profile_versions"
+         ("id", "speakerId", "versionNumber", "email", "givenName", "familyName")
+       VALUES ($1, $2, 1, 'moderator@example.test', 'Maya', 'Moderator'),
+              ($3, $4, 1, 'foreign-moderator@example.test', 'Foreign', 'Moderator')`,
+      [moderatorProfileId, moderatorId, foreignProfileId, foreignSpeakerId],
+    );
+    await seedConnection.query(
       `INSERT INTO "program_sessions" ("id", "eventId", "kind", "updatedAt")
-       VALUES ($1, $2, 'MANUAL', $4), ($3, $2, 'MANUAL', $4)`,
-      [firstSessionId, event.id, secondSessionId, now],
+       VALUES ($1, $2, 'MANUAL', $4), ($3, $2, 'MANUAL', $4), ($5, $6, 'MANUAL', $4)`,
+      [firstSessionId, event.id, secondSessionId, now, foreignSessionId, foreignEvent.id],
     );
     await seedConnection.query(
       `INSERT INTO "program_session_versions"
          ("id", "eventId", "sessionId", "versionNumber", "title", "durationMinutes", "trackId")
        VALUES ($1, $2, $3, 1, 'Opening keynote', 45, $4),
-              ($5, $2, $6, 1, 'Cooperative tension lab', 60, $4)`,
-      [firstVersionId, event.id, firstSessionId, trackId, secondVersionId, secondSessionId],
+              ($5, $2, $6, 1, 'Cooperative tension lab', 60, $4),
+              ($7, $8, $9, 1, 'Foreign moderator session', 45, NULL)`,
+      [
+        firstVersionId,
+        event.id,
+        firstSessionId,
+        trackId,
+        secondVersionId,
+        secondSessionId,
+        foreignVersionId,
+        foreignEvent.id,
+        foreignSessionId,
+      ],
+    );
+    await seedConnection.query(
+      `INSERT INTO "program_session_participants"
+         ("eventId", "sessionVersionId", "speakerId", "role", "sortOrder")
+       VALUES ($1, $2, $3, 'MODERATOR', 0), ($1, $4, $3, 'MODERATOR', 0),
+              ($5, $6, $7, 'MODERATOR', 0)`,
+      [event.id, firstVersionId, moderatorId, secondVersionId, foreignEvent.id, foreignVersionId, foreignSpeakerId],
     );
     await seedConnection.query("COMMIT");
   } catch (error) {
@@ -90,6 +137,33 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
         sameSite: "Lax",
       },
     ]);
+
+    await page.goto(`/dashboard/events/${event.slug}/sessions`);
+    await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+    await page.getByRole("combobox", { name: "Filter sessions by participant role" }).selectOption("MODERATOR");
+    await expect(page.getByText("Opening keynote", { exact: true })).toBeVisible();
+    await expect(page.getByText("Cooperative tension lab", { exact: true })).toBeVisible();
+    await expect(page.getByText("Foreign moderator session", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Inspect Opening keynote" }).click();
+    const roleSelect = page.getByRole("combobox", { name: /Maya Moderator/ });
+    await roleSelect.click();
+    await page.getByRole("option", { name: "Chairperson" }).click();
+    await page.getByRole("button", { name: "Save new version" }).click();
+    await expect(page.getByText("Session changes saved.")).toBeVisible();
+    await expect
+      .poll(async () => {
+        const role = await database.query<{ role: string }>(
+          `SELECT p."role"
+             FROM "program_session_participants" p
+             JOIN "program_session_versions" v ON v."id" = p."sessionVersionId"
+            WHERE v."sessionId" = $1
+            ORDER BY v."versionNumber" DESC
+            LIMIT 1`,
+          [firstSessionId],
+        );
+        return role.rows[0]?.role;
+      })
+      .toBe("CHAIRPERSON");
 
     await page.goto(`/dashboard/events/${event.slug}/agenda`);
     await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
@@ -157,11 +231,14 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await expect(page.getByRole("alert").filter({ hasText: "Resolve these conflicts" })).toContainText(
       "Main Hall overlaps with Opening keynote",
     );
+    await expect(page.getByRole("alert").filter({ hasText: "Resolve these conflicts" })).toContainText(
+      "Speaker Maya Moderator overlaps with Opening keynote",
+    );
 
     await page.getByRole("radio", { name: "Allow after confirmation" }).click();
     await page.getByRole("button", { name: "Add to agenda" }).click();
     const conflictDialog = page.getByRole("alertdialog");
-    await expect(conflictDialog).toContainText("Save with 2 agenda conflicts?");
+    await expect(conflictDialog).toContainText("Save with 3 agenda conflicts?");
     await conflictDialog.getByRole("button", { name: "Confirm and save" }).focus();
     await page.keyboard.press("Enter");
     await expect(page.getByText("Session added to the agenda.")).toBeVisible();
@@ -194,9 +271,10 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await conflictReview.getByRole("link", { name: "Review Cooperative tension lab" }).first().click();
     await expect(page).toHaveURL(new RegExp(`#conflict-placement-${secondPlacementId}$`));
     await conflictReview.getByRole("radio", { name: "Speaker" }).click();
-    await expect(conflictReview.getByText("0 of 2 conflicts")).toBeVisible();
+    await expect(conflictReview.getByText("1 of 3 conflicts")).toBeVisible();
+    await expect(conflictReview.getByText("Speaker: Maya Moderator")).toBeVisible();
     await conflictReview.getByRole("radio", { name: "Room" }).click();
-    await expect(conflictReview.getByText("1 of 2 conflicts")).toBeVisible();
+    await expect(conflictReview.getByText("1 of 3 conflicts")).toBeVisible();
 
     await database.query(`UPDATE "agenda_placements" SET "version" = "version" + 1, "updatedAt" = $1 WHERE "id" = $2`, [
       new Date(),
@@ -352,6 +430,6 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
       .toBe(0);
     await expect(agendaViews.getByText("No sessions in this view")).toBeVisible();
   } finally {
-    await database.query(`DELETE FROM "events" WHERE "id" = $1`, [event.id]);
+    await database.query(`DELETE FROM "events" WHERE "id" IN ($1, $2)`, [event.id, foreignEvent.id]);
   }
 });

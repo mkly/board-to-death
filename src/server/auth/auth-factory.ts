@@ -1,11 +1,12 @@
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { betterAuth } from "better-auth/minimal";
 import { nextCookies } from "better-auth/next-js";
-import { magicLink } from "better-auth/plugins";
+import { magicLink, twoFactor } from "better-auth/plugins";
 
 import type { PrismaClient } from "@/generated/prisma/client";
 
 import type { SendMagicLink } from "./magic-link-email";
+import { passwordlessTwoFactor } from "./passwordless-two-factor.ts";
 
 interface CreateAuthOptions {
   readonly baseURL: string;
@@ -13,9 +14,21 @@ interface CreateAuthOptions {
   readonly isAllowedEmail: (email: string) => boolean | Promise<boolean>;
   readonly secret: string;
   readonly sendMagicLink: SendMagicLink;
+  readonly twoFactorLockoutDuration?: number;
+  readonly twoFactorMaxFailedAttempts?: number;
+  readonly twoFactorPeriod?: number;
 }
 
-export function createAuth({ baseURL, database, isAllowedEmail, secret, sendMagicLink }: CreateAuthOptions) {
+export function createAuth({
+  baseURL,
+  database,
+  isAllowedEmail,
+  secret,
+  sendMagicLink,
+  twoFactorLockoutDuration,
+  twoFactorMaxFailedAttempts,
+  twoFactorPeriod,
+}: CreateAuthOptions) {
   return betterAuth({
     appName: "Board to Death",
     baseURL,
@@ -35,6 +48,16 @@ export function createAuth({ baseURL, database, isAllowedEmail, secret, sendMagi
           }
         },
       }),
+      twoFactor({
+        allowPasswordless: true,
+        issuer: "Board to Death",
+        accountLockout: {
+          maxFailedAttempts: twoFactorMaxFailedAttempts ?? 10,
+          durationSeconds: twoFactorLockoutDuration ?? 15 * 60,
+        },
+        totpOptions: { period: twoFactorPeriod },
+      }),
+      passwordlessTwoFactor(),
       nextCookies(),
     ],
   });

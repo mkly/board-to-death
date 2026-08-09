@@ -1,4 +1,11 @@
-import type { Event, EventType, Prisma, PrismaClient, Room, Track } from "../../generated/prisma/client.ts";
+import {
+  type Event,
+  type EventType,
+  Prisma,
+  type PrismaClient,
+  type Room,
+  type Track,
+} from "../../generated/prisma/client.ts";
 
 export type RepositoryErrorCode = "conflict" | "invalid-input" | "not-found";
 
@@ -30,6 +37,21 @@ export interface CreateEventInput {
 
 export type UpdateEventInput = Partial<CreateEventInput>;
 
+export interface CloneEventOptions {
+  readonly rooms: boolean;
+  readonly tracks: boolean;
+  readonly forms: boolean;
+  readonly tasks: boolean;
+  readonly templates: boolean;
+  readonly portalSettings: boolean;
+}
+
+export interface CloneEventInput {
+  readonly name: string;
+  readonly slug: string;
+  readonly options: CloneEventOptions;
+}
+
 export interface CreateRoomInput {
   readonly eventId: string;
   readonly name: string;
@@ -57,6 +79,10 @@ function optionalText(value: string | null | undefined): string | null | undefin
   }
   const normalized = value.trim();
   return normalized === "" ? null : normalized;
+}
+
+function inputJson(value: Prisma.JsonValue): Prisma.InputJsonValue | Prisma.JsonNullValueInput {
+  return value === null ? Prisma.JsonNull : value;
 }
 
 function validateTimezone(timezone: string): string {
@@ -129,9 +155,171 @@ function mapDatabaseError(error: unknown): never {
 }
 
 async function requireEvent(client: PrismaClient, eventId: string): Promise<void> {
-  const event = await client.event.findUnique({ where: { id: eventId }, select: { id: true } });
+  const event = await client.event.findUnique({ where: { id: eventId }, select: { id: true, archivedAt: true } });
   if (!event) {
     throw new RepositoryError("not-found", "The event was not found.");
+  }
+  if (event.archivedAt !== null) {
+    throw new RepositoryError("invalid-input", "An archived event is read-only. Restore it before editing.");
+  }
+}
+
+async function cloneForms(
+  transaction: Prisma.TransactionClient,
+  sourceEventId: string,
+  destinationEventId: string,
+): Promise<void> {
+  const forms = await transaction.cfpForm.findMany({
+    where: { eventId: sourceEventId },
+    include: {
+      versions: {
+        orderBy: { versionNumber: "asc" },
+        include: {
+          steps: { orderBy: { sortOrder: "asc" }, include: { questions: { orderBy: { sortOrder: "asc" } } } },
+        },
+      },
+    },
+  });
+  for (const form of forms) {
+    const created = await transaction.cfpForm.create({ data: { eventId: destinationEventId, key: form.key } });
+    for (const version of form.versions) {
+      await transaction.cfpFormVersion.create({
+        data: {
+          formId: created.id,
+          versionNumber: version.versionNumber,
+          schemaVersion: version.schemaVersion,
+          title: version.title,
+          description: version.description,
+          submissionKind: version.submissionKind,
+          accessPolicy: version.accessPolicy,
+          welcomeTitle: version.welcomeTitle,
+          welcomeContent: version.welcomeContent,
+          instructions: version.instructions,
+          termsContent: version.termsContent,
+          consentRequired: version.consentRequired,
+          minimumSpeakerCount: version.minimumSpeakerCount,
+          maximumSpeakerCount: version.maximumSpeakerCount,
+          requiredSpeakerFields: version.requiredSpeakerFields ?? undefined,
+          customTypes: inputJson(version.customTypes),
+          categories: version.categories ?? undefined,
+          categoryRules: version.categoryRules ?? undefined,
+          steps: {
+            create: version.steps.map((step) => ({
+              key: step.key,
+              kind: step.kind,
+              title: step.title,
+              description: step.description,
+              sortOrder: step.sortOrder,
+              questions: {
+                create: step.questions.map((question) => ({
+                  key: question.key,
+                  type: question.type,
+                  label: question.label,
+                  description: question.description,
+                  required: question.required,
+                  constraints: question.constraints ?? undefined,
+                  visibleWhen: question.visibleWhen ?? undefined,
+                  sortOrder: question.sortOrder,
+                })),
+              },
+            })),
+          },
+        },
+      });
+    }
+  }
+}
+
+async function cloneTasks(
+  transaction: Prisma.TransactionClient,
+  sourceEventId: string,
+  destinationEventId: string,
+): Promise<void> {
+  const definitions = await transaction.speakerTaskDefinition.findMany({
+    where: { eventId: sourceEventId },
+    include: { versions: { orderBy: { versionNumber: "asc" } } },
+  });
+  for (const definition of definitions) {
+    const created = await transaction.speakerTaskDefinition.create({
+      data: { eventId: destinationEventId, key: definition.key, archivedAt: definition.archivedAt },
+    });
+    if (definition.versions.length > 0) {
+      await transaction.speakerTaskDefinitionVersion.createMany({
+        data: definition.versions.map((version) => ({
+          eventId: destinationEventId,
+          definitionId: created.id,
+          versionNumber: version.versionNumber,
+          sortOrder: version.sortOrder,
+          title: version.title,
+          description: version.description,
+          applicability: inputJson(version.applicability),
+          defaultDueOffsetDays: version.defaultDueOffsetDays,
+          responseRequired: version.responseRequired,
+          responseSchema: version.responseSchema ?? undefined,
+        })),
+      });
+    }
+  }
+}
+
+async function cloneTemplates(
+  transaction: Prisma.TransactionClient,
+  sourceEventId: string,
+  destinationEventId: string,
+): Promise<void> {
+  const templates = await transaction.communicationTemplate.findMany({
+    where: { eventId: sourceEventId },
+    include: { versions: { orderBy: { version: "asc" } } },
+  });
+  for (const template of templates) {
+    const created = await transaction.communicationTemplate.create({
+      data: { eventId: destinationEventId, key: template.key, name: template.name },
+    });
+    if (template.versions.length > 0) {
+      await transaction.communicationTemplateVersion.createMany({
+        data: template.versions.map((version) => ({
+          eventId: destinationEventId,
+          templateId: created.id,
+          version: version.version,
+          subjectTemplate: version.subjectTemplate,
+          htmlTemplate: version.htmlTemplate,
+          textTemplate: version.textTemplate,
+        })),
+      });
+    }
+  }
+}
+
+async function cloneResourcePages(
+  transaction: Prisma.TransactionClient,
+  sourceEventId: string,
+  destinationEventId: string,
+): Promise<void> {
+  const pages = await transaction.speakerResourcePage.findMany({
+    where: { eventId: sourceEventId },
+    include: { versions: { orderBy: { versionNumber: "asc" } } },
+  });
+  for (const page of pages) {
+    const created = await transaction.speakerResourcePage.create({
+      data: { eventId: destinationEventId, key: page.key, archivedAt: page.archivedAt },
+    });
+    if (page.versions.length > 0) {
+      await transaction.speakerResourcePageVersion.createMany({
+        data: page.versions.map((version) => ({
+          eventId: destinationEventId,
+          pageId: created.id,
+          versionNumber: version.versionNumber,
+          slug: version.slug,
+          title: version.title,
+          summary: version.summary,
+          bodyMarkdown: version.bodyMarkdown,
+          allowedEmbedUrls: version.allowedEmbedUrls ?? undefined,
+          sortOrder: version.sortOrder,
+          publishedAt: version.publishedAt,
+          unpublishedAt: version.unpublishedAt,
+        })),
+      });
+    }
   }
 }
 
@@ -166,9 +354,90 @@ export class EventRepository {
     if (!current) {
       throw new RepositoryError("not-found", "The event was not found.");
     }
+    if (current.archivedAt !== null) {
+      throw new RepositoryError("invalid-input", "An archived event is read-only. Restore it before editing.");
+    }
     const validated = validateEvent({ ...current, ...input });
     try {
       return await this.client.event.update({ where: { id }, data: validated });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async clone(sourceEventId: string, input: CloneEventInput): Promise<Event> {
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        const source = await transaction.event.findUnique({ where: { id: sourceEventId } });
+        if (!source) throw new RepositoryError("not-found", "The source event was not found.");
+
+        const validated = validateEvent({
+          name: input.name,
+          slug: input.slug,
+          type: source.type,
+          websiteUrl: source.websiteUrl,
+          location: source.location,
+          timezone: source.timezone,
+          startsAt: source.startsAt,
+          endsAt: source.endsAt,
+          theme: input.options.portalSettings ? source.theme : null,
+          exhibitorsEnabled: source.exhibitorsEnabled,
+          sponsorsEnabled: source.sponsorsEnabled,
+          logoObjectKey: input.options.portalSettings ? source.logoObjectKey : null,
+          backgroundObjectKey: input.options.portalSettings ? source.backgroundObjectKey : null,
+        });
+        const clone = await transaction.event.create({
+          data: { ...validated, clonedFromEventId: source.id },
+        });
+
+        if (input.options.rooms) {
+          const rooms = await transaction.room.findMany({
+            where: { eventId: source.id },
+            orderBy: { sortOrder: "asc" },
+          });
+          if (rooms.length > 0) {
+            await transaction.room.createMany({
+              data: rooms.map(({ name, sortOrder }) => ({ eventId: clone.id, name, sortOrder })),
+            });
+          }
+        }
+
+        if (input.options.tracks) {
+          const tracks = await transaction.track.findMany({
+            where: { eventId: source.id },
+            orderBy: { sortOrder: "asc" },
+          });
+          if (tracks.length > 0) {
+            await transaction.track.createMany({
+              data: tracks.map(({ name, color, sortOrder }) => ({ eventId: clone.id, name, color, sortOrder })),
+            });
+          }
+        }
+
+        if (input.options.forms) await cloneForms(transaction, source.id, clone.id);
+        if (input.options.tasks) await cloneTasks(transaction, source.id, clone.id);
+        if (input.options.templates) await cloneTemplates(transaction, source.id, clone.id);
+        if (input.options.portalSettings) await cloneResourcePages(transaction, source.id, clone.id);
+
+        return clone;
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async archive(id: string, archivedAt: Date = new Date()): Promise<Event> {
+    if (!Number.isFinite(archivedAt.getTime())) invalid("archivedAt must be a valid date.");
+    try {
+      return await this.client.event.update({ where: { id }, data: { archivedAt } });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async restore(id: string): Promise<Event> {
+    try {
+      return await this.client.event.update({ where: { id }, data: { archivedAt: null } });
     } catch (error) {
       return mapDatabaseError(error);
     }

@@ -243,6 +243,73 @@ describe("speaker onboarding persistence", () => {
     );
   });
 
+  test("keeps conditional form rules pinned to the version assigned to in-flight work", async () => {
+    const eventId = await createEvent("conditional-task-versioning");
+    const speaker = await createSpeaker(eventId);
+    await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
+    const versionOneSchema = {
+      kind: "portal-form",
+      sections: [
+        {
+          id: "travel",
+          title: "Travel",
+          fields: [
+            { id: "format", label: "Format", type: "text", required: true },
+            {
+              id: "details",
+              label: "Details",
+              type: "textarea",
+              required: true,
+              visibleWhen: { fieldId: "format", equals: "Online" },
+            },
+          ],
+        },
+      ],
+      confirmation: { subject: "Received", message: "Saved", sendEmail: false },
+    };
+    const definition = await onboarding.createDefinition({
+      eventId,
+      key: "conditional-travel",
+      sortOrder: 0,
+      title: "Travel details",
+      applicability: {},
+      responseRequired: true,
+      responseSchema: versionOneSchema,
+    });
+    const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
+    await onboarding.createDefinitionVersion(eventId, definition.id, {
+      sortOrder: 0,
+      title: "Travel details",
+      applicability: {},
+      responseRequired: true,
+      responseSchema: {
+        ...versionOneSchema,
+        sections: [
+          {
+            ...versionOneSchema.sections[0],
+            fields: [
+              versionOneSchema.sections[0].fields[0],
+              {
+                ...versionOneSchema.sections[0].fields[1],
+                visibleWhen: { fieldId: "format", equals: "In person" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const stored = await client.speakerTaskAssignment.findUniqueOrThrow({
+      where: { id: assignment.id },
+      include: { definitionVersion: true },
+    });
+    assert.deepEqual(stored.definitionVersion.responseSchema, versionOneSchema);
+    const latest = (await onboarding.getDefinition(eventId, definition.id))?.versions.at(-1);
+    assert.ok(latest?.responseSchema);
+    const latestSchema = latest.responseSchema as { sections: Array<{ fields: Array<{ visibleWhen?: unknown }> }> };
+    assert.deepEqual(latestSchema.sections[0]?.fields[1]?.visibleWhen, { fieldId: "format", equals: "In person" });
+  });
+
   test("preserves response attempts through revision and completes only on approval", async () => {
     const eventId = await createEvent("response-history");
     const speaker = await createSpeaker(eventId);

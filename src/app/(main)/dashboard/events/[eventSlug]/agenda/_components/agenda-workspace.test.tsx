@@ -45,6 +45,8 @@ const sessions: readonly AgendaWorkspaceSession[] = [
   {
     id: OPENING_ID,
     title: "Opening keynote",
+    parentSessionId: null,
+    parentSessionTitle: null,
     durationMinutes: 45,
     trackId: TRACK_ID,
     trackName: "Game design",
@@ -55,6 +57,8 @@ const sessions: readonly AgendaWorkspaceSession[] = [
   {
     id: LAB_ID,
     title: "Designing cooperative tension",
+    parentSessionId: null,
+    parentSessionTitle: null,
     durationMinutes: 60,
     trackId: TRACK_ID,
     trackName: "Game design",
