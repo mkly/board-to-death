@@ -65,6 +65,7 @@ interface SessionWorkspaceProps {
   readonly sessions: readonly SessionWorkspaceSession[];
   readonly speakers: readonly { readonly id: string; readonly name: string; readonly email: string }[];
   readonly tracks: readonly { readonly id: string; readonly name: string }[];
+  readonly initialSessionId?: string;
 }
 
 type SessionFilter = "all" | "manual" | "guaranteed" | "promoted" | "archived";
@@ -248,9 +249,11 @@ function SessionForm({
   );
 }
 
-export function SessionWorkspace({ event, sessions, speakers, tracks }: SessionWorkspaceProps) {
+export function SessionWorkspace({ event, sessions, speakers, tracks, initialSessionId }: SessionWorkspaceProps) {
   const [filter, setFilter] = useState<SessionFilter>("all");
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    sessions.some(({ id }) => id === initialSessionId) ? (initialSessionId ?? null) : null,
+  );
   const [creating, setCreating] = useState(false);
   const [archiveMessage, setArchiveMessage] = useState("");
   const [archivePending, startArchiveTransition] = useTransition();
