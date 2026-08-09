@@ -47,6 +47,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
       },
     ],
     versionNumber: 2,
+    customFieldValues: [],
   },
   {
     id: "22222222-2222-4222-8222-222222222222",
@@ -61,6 +62,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
     parentSessionTitle: null,
     participants: [],
     versionNumber: 1,
+    customFieldValues: [],
   },
   {
     id: "33333333-3333-4333-8333-333333333333",
@@ -75,6 +77,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
     parentSessionTitle: null,
     participants: [],
     versionNumber: 3,
+    customFieldValues: [],
   },
 ];
 
@@ -84,6 +87,7 @@ function renderWorkspace() {
       event={{ name: "Board to Death 2027", slug: "board-to-death-2027" }}
       sessions={sessions}
       tracks={[{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Game design" }]}
+      customFieldDefinitions={[]}
       speakers={[{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Alex Rivera", email: "alex@example.test" }]}
     />,
   );

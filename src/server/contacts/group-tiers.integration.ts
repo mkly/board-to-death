@@ -109,6 +109,12 @@ describe("contact group tiers and primary contacts", () => {
       (await listContactGroups(client, event.id, { tierIds: [silver.id] })).map(({ name }) => name),
       ["Silver Labs"],
     );
+    await updateContactGroup(client, event.id, silverGroup.id, { tierId: null, primaryContactId: null });
+    const cleared = await client.contactGroup.findUniqueOrThrow({
+      where: { eventId_id: { eventId: event.id, id: silverGroup.id } },
+      select: { tierId: true, primaryContactId: true },
+    });
+    assert.deepEqual(cleared, { tierId: null, primaryContactId: null });
     await assert.rejects(
       updateContactGroup(client, event.id, silverGroup.id, { primaryContactId: foreign.id }),
       (error: unknown) => error instanceof RepositoryError && error.code === "not-found",

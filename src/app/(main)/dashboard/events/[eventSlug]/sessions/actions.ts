@@ -5,12 +5,18 @@ import { headers } from "next/headers";
 
 import { z } from "zod";
 
-import { ProgramSessionParticipantRole } from "@/generated/prisma/client";
+import { getRuntimeConfig } from "@/config/runtime-env.server";
+import { CustomFieldEntityType, CustomFieldType, ProgramSessionParticipantRole } from "@/generated/prisma/client";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
+import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { contentDisposition, createFileStorage, safeFileName } from "@/server/infrastructure";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
+
+import { randomUUID } from "node:crypto";
 
 export interface SessionMutationState {
   readonly status: "idle" | "success" | "error";
@@ -118,6 +124,15 @@ export async function saveProgramSession(
   if (!event) return { status: "error", message: "This event is not available." };
 
   const repository = new ProgramSessionRepository(getDatabaseClient());
+  const customFields = new CustomFieldRepository(getDatabaseClient());
+  const definitions = await customFields.listDefinitions(event.id, CustomFieldEntityType.PROGRAM_SESSION);
+  let customInput: ReturnType<typeof parseCustomFieldFormData>;
+  try {
+    customInput = parseCustomFieldFormData(formData, definitions);
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
   const input = {
     title: parsed.data.title,
     description: parsed.data.description === "" ? null : parsed.data.description,
@@ -135,6 +150,50 @@ export async function saveProgramSession(
       parsed.data.sessionId === ""
         ? await repository.createManual({ eventId: event.id, ...input })
         : await repository.update(event.id, parsed.data.sessionId, input);
+    const target = { entityType: CustomFieldEntityType.PROGRAM_SESSION, sessionId: saved.id } as const;
+    const existingValues = await customFields.listValues(event.id, target);
+    for (const entry of customInput.values) {
+      await customFields.setValue(event.id, entry.definition.id, target, entry.value);
+    }
+    const uploadedDefinitionIds = new Set(customInput.files.map(({ definition }) => definition.id));
+    const missingRequiredFile = definitions.find(
+      (definition) =>
+        definition.type === CustomFieldType.FILE &&
+        definition.required &&
+        !uploadedDefinitionIds.has(definition.id) &&
+        !existingValues.some((stored) => stored.definitionId === definition.id),
+    );
+    if (missingRequiredFile) {
+      return { status: "error", message: `${missingRequiredFile.label} is required.`, sessionId: saved.id };
+    }
+    const storage = createFileStorage({
+      driver: "local",
+      rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
+    });
+    for (const { definition, file } of customInput.files) {
+      const fileName = safeFileName(file.name);
+      if (!fileName) return { status: "error", message: `${definition.label} has an invalid file name.` };
+      const objectKey = `events/${event.id}/custom-fields/${definition.id}/sessions/${saved.id}/${randomUUID()}`;
+      const stored = await storage.put({
+        key: objectKey,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+        contentType: file.type || "application/octet-stream",
+        contentDisposition: contentDisposition(fileName),
+        metadata: { eventId: event.id, definitionId: definition.id, sessionId: saved.id },
+      });
+      if (!stored.ok) return { status: "error", message: `${definition.label} could not be stored. Try again.` };
+      try {
+        await customFields.setValue(event.id, definition.id, target, { objectKey, fileName });
+      } catch (error) {
+        await storage.delete(objectKey);
+        throw error;
+      }
+      const previous = existingValues.find(({ definitionId }) => definitionId === definition.id)?.value;
+      if (typeof previous === "object" && previous !== null && !Array.isArray(previous) && "objectKey" in previous) {
+        const previousKey = previous.objectKey;
+        if (typeof previousKey === "string" && previousKey !== objectKey) await storage.delete(previousKey);
+      }
+    }
     revalidatePath(`/dashboard/events/${event.slug}/sessions`);
     return {
       status: "success",

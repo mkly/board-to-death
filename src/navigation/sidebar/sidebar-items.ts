@@ -148,6 +148,24 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
           };
         }
 
+        if (id === "settings") {
+          return {
+            id,
+            title,
+            icon,
+            disabled,
+            subItems: [
+              { id: "event-settings", title: "Event settings", url, disabled },
+              {
+                id: "custom-fields",
+                title: "Custom fields",
+                url: eventSlug ? `${url}/custom-fields` : "/dashboard",
+                disabled,
+              },
+            ],
+          };
+        }
+
         return { id, title, icon, url, disabled };
       }),
     },

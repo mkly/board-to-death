@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
-import type { ContactGroupKind } from "@/generated/prisma/client";
+import { getRuntimeConfig } from "@/config/runtime-env.server";
+import {
+  type ContactGroupKind,
+  type CustomFieldDefinition,
+  CustomFieldEntityType,
+  CustomFieldType,
+} from "@/generated/prisma/client";
 import {
   acceptContactGroupIntakeSubmission,
   closeContactGroupIntakeForm,
@@ -19,11 +25,15 @@ import {
   reorderContactGroupTiers,
   updateContactGroup,
 } from "@/server/contacts/repositories";
+import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
+import { CustomFieldRepository, type CustomFieldTarget } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { contentDisposition, createFileStorage, safeFileName } from "@/server/infrastructure";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
+import { randomUUID } from "node:crypto";
 
 const KINDS: readonly ContactGroupKind[] = ["SPONSOR", "EXHIBITOR"];
 
@@ -75,6 +85,62 @@ function fail(eventSlug: string, error: unknown): never {
   redirect(`${path(eventSlug)}?error=${encodeURIComponent(message(error))}`);
 }
 
+async function saveCustomFields({
+  eventId,
+  target,
+  definitions,
+  formData,
+  pathSegment,
+}: {
+  readonly eventId: string;
+  readonly target: CustomFieldTarget;
+  readonly definitions: readonly CustomFieldDefinition[];
+  readonly formData: FormData;
+  readonly pathSegment: string;
+}): Promise<void> {
+  const repository = new CustomFieldRepository(getDatabaseClient());
+  const parsed = parseCustomFieldFormData(formData, definitions);
+  const existing = await repository.listValues(eventId, target);
+  const uploadedDefinitionIds = new Set(parsed.files.map(({ definition }) => definition.id));
+  const missingRequiredFile = definitions.find(
+    (definition) =>
+      definition.type === CustomFieldType.FILE &&
+      definition.required &&
+      !uploadedDefinitionIds.has(definition.id) &&
+      !existing.some(({ definitionId }) => definitionId === definition.id),
+  );
+  if (missingRequiredFile) throw new RepositoryError("invalid-input", `${missingRequiredFile.label} is required.`);
+
+  for (const entry of parsed.values) {
+    await repository.setValue(eventId, entry.definition.id, target, entry.value);
+  }
+
+  const storage = createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH });
+  for (const { definition, file } of parsed.files) {
+    const fileName = safeFileName(file.name);
+    if (!fileName) throw new RepositoryError("invalid-input", `${definition.label} has an invalid file name.`);
+    const objectKey = `events/${eventId}/custom-fields/${definition.id}/${pathSegment}/${randomUUID()}`;
+    const stored = await storage.put({
+      key: objectKey,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      contentType: file.type || "application/octet-stream",
+      contentDisposition: contentDisposition(fileName),
+      metadata: { eventId, definitionId: definition.id, recordType: target.entityType },
+    });
+    if (!stored.ok) throw new RepositoryError("invalid-input", `${definition.label} could not be stored. Try again.`);
+    try {
+      await repository.setValue(eventId, definition.id, target, { objectKey, fileName });
+    } catch (error) {
+      await storage.delete(objectKey);
+      throw error;
+    }
+    const previous = existing.find(({ definitionId }) => definitionId === definition.id)?.value;
+    if (typeof previous === "object" && previous !== null && !Array.isArray(previous) && "objectKey" in previous) {
+      const previousKey = previous.objectKey;
+      if (typeof previousKey === "string" && previousKey !== objectKey) await storage.delete(previousKey);
+    }
+  }
+}
 export async function createTierAction(eventSlug: string, formData: FormData): Promise<never> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
@@ -142,12 +208,24 @@ export async function removeTierAction(eventSlug: string, tierId: string): Promi
 export async function createGroupAction(eventSlug: string, formData: FormData): Promise<never> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
-    await createContactGroup(getDatabaseClient(), {
+    const client = getDatabaseClient();
+    const definitions = await new CustomFieldRepository(client).listDefinitions(
+      event.id,
+      CustomFieldEntityType.CONTACT_GROUP,
+    );
+    const group = await createContactGroup(client, {
       eventId: event.id,
       kind: kindValue(formData),
       name: value(formData, "name"),
       tierId: optionalId(formData, "tierId"),
       primaryContactId: optionalId(formData, "primaryContactId"),
+    });
+    await saveCustomFields({
+      eventId: event.id,
+      target: { entityType: CustomFieldEntityType.CONTACT_GROUP, groupId: group.id },
+      definitions,
+      formData,
+      pathSegment: `groups/${group.id}`,
     });
   } catch (error) {
     fail(event.slug, error);
@@ -158,10 +236,22 @@ export async function createGroupAction(eventSlug: string, formData: FormData): 
 export async function updateGroupAction(eventSlug: string, groupId: string, formData: FormData): Promise<never> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
-    await updateContactGroup(getDatabaseClient(), event.id, groupId, {
+    const client = getDatabaseClient();
+    const definitions = await new CustomFieldRepository(client).listDefinitions(
+      event.id,
+      CustomFieldEntityType.CONTACT_GROUP,
+    );
+    const group = await updateContactGroup(client, event.id, groupId, {
       name: value(formData, "name"),
       tierId: optionalId(formData, "tierId"),
       primaryContactId: optionalId(formData, "primaryContactId"),
+    });
+    await saveCustomFields({
+      eventId: event.id,
+      target: { entityType: CustomFieldEntityType.CONTACT_GROUP, groupId: group.id },
+      definitions,
+      formData,
+      pathSegment: `groups/${group.id}`,
     });
   } catch (error) {
     fail(event.slug, error);

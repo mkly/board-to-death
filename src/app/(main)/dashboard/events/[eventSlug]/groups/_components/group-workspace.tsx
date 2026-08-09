@@ -2,6 +2,11 @@ import Link from "next/link";
 
 import { ArrowDown, ArrowUp, Building2, Plus, Save, Trash2 } from "lucide-react";
 
+import {
+  type CustomFieldInputDefinition,
+  CustomFieldInputs,
+  type CustomFieldInputValue,
+} from "@/components/custom-fields/custom-field-inputs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +35,10 @@ interface GroupWorkspaceProps {
     readonly sponsorsEnabled: boolean;
     readonly exhibitorsEnabled: boolean;
   };
-  readonly groups: readonly ContactGroupWithDetails[];
+  readonly groups: readonly (ContactGroupWithDetails & {
+    readonly customFieldValues: readonly CustomFieldInputValue[];
+  })[];
+  readonly customFieldDefinitions: readonly CustomFieldInputDefinition[];
   readonly tiers: readonly ContactGroupTier[];
   readonly contacts: readonly {
     readonly id: string;
@@ -105,6 +113,43 @@ function ContactSelect({
         ))}
       </NativeSelect>
     </Field>
+  );
+}
+
+function valueLabel(value: unknown): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string").join(", ");
+  if (value && typeof value === "object" && "fileName" in value && typeof value.fileName === "string") {
+    return value.fileName;
+  }
+  return "Not set";
+}
+
+function SavedCustomFields({
+  definitions,
+  values,
+  headingId,
+}: {
+  readonly definitions: readonly CustomFieldInputDefinition[];
+  readonly values: readonly CustomFieldInputValue[];
+  readonly headingId: string;
+}) {
+  if (definitions.length === 0) return null;
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-3">
+      <h3 id={headingId} className="font-medium">
+        Saved custom fields
+      </h3>
+      <dl className="grid gap-3 sm:grid-cols-2">
+        {definitions.map((definition) => (
+          <div key={definition.id} className="flex flex-col gap-1 rounded-lg border p-3">
+            <dt className="text-muted-foreground text-xs">{definition.label}</dt>
+            <dd>{valueLabel(values.find(({ definitionId }) => definitionId === definition.id)?.value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -198,7 +243,16 @@ function TierManager({
   );
 }
 
-export function GroupWorkspace({ event, groups, tiers, contacts, filters, notice, error }: GroupWorkspaceProps) {
+export function GroupWorkspace({
+  event,
+  groups,
+  tiers,
+  contacts,
+  customFieldDefinitions,
+  filters,
+  notice,
+  error,
+}: GroupWorkspaceProps) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -255,6 +309,9 @@ export function GroupWorkspace({ event, groups, tiers, contacts, filters, notice
               </Field>
               <TierSelect defaultValue={null} hideLabel={false} label="new-group-tier" tiers={tiers} />
               <ContactSelect contacts={contacts} defaultValue={null} hideLabel={false} label="new-group-contact" />
+              <div className="md:col-span-4">
+                <CustomFieldInputs definitions={customFieldDefinitions} idPrefix="new-group-" />
+              </div>
               <Button
                 className="md:col-start-4"
                 disabled={!event.sponsorsEnabled && !event.exhibitorsEnabled}
@@ -360,6 +417,18 @@ export function GroupWorkspace({ event, groups, tiers, contacts, filters, notice
                           <Save data-icon="inline-start" />
                           Save
                         </Button>
+                        <div className="flex flex-col gap-5 md:col-span-5">
+                          <CustomFieldInputs
+                            definitions={customFieldDefinitions}
+                            idPrefix={`group-${group.id}-`}
+                            values={group.customFieldValues}
+                          />
+                          <SavedCustomFields
+                            definitions={customFieldDefinitions}
+                            headingId={`group-${group.id}-saved-custom-fields`}
+                            values={group.customFieldValues}
+                          />
+                        </div>
                       </form>
                     </TableCell>
                   </TableRow>

@@ -540,7 +540,7 @@ export async function updateContactGroup(
   groupId: string,
   input: UpdateContactGroupInput,
 ): Promise<ContactGroup> {
-  const data: Prisma.ContactGroupUpdateInput = {};
+  const data: Prisma.ContactGroupUncheckedUpdateInput = {};
   if (input.name !== undefined) data.name = requiredText(input.name, "name");
   if (input.slug !== undefined) data.slug = slugifyGroupName(input.slug);
 
@@ -558,13 +558,8 @@ export async function updateContactGroup(
       update: {},
     });
   }
-  if (input.tierId !== undefined)
-    data.tier = input.tierId ? { connect: { eventId_id: { eventId, id: input.tierId } } } : { disconnect: true };
-  if (input.primaryContactId !== undefined) {
-    data.primaryContact = input.primaryContactId
-      ? { connect: { eventId_id: { eventId, id: input.primaryContactId } } }
-      : { disconnect: true };
-  }
+  if (input.tierId !== undefined) data.tierId = input.tierId;
+  if (input.primaryContactId !== undefined) data.primaryContactId = input.primaryContactId;
 
   try {
     return await client.contactGroup.update({ where: { eventId_id: { eventId, id: groupId } }, data });

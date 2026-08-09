@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CustomFieldEntityType } from "@/generated/prisma/client";
+import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
 import { SpeakerRepository } from "@/server/speakers/repositories";
@@ -21,10 +23,11 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
 
   const client = getDatabaseClient();
   // Bounded pages, not whole tables: see performance/budgets.json for the caps.
-  const [sessionPage, speakerPage, tracks] = await Promise.all([
+  const [sessionPage, speakerPage, tracks, customFieldDefinitions] = await Promise.all([
     new ProgramSessionRepository(client).listPage(event.id, { includeArchived: true }),
     new SpeakerRepository(client).listPage(event.id),
     client.track.findMany({ where: { eventId: event.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    new CustomFieldRepository(client).listDefinitions(event.id, CustomFieldEntityType.PROGRAM_SESSION),
   ]);
   const sessions = sessionPage.items;
   const speakers = speakerPage.items;
@@ -36,6 +39,10 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
     ]),
   );
   const trackNames = new Map(tracks.map((track) => [track.id, track.name]));
+  const customFieldValues = await client.customFieldValue.findMany({
+    where: { eventId: event.id, sessionId: { in: sessions.map(({ id }) => id) } },
+    select: { sessionId: true, definitionId: true, value: true },
+  });
   const sessionTitles = new Map(sessions.map((session) => [session.id, session.version.title]));
 
   return (
@@ -58,6 +65,18 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
           email: speaker.profile.email,
         }))}
         tracks={tracks.map((track) => ({ id: track.id, name: track.name }))}
+        customFieldDefinitions={customFieldDefinitions.map((definition) => ({
+          id: definition.id,
+          label: definition.label,
+          description: definition.description,
+          type: definition.type,
+          required: definition.required,
+          characterLimit: definition.characterLimit,
+          options:
+            Array.isArray(definition.options) && definition.options.every((option) => typeof option === "string")
+              ? definition.options
+              : [],
+        }))}
         sessions={sessions.map((session) => ({
           id: session.id,
           kind: session.kind,
@@ -77,6 +96,9 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
             role,
           })),
           versionNumber: session.version.versionNumber,
+          customFieldValues: customFieldValues
+            .filter((value) => value.sessionId === session.id)
+            .map(({ definitionId, value }) => ({ definitionId, value })),
         }))}
       />
     </div>
