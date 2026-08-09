@@ -76,6 +76,12 @@ test("records and refreshes audited final submission decisions", async ({ contex
   await rejectedRow.getByRole("button", { name: "Reject" }).click();
   await expect(page.getByText("Submission rejected.")).toBeVisible();
 
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/sessions`);
+  await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+  await expect(page.getByText("waitlist proposal", { exact: true })).toBeVisible();
+  await expect(page.getByText("accept proposal", { exact: true })).toBeVisible();
+  await expect(page.getByText("Promoted abstract", { exact: true })).toHaveCount(2);
+
   await page.goto(`/dashboard/events/${fixture.eventSlug}/submissions`);
   const submissionTable = page.getByRole("table");
   await expect(submissionTable.getByText("Accepted", { exact: true })).toHaveCount(2);

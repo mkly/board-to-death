@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import {
   CfpSubmissionKind,
+  CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
   EvaluationAssignmentStatus,
   EvaluationDecisionOutcome,
@@ -24,6 +25,22 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for evaluation decis
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const decisions = new EvaluationDecisionRepository(client);
 const results = new EvaluationResultsRepository(client);
+
+const decisionDefinition = {
+  version: 1,
+  title: "Program CFP",
+  sections: [
+    {
+      id: "proposal",
+      kind: "questions",
+      title: "Proposal",
+      questions: [
+        { id: "title", type: "short_text", label: "Proposal title", required: true },
+        { id: "abstract", type: "long_text", label: "Abstract", required: true },
+      ],
+    },
+  ],
+} as const;
 
 async function expectRepositoryError(promise: Promise<unknown>, code?: string): Promise<void> {
   await assert.rejects(
@@ -70,22 +87,39 @@ describe("final evaluation decisions", () => {
     const formVersion = event.cfpForms[0]?.versions[0];
     assert.ok(formVersion);
     const submissions = await Promise.all(
-      ["waitlist", "accept", "reject", "incomplete"].map((label) =>
+      ["waitlist", "accept", "reject", "incomplete", "guaranteed"].map((label) =>
         client.cfpSubmission.create({
           data: {
             eventId: event.id,
             formVersionId: formVersion.id,
-            kind: CfpSubmissionKind.ABSTRACT,
+            kind: label === "guaranteed" ? CfpSubmissionKind.GUARANTEED_SESSION : CfpSubmissionKind.ABSTRACT,
             status: CfpSubmissionStatus.UNDER_REVIEW,
             submittedAt: new Date("2027-04-01T18:00:00.000Z"),
             reviewStartedAt: new Date("2027-04-02T18:00:00.000Z"),
             intakeClientIdentifier: label,
+            revisions: {
+              create: {
+                versionNumber: 1,
+                kind: CfpSubmissionRevisionKind.FINAL,
+                formVersionId: formVersion.id,
+                definitionSnapshot: decisionDefinition,
+                answers: {
+                  create: [
+                    { questionId: "title", sortOrder: 0, value: `${label} proposal` },
+                    { questionId: "abstract", sortOrder: 1, value: `${label} abstract` },
+                  ],
+                },
+              },
+            },
           },
         }),
       ),
     );
-    const [waitlistedSubmission, acceptedSubmission, rejectedSubmission, incompleteSubmission] = submissions;
-    assert.ok(waitlistedSubmission && acceptedSubmission && rejectedSubmission && incompleteSubmission);
+    const [waitlistedSubmission, acceptedSubmission, rejectedSubmission, incompleteSubmission, guaranteedSubmission] =
+      submissions;
+    assert.ok(
+      waitlistedSubmission && acceptedSubmission && rejectedSubmission && incompleteSubmission && guaranteedSubmission,
+    );
 
     const plan = await client.evaluationPlan.create({
       data: {
@@ -173,6 +207,12 @@ describe("final evaluation decisions", () => {
     });
     assert.equal(accepted.decisionNumber, 1);
     assert.equal(rejected.decisionNumber, 1);
+    assert.equal(
+      await client.programSession.count({
+        where: { sourceSubmissionId: { in: [waitlistedSubmission.id, acceptedSubmission.id] } },
+      }),
+      1,
+    );
 
     const converted = await decisions.record({
       ...waitlistInput,
@@ -188,6 +228,27 @@ describe("final evaluation decisions", () => {
     });
     assert.equal(repeatedConversion.id, converted.id);
     assert.equal(converted.supersedesDecisionId, firstWaitlist.id);
+
+    const acceptedGuaranteed = await decisions.record({
+      eventId: event.id,
+      roundId: round.id,
+      submissionId: guaranteedSubmission.id,
+      outcome: EvaluationDecisionOutcome.ACCEPTED,
+      expectedDecisionNumber: 0,
+      actorId: "admin-1",
+    });
+    assert.equal(acceptedGuaranteed.decisionNumber, 1);
+    assert.equal(
+      (await client.cfpSubmission.findUniqueOrThrow({ where: { id: guaranteedSubmission.id } })).status,
+      CfpSubmissionStatus.ACCEPTED,
+    );
+    assert.equal(await client.programSession.count({ where: { sourceSubmissionId: guaranteedSubmission.id } }), 0);
+    assert.equal(
+      await client.programSession.count({
+        where: { sourceSubmissionId: { in: [waitlistedSubmission.id, acceptedSubmission.id] } },
+      }),
+      2,
+    );
 
     await expectRepositoryError(
       decisions.record({

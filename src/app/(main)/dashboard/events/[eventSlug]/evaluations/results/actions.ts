@@ -88,6 +88,7 @@ function refresh(eventSlug: string): void {
   revalidatePath(`/dashboard/events/${eventSlug}/evaluations`);
   revalidatePath(`/dashboard/events/${eventSlug}/evaluations/assignments`);
   revalidatePath(`/dashboard/events/${eventSlug}/evaluations/results`);
+  revalidatePath(`/dashboard/events/${eventSlug}/sessions`);
 }
 
 const decisionNotices: Readonly<Record<EvaluationDecisionOutcome, string>> = {

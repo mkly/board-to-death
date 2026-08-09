@@ -667,6 +667,7 @@ model CfpCategory {
   event        Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   submissions  CfpSubmissionCategory[]
   policyRoutes CfpPolicyCategoryRoute[]
+  sessionVersions ProgramSessionVersion[]
 
   @@unique([eventId, key])
   @@unique([eventId, id])
@@ -1115,15 +1116,18 @@ model ProgramSessionVersion {
   title           String
   description     String?
   durationMinutes Int
+  categoryId      String?                     @db.Uuid
   trackId         String?                     @db.Uuid
   createdAt       DateTime                    @default(now()) @db.Timestamptz(3)
   event           Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   session         ProgramSession              @relation(fields: [eventId, sessionId], references: [eventId, id], onDelete: Cascade)
+  category        CfpCategory?                 @relation(fields: [eventId, categoryId], references: [eventId, id], onDelete: NoAction)
   track           Track?                      @relation(fields: [eventId, trackId], references: [eventId, id], onDelete: NoAction)
   participants    ProgramSessionParticipant[]
 
   @@unique([sessionId, versionNumber])
   @@unique([eventId, id])
+  @@index([eventId, categoryId])
   @@index([eventId, trackId])
   @@map("program_session_versions")
 }
