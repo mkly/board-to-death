@@ -183,6 +183,13 @@ export class SpeakerResourceRepository {
         if (version.publishedAt !== null || version.unpublishedAt !== null) {
           invalid("Only a draft resource version can be published.");
         }
+        const active = await transaction.speakerResourcePageVersion.findFirst({
+          where: { eventId, pageId, publishedAt: { not: null }, unpublishedAt: null },
+          select: { publishedAt: true },
+        });
+        if (active?.publishedAt && publishedAt < active.publishedAt) {
+          invalid("publishedAt cannot precede the currently published version's publishedAt.");
+        }
         await transaction.speakerResourcePageVersion.updateMany({
           where: { eventId, pageId, publishedAt: { not: null }, unpublishedAt: null },
           data: { unpublishedAt: publishedAt },

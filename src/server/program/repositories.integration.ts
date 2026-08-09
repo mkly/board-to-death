@@ -96,6 +96,13 @@ describe("speaker resource persistence", () => {
         [2, "Published directions"],
       ],
     );
+
+    const backdated = await resources.revise(eventId, first.id, { bodyMarkdown: "Backdated directions" });
+    await expectRepositoryError(
+      resources.publish(eventId, first.id, versionId(backdated, 2), new Date("2027-01-01T09:00:00.000Z")),
+      "invalid-input",
+    );
+    assert.equal((await resources.listPublished(eventId))[1]?.version.versionNumber, 2);
   });
 
   test("unpublishes and archives resources without exposing drafts or other events", async () => {
