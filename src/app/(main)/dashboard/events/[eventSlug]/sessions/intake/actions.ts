@@ -24,6 +24,7 @@ export interface ManualIntakeState {
 
 interface PreparedAbstractRow {
   readonly kind: "abstract";
+  readonly rowNumber: number;
   readonly clientIdentifier: string;
   readonly formVersionId: string;
   readonly status: CfpSubmissionStatus;
@@ -34,6 +35,7 @@ interface PreparedAbstractRow {
 
 interface PreparedSessionRow {
   readonly kind: "guaranteed_session";
+  readonly rowNumber: number;
   readonly clientIdentifier: string;
   readonly title: string;
   readonly description: string;
@@ -64,6 +66,7 @@ export interface CsvIntakeState {
 const preparedRowSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("abstract"),
+    rowNumber: z.number().int().min(2),
     clientIdentifier: z.string().min(1).max(100),
     formVersionId: z.uuid(),
     status: z.enum(CfpSubmissionStatus),
@@ -73,6 +76,7 @@ const preparedRowSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("guaranteed_session"),
+    rowNumber: z.number().int().min(2),
     clientIdentifier: z.string().min(1).max(100),
     title: z.string().min(1).max(200),
     description: z.string().max(5_000),
@@ -303,6 +307,7 @@ export async function previewAdminIntakeCsv(
         ) {
           payload = {
             kind: "abstract",
+            rowNumber: row.rowNumber,
             clientIdentifier: row.clientIdentifier,
             formVersionId: form.id,
             status: parsedStatus.data,
@@ -320,6 +325,7 @@ export async function previewAdminIntakeCsv(
         if (row.track !== "" && !trackId) rowErrors.push(`Track ${row.track} was not found in this event.`);
         payload = {
           kind: "guaranteed_session",
+          rowNumber: row.rowNumber,
           clientIdentifier: row.clientIdentifier,
           title: row.title,
           description: row.description,
@@ -405,7 +411,13 @@ export async function applyAdminIntakeCsv(_previousState: CsvIntakeState, formDa
 
   const repository = new AdminIntakeRepository(getDatabaseClient());
   const rows: CsvPreviewRow[] = [];
-  for (const [index, payload] of parsed.data.entries()) {
+  for (const payload of parsed.data) {
+    const identity = {
+      rowNumber: payload.rowNumber,
+      clientIdentifier: payload.clientIdentifier,
+      kind: payload.kind,
+      title: payload.kind === "guaranteed_session" ? payload.title : "Abstract",
+    };
     try {
       const result =
         payload.kind === "abstract"
@@ -421,20 +433,10 @@ export async function applyAdminIntakeCsv(_previousState: CsvIntakeState, formDa
               actorId: event.actorId,
               source: "csv",
             });
-      rows.push({
-        rowNumber: index + 2,
-        clientIdentifier: payload.clientIdentifier,
-        kind: payload.kind,
-        title: payload.kind === "guaranteed_session" ? payload.title : "Abstract",
-        outcome: result.outcome,
-        errors: [],
-      });
+      rows.push({ ...identity, outcome: result.outcome, errors: [] });
     } catch (error) {
       rows.push({
-        rowNumber: index + 2,
-        clientIdentifier: payload.clientIdentifier,
-        kind: payload.kind,
-        title: payload.kind === "guaranteed_session" ? payload.title : "Abstract",
+        ...identity,
         outcome: "rejected",
         errors: [error instanceof RepositoryError ? repositoryMessage(error) : "The row could not be applied."],
       });
