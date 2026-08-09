@@ -20,6 +20,7 @@ import {
 const id = (suffix: number): string => `00000000-0000-4000-8000-${suffix.toString().padStart(12, "0")}`;
 
 export const representativeFixture = {
+  organizationId: id(50),
   eventId: id(1),
   eventSlug: "board-to-death-demo",
   roomId: id(2),
@@ -38,6 +39,7 @@ export const representativeFixture = {
 } as const;
 
 export interface RepresentativeFixtureResult {
+  readonly organizationId: string;
   readonly eventId: string;
   readonly eventSlug: string;
   readonly submissionId: string;
@@ -60,9 +62,23 @@ export async function createRepresentativeFixtures(client: PrismaClient): Promis
       await transaction.event.delete({ where: { id: existingEvent.id } });
     }
 
+    await transaction.organization.upsert({
+      where: { id: fixture.organizationId },
+      create: {
+        id: fixture.organizationId,
+        name: "Board to Death Demo",
+        slug: "board-to-death-demo",
+      },
+      update: {
+        name: "Board to Death Demo",
+        slug: "board-to-death-demo",
+      },
+    });
+
     await transaction.event.create({
       data: {
         id: fixture.eventId,
+        orgId: fixture.organizationId,
         name: "Board to Death Demo 2027",
         slug: fixture.eventSlug,
         type: EventType.CONFERENCE,
@@ -461,6 +477,7 @@ export async function createRepresentativeFixtures(client: PrismaClient): Promis
   });
 
   return {
+    organizationId: fixture.organizationId,
     eventId: fixture.eventId,
     eventSlug: fixture.eventSlug,
     submissionId: fixture.submissionId,

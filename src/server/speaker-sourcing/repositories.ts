@@ -242,12 +242,14 @@ export class SpeakerSourcingRepository {
       return await this.client.$transaction(async (transaction) => {
         const form = await transaction.speakerInterestForm.findFirst({
           where: { id: publishedForm.id, publicId: input.publicId, publishedAt: { not: null } },
+          include: { event: { select: { orgId: true } } },
         });
         if (!form) throw new RepositoryError("not-found", "This speaker interest form is not available.");
         const person = await transaction.person.upsert({
-          where: { email },
+          where: { orgId_email: { orgId: form.event.orgId, email } },
           update: {},
           create: {
+            orgId: form.event.orgId,
             email,
             givenName,
             familyName,

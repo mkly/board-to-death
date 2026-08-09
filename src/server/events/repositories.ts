@@ -20,6 +20,7 @@ export class RepositoryError extends Error {
 }
 
 export interface CreateEventInput {
+  readonly orgId?: string;
   readonly name: string;
   readonly slug: string;
   readonly type?: EventType;
@@ -35,7 +36,7 @@ export interface CreateEventInput {
   readonly backgroundObjectKey?: string | null;
 }
 
-export type UpdateEventInput = Partial<CreateEventInput>;
+export type UpdateEventInput = Partial<Omit<CreateEventInput, "orgId">>;
 
 export interface CloneEventOptions {
   readonly rooms: boolean;
@@ -125,6 +126,7 @@ function validateEvent(input: CreateEventInput): CreateEventInput {
   }
 
   return {
+    orgId: input.orgId,
     name: requireText(input.name, "name"),
     slug,
     type: input.type,
@@ -387,7 +389,7 @@ export class EventRepository {
           backgroundObjectKey: input.options.portalSettings ? source.backgroundObjectKey : null,
         });
         const clone = await transaction.event.create({
-          data: { ...validated, clonedFromEventId: source.id },
+          data: { ...validated, orgId: source.orgId, clonedFromEventId: source.id },
         });
 
         if (input.options.rooms) {

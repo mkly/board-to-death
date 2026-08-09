@@ -64,7 +64,7 @@ describe("organization contact directory", () => {
     });
     assert.ok(firstContact.personId);
 
-    const [result] = await searchDirectoryPeople(client, "robotics");
+    const [result] = await searchDirectoryPeople(client, firstEvent.id, "robotics");
     assert.equal(result?.email, "dana@example.test");
     assert.deepEqual(result?.linkedEventIds, [firstEvent.id]);
 
@@ -125,6 +125,52 @@ describe("organization contact directory", () => {
     assert.equal(linked.organization, "Event Org");
   });
 
+  test("scopes the person directory to the organization that owns the event", async () => {
+    const otherOrganization = await client.organization.upsert({
+      where: { slug: "other-directory-org" },
+      create: { name: "Other Directory Org", slug: "other-directory-org" },
+      update: {},
+    });
+    const homeEvent = await createEvent("directory-home", "2027-09-01T17:00:00.000Z");
+    const foreignEvent = await events.create({
+      orgId: otherOrganization.id,
+      name: "directory-foreign",
+      slug: "directory-foreign",
+      type: EventType.CONFERENCE,
+      timezone: "America/Los_Angeles",
+      startsAt: new Date("2027-10-01T17:00:00.000Z"),
+      endsAt: new Date("2027-10-02T17:00:00.000Z"),
+    });
+
+    await createContact(client, {
+      eventId: homeEvent.id,
+      email: "shared@example.test",
+      givenName: "Home",
+      familyName: "Person",
+      organization: "Shared Robotics",
+    });
+    await createContact(client, {
+      eventId: foreignEvent.id,
+      email: "shared@example.test",
+      givenName: "Foreign",
+      familyName: "Person",
+      organization: "Shared Robotics",
+    });
+
+    assert.deepEqual(
+      (await searchDirectoryPeople(client, homeEvent.id, "Shared Robotics")).map(({ givenName }) => givenName),
+      ["Home"],
+    );
+    assert.deepEqual(
+      (await searchDirectoryPeople(client, foreignEvent.id, "")).map(({ givenName }) => givenName),
+      ["Foreign"],
+    );
+
+    await client.event.deleteMany({ where: { orgId: otherOrganization.id } });
+    await client.person.deleteMany({ where: { orgId: otherOrganization.id } });
+    await client.organization.delete({ where: { id: otherOrganization.id } });
+  });
+
   test("revives an archived event contact instead of stranding the person as already linked", async () => {
     const event = await createEvent("directory-archived", "2027-07-01T16:00:00.000Z");
     const contact = await createContact(client, {
@@ -137,7 +183,7 @@ describe("organization contact directory", () => {
     assert.ok(contact.personId);
     await archiveContact(client, event.id, contact.id);
 
-    const [summary] = await searchDirectoryPeople(client, "Archive Co");
+    const [summary] = await searchDirectoryPeople(client, event.id, "Archive Co");
     assert.deepEqual(summary?.linkedEventIds, []);
     assert.deepEqual(await listContacts(client, event.id), []);
 
