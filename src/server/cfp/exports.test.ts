@@ -1,9 +1,10 @@
+import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 
 import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/client";
 
-import { createSubmissionCsv, createSubmissionFileBundle } from "./exports";
+import { createSubmissionCsv, createSubmissionFileBundle, createSubmissionXlsx } from "./exports";
 import type { CfpSubmissionListItem } from "./submissions";
 
 function submission(overrides: Partial<CfpSubmissionListItem> = {}): CfpSubmissionListItem {
@@ -36,6 +37,20 @@ describe("submission exports", () => {
 
     expect(csv).toContain('"\'=HYPERLINK(""https://example.test"")"');
     expect(csv).toContain('"\'+1000"');
+  });
+
+  it("writes the selected columns and formula-neutralized values to an Excel workbook", async () => {
+    const bytes = await createSubmissionXlsx({
+      columns: ["formTitle", "applicant", "answer:budget"],
+      customLabels: { budget: "Budget" },
+      items: [submission({ formTitle: "Filtered proposal", answers: { budget: "=2+2" } })],
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
+    const worksheet = workbook.getWorksheet("Submissions");
+
+    expect(worksheet?.getRow(1).values).toEqual([undefined, "Submission", "Applicant", "Budget"]);
+    expect(worksheet?.getRow(2).values).toEqual([undefined, "Filtered proposal", "Lex", "'=2+2"]);
   });
 
   it("includes only authorized submission attachments under safe, unique paths with a manifest", async () => {
