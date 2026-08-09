@@ -19,7 +19,8 @@ import { EmbedFrameBridge } from "../_components/embed-frame-bridge";
 import { AgendaEmbed } from "./_components/agenda-embed";
 import { type ItinerarySession, ItineraryWorkspace } from "./_components/itinerary-workspace";
 import { PublishedSessionList, type PublishedSessionListItem } from "./_components/published-session-list";
-import { PublishedSpeakerList, type PublishedSpeakerListItem } from "./_components/published-speaker-list";
+import { PublishedSpeakerGallery, type PublishedSpeakerGalleryItem } from "./_components/published-speaker-gallery";
+import { PublishedSpeakerList } from "./_components/published-speaker-list";
 
 const KIND_ICONS = {
   agenda: CalendarDays,
@@ -57,11 +58,15 @@ function speakerInitials(speaker: {
   return `${(speaker.preferredName ?? speaker.givenName).charAt(0)}${speaker.familyName.charAt(0)}`.toLocaleUpperCase();
 }
 
-async function publishedSpeakerList(
+async function publishedSpeakerProfiles(
   eventSlug: string,
   configuration: ReturnType<typeof parseEmbedSearchParams>,
 ): Promise<
-  | { readonly status: "available"; readonly eventName: string; readonly speakers: readonly PublishedSpeakerListItem[] }
+  | {
+      readonly status: "available";
+      readonly eventName: string;
+      readonly speakers: readonly PublishedSpeakerGalleryItem[];
+    }
   | { readonly status: "unavailable" }
 > {
   const publication = await new PublishedProgramRepository(getDatabaseClient()).findPublic(eventSlug);
@@ -96,6 +101,9 @@ async function publishedSpeakerList(
         id: speaker.id,
         name: speakerName(speaker),
         initials: speakerInitials(speaker),
+        photoHref: speaker.photoObjectKey
+          ? `/embed/${encodeURIComponent(eventSlug)}/speakers/${encodeURIComponent(speaker.id)}/photo?v=${publication.version.versionNumber}`
+          : null,
         pronouns: speaker.pronouns,
         organization: speaker.organization,
         jobTitle: speaker.jobTitle,
@@ -309,12 +317,39 @@ export default async function PublishedEmbedPreview({
     );
   }
 
-  const speakerList =
-    configuration.kind === "speaker-list" ? await publishedSpeakerList(eventSlug, configuration) : null;
+  const speakerProfiles =
+    configuration.kind === "speaker-list" || configuration.kind === "speaker-gallery"
+      ? await publishedSpeakerProfiles(eventSlug, configuration)
+      : null;
+  const speakerList = configuration.kind === "speaker-list" ? speakerProfiles : null;
+  const speakerGallery = configuration.kind === "speaker-gallery" ? speakerProfiles : null;
   const sessionList = configuration.kind === "session-list" ? await publishedSessionList(eventSlug) : null;
   const itinerary = configuration.kind === "itinerary" ? await publishedItinerary(eventSlug) : null;
   let content: ReactNode;
-  if (speakerList?.status === "available") {
+  if (speakerGallery?.status === "available") {
+    content = (
+      <PublishedSpeakerGallery
+        density={configuration.density}
+        enabledFilters={configuration.filters}
+        eventName={speakerGallery.eventName}
+        speakers={speakerGallery.speakers}
+      />
+    );
+  } else if (configuration.kind === "speaker-gallery") {
+    content = (
+      <Card className="mx-auto w-full max-w-6xl" size={configuration.density === "compact" ? "sm" : "default"}>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Users aria-hidden="true" />
+            <CardTitle>
+              <h1>Speaker gallery unavailable</h1>
+            </CardTitle>
+          </div>
+          <CardDescription>This event does not currently have a published speaker gallery.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  } else if (speakerList?.status === "available") {
     content = (
       <PublishedSpeakerList
         density={configuration.density}
