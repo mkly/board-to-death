@@ -40,35 +40,44 @@ const formActions = {
 
 const actionContent: Record<
   FormAction,
-  { readonly title: string; readonly description: string; readonly label: string }
+  {
+    readonly title: string;
+    readonly description: string;
+    readonly label: string;
+    readonly variant: "default" | "destructive";
+  }
 > = {
   duplicate: {
     title: "Duplicate this CFP form?",
     description: "This creates a separate draft with a new public identity. Existing responses are not copied.",
     label: "Duplicate form",
+    variant: "default",
   },
   close: {
     title: "Close this CFP form?",
     description: "New responses will be stopped. You can reopen the form later.",
     label: "Close form",
+    variant: "destructive",
   },
   reopen: {
     title: "Reopen this CFP form?",
     description: "The published form will accept responses again under its existing public identity.",
     label: "Reopen form",
+    variant: "default",
   },
   archive: {
     title: "Archive this CFP form?",
     description: "Archived forms cannot be reopened. Existing responses and the audit history are retained.",
     label: "Archive form",
+    variant: "destructive",
   },
 };
 
-function SubmitAction({ label }: { readonly label: string }) {
+function SubmitAction({ label, variant }: { readonly label: string; readonly variant: "default" | "destructive" }) {
   const { pending } = useFormStatus();
 
   return (
-    <Button type="submit" variant="destructive" disabled={pending}>
+    <Button type="submit" variant={variant} disabled={pending}>
       {pending ? <Spinner data-icon="inline-start" /> : null}
       {pending ? "Updating…" : label}
     </Button>
@@ -84,9 +93,17 @@ export function CfpFormActions({
   readonly form: CfpFormSummary;
   readonly setupHref: string;
 }) {
-  const [selectedAction, setSelectedAction] = useState<FormAction | null>(null);
-  const mutation = formActions[selectedAction ?? "duplicate"].bind(null, eventSlug, form.id);
-  const content = selectedAction ? actionContent[selectedAction] : actionContent.duplicate;
+  // The selected action outlives the dialog's close animation so the confirmation copy and the bound
+  // server action never flip back to "duplicate" while the dialog is still on screen.
+  const [selectedAction, setSelectedAction] = useState<FormAction>("duplicate");
+  const [confirming, setConfirming] = useState(false);
+  const mutation = formActions[selectedAction].bind(null, eventSlug, form.id);
+  const content = actionContent[selectedAction];
+
+  const confirm = (action: FormAction) => {
+    setSelectedAction(action);
+    setConfirming(true);
+  };
 
   return (
     <div className="flex justify-end gap-2">
@@ -101,23 +118,23 @@ export function CfpFormActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={() => setSelectedAction("duplicate")}>
+            <DropdownMenuItem onSelect={() => confirm("duplicate")}>
               <Copy />
               Duplicate
             </DropdownMenuItem>
             {form.status === "PUBLISHED" ? (
-              <DropdownMenuItem onSelect={() => setSelectedAction("close")}>
+              <DropdownMenuItem onSelect={() => confirm("close")}>
                 <LockKeyhole />
                 Close
               </DropdownMenuItem>
             ) : null}
             {form.status === "CLOSED" ? (
               <>
-                <DropdownMenuItem onSelect={() => setSelectedAction("reopen")}>
+                <DropdownMenuItem onSelect={() => confirm("reopen")}>
                   <LockKeyholeOpen />
                   Reopen
                 </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onSelect={() => setSelectedAction("archive")}>
+                <DropdownMenuItem variant="destructive" onSelect={() => confirm("archive")}>
                   <Archive />
                   Archive
                 </DropdownMenuItem>
@@ -127,7 +144,7 @@ export function CfpFormActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={selectedAction !== null} onOpenChange={(open) => !open && setSelectedAction(null)}>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{content.title}</AlertDialogTitle>
@@ -136,7 +153,7 @@ export function CfpFormActions({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <form action={mutation}>
-              <SubmitAction label={content.label} />
+              <SubmitAction label={content.label} variant={content.variant} />
             </form>
           </AlertDialogFooter>
         </AlertDialogContent>
