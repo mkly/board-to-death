@@ -95,6 +95,28 @@ export function sessionsOverlap(first: ItinerarySession, second: ItinerarySessio
   );
 }
 
+/**
+ * Storage access is guarded because this widget runs as a third-party iframe:
+ * a host page that sandboxes the frame, or a browser that blocks partitioned
+ * storage, makes `window.localStorage` throw on access rather than return
+ * null. Losing persistence there is acceptable; crashing the embed is not.
+ */
+function readStoredValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable or over quota; the selection stays in memory.
+  }
+}
+
 function readStoredIds(value: string | null): readonly string[] {
   if (!value) return [];
   try {
@@ -165,7 +187,7 @@ export function ItineraryWorkspace({
   // saved selection pointing at removed sessions reconciles instead of
   // rendering blanks. Nothing is written back to the server.
   useEffect(() => {
-    const stored = readStoredIds(window.localStorage.getItem(storageKey));
+    const stored = readStoredIds(readStoredValue(storageKey));
     const available = stored.filter((id) => sessionsById.has(id));
     setSelectedIds(available);
     setDroppedCount(stored.length - available.length);
@@ -174,7 +196,7 @@ export function ItineraryWorkspace({
 
   useEffect(() => {
     if (!restored) return;
-    window.localStorage.setItem(storageKey, JSON.stringify(selectedIds));
+    writeStoredValue(storageKey, JSON.stringify(selectedIds));
   }, [restored, selectedIds, storageKey]);
 
   const days = useMemo(() => {
