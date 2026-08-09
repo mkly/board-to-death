@@ -135,8 +135,7 @@ interface StatusTimestamps {
  * as the day the decision happened.
  */
 function statusTimestamps(status: CfpSubmissionStatus, now: Date, previous?: StatusTimestamps): StatusTimestamps {
-  const reached = (already: Date | null | undefined, isReached: boolean) =>
-    isReached ? (already ?? now) : null;
+  const reached = (already: Date | null | undefined, isReached: boolean) => (isReached ? (already ?? now) : null);
   return {
     submittedAt: reached(previous?.submittedAt, status !== CfpSubmissionStatus.DRAFT),
     reviewStartedAt: reached(
@@ -524,7 +523,11 @@ export class AdminIntakeRepository {
         // The session and its intake identity are written by two statements, so a
         // racing import that claims the identifier first would otherwise strand an
         // untracked session that no retry can ever match. Undo our own create.
-        if (!existing) await this.#client.programSession.delete({ where: { id: session.id } }).catch(() => {});
+        if (!existing) {
+          await this.#client.programSession.delete({ where: { id: session.id } }).catch(() => {
+            // Report the identity failure, not a cleanup failure layered on top of it.
+          });
+        }
         throw error;
       }
       return { id: session.id, outcome: existing ? "updated" : "created" };
