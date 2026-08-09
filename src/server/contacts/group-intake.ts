@@ -198,8 +198,8 @@ export async function acceptContactGroupIntakeSubmission(
           givenName: submission.contactGivenName,
           familyName: submission.contactFamilyName,
           organization: submission.organizationName,
-          jobTitle: submission.contactJobTitle,
-          phone: submission.contactPhone,
+          jobTitle: submission.contactJobTitle ?? contact.jobTitle,
+          phone: submission.contactPhone ?? contact.phone,
           archivedAt: null,
         },
       });

@@ -132,6 +132,22 @@ describe("contact group intake", () => {
       2,
     );
 
+    const repeatContact = await submitContactGroupIntakeForm(client, form.publicId, {
+      organizationName: "Analytical Engines",
+      contactGivenName: "Ada",
+      contactFamilyName: "Lovelace",
+      contactEmail: "ada@example.test",
+    });
+    await acceptContactGroupIntakeSubmission(client, event.id, repeatContact.id, reviewer.id);
+    assert.equal(
+      (
+        await client.contact.findUniqueOrThrow({
+          where: { eventId_email: { eventId: event.id, email: "ada@example.test" } },
+        })
+      ).jobTitle,
+      "Founder",
+    );
+
     const rejected = await submitContactGroupIntakeForm(client, form.publicId, {
       organizationName: "Rejected Labs",
       contactGivenName: "Rejected",
