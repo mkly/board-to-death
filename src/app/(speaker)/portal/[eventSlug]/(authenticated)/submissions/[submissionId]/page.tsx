@@ -66,7 +66,7 @@ export default async function SpeakerSubmissionPage({ params }: SpeakerSubmissio
                 {submission.answers.map((answer) => (
                   <div key={answer.questionId} className="flex flex-col gap-1">
                     <dt className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-                      {answer.questionId}
+                      {answer.label}
                     </dt>
                     <dd className="whitespace-pre-wrap text-sm">{answerText(answer.value)}</dd>
                   </div>

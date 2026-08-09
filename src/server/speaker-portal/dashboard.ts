@@ -1,4 +1,6 @@
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+
+import { parseCfpDefinition } from "../../lib/cfp/index.ts";
 
 export interface SpeakerPortalIdentity {
   readonly eventId: string;
@@ -28,6 +30,14 @@ function displayName(profile: {
   readonly familyName: string;
 }) {
   return `${profile.preferredName ?? profile.givenName} ${profile.familyName}`;
+}
+
+function questionLabelsFromSnapshot(snapshot: Prisma.JsonValue): Map<string, string> {
+  const parsed = parseCfpDefinition(snapshot);
+  if (!parsed.ok) return new Map();
+  return new Map(
+    parsed.definition.sections.flatMap((section) => section.questions.map((question) => [question.id, question.label])),
+  );
 }
 
 export class SpeakerPortalRepository {
@@ -190,11 +200,17 @@ export class SpeakerPortalRepository {
         revisions: {
           orderBy: { versionNumber: "desc" },
           take: 1,
-          select: { answers: { orderBy: { sortOrder: "asc" }, select: { questionId: true, value: true } } },
+          select: {
+            definitionSnapshot: true,
+            answers: { orderBy: { sortOrder: "asc" }, select: { questionId: true, value: true } },
+          },
         },
       },
     });
     if (!submission) return null;
+
+    const revision = submission.revisions[0];
+    const questionLabels = questionLabelsFromSnapshot(revision?.definitionSnapshot ?? null);
 
     return {
       id: submission.id,
@@ -210,7 +226,10 @@ export class SpeakerPortalRepository {
           ? [{ id: speaker.id, displayName: displayName(profile), organization: profile.organization }]
           : [];
       }),
-      answers: submission.revisions[0]?.answers ?? [],
+      answers: (revision?.answers ?? []).map((answer) => ({
+        ...answer,
+        label: questionLabels.get(answer.questionId) ?? answer.questionId,
+      })),
     };
   }
 }
