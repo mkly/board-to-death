@@ -17,6 +17,7 @@ function principal(role: EventRole, eventId = FIRST_EVENT_ID): AuthenticatedPrin
 function event(id: string): Event {
   return {
     id,
+    orgId: "00000000-0000-4000-8000-000000000100",
     name: `Event ${id}`,
     slug: `event-${id.at(-1)}`,
     type: "CONFERENCE",

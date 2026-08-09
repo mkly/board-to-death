@@ -19,6 +19,8 @@ model User {
   sessions           Session[]
   accounts           Account[]
   twoFactors         TwoFactor[]
+  organizationMemberships OrganizationMember[]
+  eventMemberships   EventMembership[]
   cfpSubmissionViews CfpSubmissionView[]
   contactGroupIntakeReviews ContactGroupIntakeSubmission[]
 
@@ -382,8 +384,73 @@ enum ReportBaseType {
   EVALUATION_PLAN
 }
 
+enum OrganizationMemberRole {
+  OWNER
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum EventMembershipRole {
+  ORGANIZER_ADMIN @map("organizer-admin")
+  REVIEWER        @map("reviewer")
+  APPLICANT       @map("applicant")
+  SPEAKER         @map("speaker")
+}
+
+model Organization {
+  id        String               @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String               @unique
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime             @updatedAt @db.Timestamptz(3)
+  members   OrganizationMember[]
+  events    Event[]
+  people    Person[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id           String                 @id @default(uuid()) @db.Uuid
+  orgId        String                 @db.Uuid
+  userId       String
+  role         OrganizationMemberRole @default(MEMBER)
+  status       MembershipStatus       @default(ACTIVE)
+  revokedAt    DateTime?              @db.Timestamptz(3)
+  createdAt    DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime               @updatedAt @db.Timestamptz(3)
+  organization Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId, status])
+  @@map("organization_members")
+}
+
+model EventMembership {
+  id        String                @id @default(uuid()) @db.Uuid
+  eventId   String                @db.Uuid
+  userId    String
+  roles     EventMembershipRole[]
+  status    MembershipStatus      @default(ACTIVE)
+  revokedAt DateTime?             @db.Timestamptz(3)
+  createdAt DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime              @updatedAt @db.Timestamptz(3)
+  event     Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId, status])
+  @@map("event_memberships")
+}
+
 model Event {
   id                        String                     @id @default(uuid()) @db.Uuid
+  orgId                     String                     @default("00000000-0000-4000-8000-000000000100") @db.Uuid
   name                      String
   slug                      String                     @unique
   type                      EventType                  @default(CONFERENCE)
@@ -447,7 +514,10 @@ model Event {
   webhookEndpoints          WebhookEndpoint[]
   webhookDeliveries         WebhookDelivery[]
   participantPortals        ParticipantPortal[]
+  organization              Organization               @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  memberships               EventMembership[]
 
+  @@index([orgId, archivedAt, startsAt])
   @@index([archivedAt, startsAt])
   @@index([clonedFromEventId])
   @@map("events")
@@ -588,7 +658,8 @@ model DashboardWidget {
 
 model Person {
   id           String            @id @default(uuid()) @db.Uuid
-  email        String            @unique
+  orgId        String            @default("00000000-0000-4000-8000-000000000100") @db.Uuid
+  email        String
   givenName    String
   familyName   String
   organization String?
@@ -599,7 +670,9 @@ model Person {
   contacts     Contact[]
   prospects    SpeakerProspect[]
   speakers     Speaker[]
+  tenant       Organization      @relation(fields: [orgId], references: [id], onDelete: Restrict)
 
+  @@unique([orgId, email])
   @@index([familyName, givenName])
   @@map("people")
 }

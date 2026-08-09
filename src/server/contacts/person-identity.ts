@@ -12,12 +12,15 @@ export interface PersonIdentityInput {
 /** Resolve a stable person identity without overwriting directory-owned profile data. */
 export async function resolvePersonIdentity(
   client: Prisma.TransactionClient,
+  eventId: string,
   input: PersonIdentityInput,
 ): Promise<Person> {
+  const event = await client.event.findUniqueOrThrow({ where: { id: eventId }, select: { orgId: true } });
   return await client.person.upsert({
-    where: { email: input.email },
+    where: { orgId_email: { orgId: event.orgId, email: input.email } },
     update: {},
     create: {
+      orgId: event.orgId,
       email: input.email,
       givenName: input.givenName,
       familyName: input.familyName,

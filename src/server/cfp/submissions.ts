@@ -559,7 +559,7 @@ async function createSubmission(
   }
   const speakerIds: string[] = [];
   for (const profile of participantProfiles) {
-    const person = await resolvePersonIdentity(transaction, profile);
+    const person = await resolvePersonIdentity(transaction, input.eventId, profile);
     const existing = await transaction.speaker.findUnique({
       where: { eventId_normalizedEmail: { eventId: input.eventId, normalizedEmail: profile.email } },
       include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },

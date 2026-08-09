@@ -238,7 +238,7 @@ export class SpeakerRepository {
     const profile = validateSpeakerProfileInput(input);
     try {
       const speaker = await this.client.$transaction(async (transaction) => {
-        const person = await resolvePersonIdentity(transaction, profile);
+        const person = await resolvePersonIdentity(transaction, input.eventId, profile);
         return await transaction.speaker.create({
           data: {
             eventId: input.eventId,
@@ -297,7 +297,7 @@ export class SpeakerRepository {
           throw new RepositoryError("conflict", "The speaker profile changed after this form was loaded.");
         }
         const profile = validateSpeakerProfileInput({ ...profileInput(previous.profile), ...input });
-        const person = await resolvePersonIdentity(transaction, profile);
+        const person = await resolvePersonIdentity(transaction, eventId, profile);
         await transaction.speaker.update({
           where: { id: speakerId },
           data: {

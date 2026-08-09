@@ -29,6 +29,7 @@ describe("representative database fixtures", () => {
     const event = await client.event.findUniqueOrThrow({
       where: { id: created.eventId },
       include: {
+        organization: true,
         rooms: { orderBy: { sortOrder: "asc" } },
         tracks: { orderBy: { sortOrder: "asc" } },
         cfpForms: { include: { versions: { include: { steps: { orderBy: { sortOrder: "asc" } } } } } },
@@ -53,6 +54,7 @@ describe("representative database fixtures", () => {
     });
 
     assert.equal(event.slug, representativeFixture.eventSlug);
+    assert.equal(event.organization.id, representativeFixture.organizationId);
     assert.deepEqual(
       event.rooms.map(({ name, sortOrder }) => [name, sortOrder]),
       [
@@ -129,5 +131,6 @@ describe("representative database fixtures", () => {
       await client.speakerTaskDefinition.count({ where: { id: representativeFixture.taskDefinitionId } }),
       0,
     );
+    assert.equal(await client.organization.count({ where: { id: representativeFixture.organizationId } }), 1);
   });
 });
