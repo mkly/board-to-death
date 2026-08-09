@@ -6,10 +6,11 @@ export interface RecipientAudienceSelection {
   readonly sessionIds?: readonly string[];
   readonly categoryIds?: readonly string[];
   readonly onboardingStatuses?: readonly SpeakerTaskAssignmentStatus[];
+  readonly tierIds?: readonly string[];
 }
 
 export interface RecipientAudienceMatch {
-  readonly kind: "explicit" | "acceptance" | "session" | "category" | "onboarding";
+  readonly kind: "explicit" | "acceptance" | "session" | "category" | "onboarding" | "tier";
   readonly id: string;
   readonly label: string;
 }
@@ -35,6 +36,7 @@ export interface RecipientAudienceOptions {
   readonly speakers: readonly { id: string; name: string; email: string }[];
   readonly sessions: readonly { id: string; title: string }[];
   readonly categories: readonly { id: string; label: string }[];
+  readonly tiers: readonly { id: string; label: string; kind: "SPONSOR" | "EXHIBITOR" }[];
 }
 
 const ACCEPTANCE_LABELS: Record<CfpSubmissionStatus, string> = {
@@ -71,7 +73,7 @@ export class RecipientAudienceRepository {
   }
 
   async listOptions(eventId: string): Promise<RecipientAudienceOptions> {
-    const [speakers, sessions, categories] = await Promise.all([
+    const [speakers, sessions, categories, tiers] = await Promise.all([
       this.#client.speaker.findMany({
         where: { eventId },
         select: {
@@ -98,6 +100,11 @@ export class RecipientAudienceRepository {
         select: { id: true, label: true },
         orderBy: { label: "asc" },
       }),
+      this.#client.contactGroupTier.findMany({
+        where: { eventId },
+        select: { id: true, name: true, kind: true },
+        orderBy: [{ kind: "asc" }, { sortOrder: "asc" }],
+      }),
     ]);
 
     return {
@@ -110,6 +117,7 @@ export class RecipientAudienceRepository {
         return version ? [{ id: session.id, title: version.title }] : [];
       }),
       categories,
+      tiers: tiers.map((tier) => ({ id: tier.id, label: tier.name, kind: tier.kind })),
     };
   }
 
@@ -119,8 +127,9 @@ export class RecipientAudienceRepository {
     const sessionIds = unique(selection.sessionIds);
     const categoryIds = unique(selection.categoryIds);
     const onboardingStatuses = [...new Set(selection.onboardingStatuses ?? [])];
+    const tierIds = unique(selection.tierIds);
 
-    const [explicitSpeakers, acceptanceRows, sessions, categoryRows, onboardingRows] = await Promise.all([
+    const [explicitSpeakers, acceptanceRows, sessions, categoryRows, onboardingRows, tierGroups] = await Promise.all([
       speakerIds.length === 0
         ? []
         : this.#client.speaker.findMany({ where: { eventId, id: { in: speakerIds } }, select: { id: true } }),
@@ -167,6 +176,22 @@ export class RecipientAudienceRepository {
         : this.#client.speakerTaskAssignment.findMany({
             where: { eventId, status: { in: onboardingStatuses } },
             select: { speakerId: true, status: true },
+          }),
+      tierIds.length === 0
+        ? []
+        : this.#client.contactGroup.findMany({
+            where: {
+              eventId,
+              archivedAt: null,
+              tierId: { in: tierIds },
+              primaryContact: { archivedAt: null },
+            },
+            select: {
+              primaryContact: {
+                select: { id: true, email: true, givenName: true, familyName: true },
+              },
+              tier: { select: { id: true, name: true, kind: true } },
+            },
           }),
     ]);
 
@@ -259,6 +284,33 @@ export class RecipientAudienceRepository {
       }
       recipients.push(member);
     }
+
+    const contacts = new Map<string, RecipientAudienceMember>();
+    for (const group of tierGroups) {
+      const contact = group.primaryContact;
+      const tier = group.tier;
+      if (!contact || !tier) continue;
+      const speakerId = `contact:${contact.id}`;
+      const existing = contacts.get(contact.id);
+      const match: RecipientAudienceMatch = {
+        kind: "tier",
+        id: tier.id,
+        label: `${tier.kind === "SPONSOR" ? "Sponsor" : "Exhibitor"} tier: ${tier.name}`,
+      };
+      if (existing) {
+        if (!existing.matches.some(({ kind, id }) => kind === match.kind && id === match.id)) {
+          contacts.set(contact.id, { ...existing, matches: [...existing.matches, match] });
+        }
+      } else {
+        contacts.set(contact.id, {
+          speakerId,
+          displayName: `${contact.givenName} ${contact.familyName}`,
+          email: contact.email,
+          matches: [match],
+        });
+      }
+    }
+    recipients.push(...[...contacts.values()].sort((left, right) => left.email.localeCompare(right.email)));
 
     return { recipients, excluded };
   }

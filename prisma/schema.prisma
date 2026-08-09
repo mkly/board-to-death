@@ -333,6 +333,7 @@ model Event {
   customDashboards          CustomDashboard[]
   contacts                  Contact[]
   contactGroups             ContactGroup[]
+  contactGroupTiers         ContactGroupTier[]
   fileRequests              FileRequest[]
   fileRequestAssignments    FileRequestAssignment[]
 
@@ -388,6 +389,7 @@ model Contact {
   updatedAt    DateTime                @updatedAt @db.Timestamptz(3)
   event        Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   memberships  ContactGroupMember[]
+  primaryForGroups ContactGroup[] @relation("ContactGroupPrimaryContact")
   assignments  FileRequestAssignment[]
 
   @@unique([eventId, email])
@@ -402,17 +404,41 @@ model ContactGroup {
   kind        ContactGroupKind
   name        String
   slug        String
+  tierId      String?                 @db.Uuid
+  primaryContactId String?            @db.Uuid
   archivedAt  DateTime?               @db.Timestamptz(3)
   createdAt   DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime                @updatedAt @db.Timestamptz(3)
   event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tier        ContactGroupTier?       @relation(fields: [eventId, tierId], references: [eventId, id], onDelete: Restrict)
+  primaryContact Contact?             @relation("ContactGroupPrimaryContact", fields: [eventId, primaryContactId], references: [eventId, id], onDelete: Restrict)
   members     ContactGroupMember[]
   assignments FileRequestAssignment[]
 
   @@unique([eventId, slug])
   @@unique([eventId, id])
   @@index([eventId, kind, archivedAt])
+  @@index([eventId, tierId, archivedAt])
+  @@index([eventId, primaryContactId])
   @@map("contact_groups")
+}
+
+model ContactGroupTier {
+  id        String           @id @default(uuid()) @db.Uuid
+  eventId   String           @db.Uuid
+  kind      ContactGroupKind
+  name      String
+  sortOrder Int
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+  event     Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  groups    ContactGroup[]
+
+  @@unique([eventId, id])
+  @@unique([eventId, kind, name])
+  @@unique([eventId, kind, sortOrder])
+  @@index([eventId, kind, sortOrder])
+  @@map("contact_group_tiers")
 }
 
 model ContactGroupMember {
