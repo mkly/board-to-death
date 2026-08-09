@@ -3,7 +3,8 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { betterAuth } from "better-auth/minimal";
 import { magicLink } from "better-auth/plugins";
 
-import { EventType, PrismaClient } from "../../../src/generated/prisma/client.ts";
+import { CfpAdminRole, CfpDraftPolicy, EventType, PrismaClient } from "../../../src/generated/prisma/client.ts";
+import { CfpAdministratorRepository, CfpPolicyRepository } from "../../../src/server/cfp/policies.ts";
 import { CfpFormRepository } from "../../../src/server/cfp/repositories.ts";
 import { EventRepository } from "../../../src/server/events/repositories.ts";
 import { randomUUID } from "node:crypto";
@@ -39,7 +40,47 @@ async function setup() {
       instructions: "Complete each required field before submitting your proposal.",
       termsContent: "",
       consentRequired: false,
+      minimumSpeakerCount: 1,
+      maximumSpeakerCount: 1,
+      requiredSpeakerFields: [],
       sections: [{ id: "proposal", kind: "questions", title: "Proposal", questions: [] }],
+    },
+  });
+  const administrators = new CfpAdministratorRepository(client);
+  const owner = await administrators.create({
+    eventId: event.id,
+    externalId: adminEmail,
+    displayName: "CFP Owner",
+  });
+  const editor = await administrators.create({
+    eventId: event.id,
+    externalId: "editor@example.test",
+    displayName: "Program Editor",
+  });
+  await new CfpPolicyRepository(client).create({
+    eventId: event.id,
+    key: form.key,
+    definition: {
+      submissionOpensAt: new Date("2027-09-01T16:00:00.000Z"),
+      submissionClosesAt: new Date("2028-02-01T08:00:00.000Z"),
+      confirmationClosesAt: new Date("2028-03-01T08:00:00.000Z"),
+      draftPolicy: CfpDraftPolicy.ALLOWED,
+      submissionLimits: { maxSubmissionsPerSpeaker: 2, maxParticipantsPerSubmission: 4 },
+      messages: {
+        introduction: "Share your tabletop proposal.",
+        submissionConfirmation: "Your proposal was received.",
+        closed: "This CFP is closed.",
+      },
+      conditionalVisibility: [],
+      categoryRouting: [],
+      adminAssignments: [
+        {
+          administratorId: owner.id,
+          role: CfpAdminRole.OWNER,
+          notifyOnNewSubmission: false,
+          notifyOnSubmissionUpdate: false,
+        },
+      ],
     },
   });
 
@@ -71,7 +112,7 @@ async function setup() {
   const verified = await auth.handler(new Request(magicLinkUrl, { redirect: "manual" }));
   const sessionToken = verified.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
   if (!sessionToken) throw new Error("Expected Better Auth to create a browser-test session.");
-  console.log(JSON.stringify({ eventId: event.id, eventSlug, formId: form.formId, sessionToken }));
+  console.log(JSON.stringify({ editorId: editor.id, eventId: event.id, eventSlug, formId: form.formId, sessionToken }));
 }
 
 async function cleanup(eventSlug: string | undefined) {

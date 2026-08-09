@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const actionMocks = vi.hoisted(() => ({
@@ -24,6 +24,7 @@ class ResizeObserverStub {
 }
 
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+HTMLElement.prototype.scrollIntoView = vi.fn();
 
 const event = {
   name: "Board to Death 2027",
@@ -77,6 +78,12 @@ function renderWorkspace() {
   return render(<AgendaWorkspace event={event} sessions={sessions} rooms={rooms} tracks={tracks} />);
 }
 
+function agendaViews() {
+  const card = screen.getByText("Agenda views").closest('[data-slot="card"]');
+  if (!card) throw new Error("Agenda views card was not rendered.");
+  return within(card as HTMLElement);
+}
+
 describe("AgendaWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,18 +99,89 @@ describe("AgendaWorkspace", () => {
   });
   afterEach(cleanup);
 
-  test("filters scheduled and unscheduled sessions", () => {
+  test("filters scheduled and unscheduled sessions", async () => {
     renderWorkspace();
-    expect(screen.getByText("Opening keynote")).toBeTruthy();
-    expect(screen.getByText("Designing cooperative tension")).toBeTruthy();
+    expect(agendaViews().getByText("Opening keynote")).toBeTruthy();
+    expect(agendaViews().getByText("Designing cooperative tension")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Unscheduled" }));
-    expect(screen.getByText("Opening keynote")).toBeTruthy();
-    expect(screen.queryByText("Designing cooperative tension")).toBeNull();
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Unscheduled" }));
+    expect(agendaViews().getByText("Opening keynote")).toBeTruthy();
+    expect(agendaViews().queryByText("Designing cooperative tension")).toBeNull();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Scheduled" }));
-    expect(screen.queryByText("Opening keynote")).toBeNull();
-    expect(screen.getByText("Designing cooperative tension")).toBeTruthy();
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Scheduled" }));
+    expect(agendaViews().queryByText("Opening keynote")).toBeNull();
+    expect(agendaViews().getByText("Designing cooperative tension")).toBeTruthy();
+  });
+
+  test("snaps pointer resize to 15 minutes and persists through the placement action", async () => {
+    renderWorkspace();
+    const resizeHandle = screen.getByRole("button", { name: "Resize Designing cooperative tension" });
+    fireEvent.pointerDown(resizeHandle, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(resizeHandle, { clientY: 118, pointerId: 1 });
+    await act(async () => {
+      fireEvent.pointerUp(resizeHandle, { clientY: 118, pointerId: 1 });
+    });
+
+    await waitFor(() => expect(actionMocks.saveAgendaPlacement).toHaveBeenCalled());
+    const formData = actionMocks.saveAgendaPlacement.mock.calls[0]?.[1] as FormData;
+    expect(formData.get("placementId")).toBe(LAB_PLACEMENT_ID);
+    expect(formData.get("durationMinutes")).toBe("75");
+    expect(formData.get("expectedVersion")).toBe("2");
+    expect(await screen.findByText("Schedule updated")).toBeTruthy();
+
+    fireEvent.pointerDown(resizeHandle, { clientY: 100, pointerId: 2 });
+    fireEvent.pointerMove(resizeHandle, { clientY: 118, pointerId: 2 });
+    await act(async () => {
+      fireEvent.pointerUp(resizeHandle, { clientY: 118, pointerId: 2 });
+    });
+    await waitFor(() => expect(actionMocks.saveAgendaPlacement).toHaveBeenCalledTimes(2));
+    const sequentialFormData = actionMocks.saveAgendaPlacement.mock.calls[1]?.[1] as FormData;
+    expect(sequentialFormData.get("durationMinutes")).toBe("90");
+    expect(sequentialFormData.get("expectedVersion")).toBe("3");
+  });
+
+  test("reverts a failed resize and explains the failure", async () => {
+    actionMocks.saveAgendaPlacement.mockResolvedValueOnce({
+      status: "error",
+      message: "The agenda placement changed; reload it before saving again.",
+    });
+    const { container } = renderWorkspace();
+    const resizeHandle = screen.getByRole("button", { name: "Resize Designing cooperative tension" });
+    fireEvent.pointerDown(resizeHandle, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(resizeHandle, { clientY: 136, pointerId: 1 });
+    await act(async () => {
+      fireEvent.pointerUp(resizeHandle, { clientY: 136, pointerId: 1 });
+    });
+
+    expect(await screen.findByText("Schedule change not saved")).toBeTruthy();
+    expect(screen.getByText(/Change reverted/)).toBeTruthy();
+    const card = container.querySelector(`[data-agenda-session="${LAB_ID}"]`);
+    expect(card?.textContent).toContain("60 min");
+  });
+
+  test("switches among date, track, and room views while preserving filters", async () => {
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Scheduled" }));
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Day" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Saturday, March 13, 2027")).toBeTruthy();
+    expect(agendaViews().getByText("Designing cooperative tension")).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Week" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Mar 8–Mar 14, 2027")).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Month" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("March 2027")).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Track" }), { button: 0, ctrlKey: false });
+    expect(screen.getByRole("heading", { name: "Game design" })).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Room" }), { button: 0, ctrlKey: false });
+    expect(screen.getByRole("heading", { name: "Main Hall" })).toBeTruthy();
+    expect(agendaViews().queryByText("Opening keynote")).toBeNull();
   });
 
   test("submits keyboard-accessible placement fields", async () => {

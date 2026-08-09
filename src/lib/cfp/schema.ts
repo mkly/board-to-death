@@ -59,6 +59,8 @@ const categoryRoutingRuleSchema = z.object({
   categoryId: z.string().min(1),
 });
 
+const requiredSpeakerFieldSchema = z.enum(["biography", "contact", "consent"]);
+
 export const cfpFormDefinitionSchema = z.object({
   version: z.number().int(),
   title: z.string().min(1),
@@ -70,6 +72,9 @@ export const cfpFormDefinitionSchema = z.object({
   instructions: z.string().optional(),
   termsContent: z.string().optional(),
   consentRequired: z.boolean().optional(),
+  minimumSpeakerCount: z.number().int().min(1).max(20).optional(),
+  maximumSpeakerCount: z.number().int().min(1).max(20).optional(),
+  requiredSpeakerFields: z.array(requiredSpeakerFieldSchema).optional(),
   customQuestionTypes: z.array(z.string().min(1)).optional(),
   categories: z.array(categorySchema).optional(),
   sections: z.array(sectionSchema).min(1),
