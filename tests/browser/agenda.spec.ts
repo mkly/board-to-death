@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { Pool } from "pg";
 
 import { randomUUID } from "node:crypto";
@@ -17,6 +17,16 @@ function nextMagicLink(): Promise<string> {
   return new Promise((resolve) => {
     resolveMagicLink = resolve;
   });
+}
+
+async function dragAgendaCard(page: Page, source: Locator, target: Locator, targetY: number): Promise<void> {
+  await page.locator("[data-agenda-scroll]").scrollIntoViewIfNeeded();
+  const [sourceBox, targetBox] = await Promise.all([source.boundingBox(), target.boundingBox()]);
+  if (!sourceBox || !targetBox) throw new Error("Agenda drag source or target was not visible.");
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetY, { steps: 12 });
+  await page.mouse.up();
 }
 
 test.beforeAll(async () => {
@@ -115,6 +125,9 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
 
     await page.goto(`/dashboard/events/${event.slug}/agenda`);
     await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
+    const agendaViews = page.locator('[data-slot="card"]').filter({
+      has: page.getByText("Agenda views", { exact: true }),
+    });
     await page.getByRole("combobox", { name: "Status" }).click();
     await page.getByRole("option", { name: "Unscheduled", exact: true }).click();
     await expect(page.getByText("2 sessions")).toBeVisible();
@@ -128,8 +141,8 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await page.reload();
     await page.getByRole("combobox", { name: "Status" }).click();
     await page.getByRole("option", { name: "Scheduled", exact: true }).click();
-    await expect(page.getByText("Opening keynote")).toBeVisible();
-    await expect(page.getByText("Cooperative tension lab")).toHaveCount(0);
+    await expect(agendaViews.getByText("Opening keynote")).toBeVisible();
+    await expect(agendaViews.getByText("Cooperative tension lab")).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Day" }).click();
     await expect(page.getByText("Saturday, March 13, 2027")).toBeVisible();
@@ -237,10 +250,139 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await page.getByRole("option", { name: "Scheduled", exact: true }).click();
     await page.getByRole("button", { name: "Edit placement for Cooperative tension lab" }).click();
     await expect(page.getByLabel("Starts at")).toHaveValue("2027-03-13T12:00");
+    await page.setViewportSize({ width: 1920, height: 1080 });
+
+    const workshopLane = page.locator(`[data-agenda-lane="${secondaryRoomId}:${secondaryTrackId}"]`);
+    const mainLane = page.locator(`[data-agenda-lane="${roomId}:${trackId}"]`);
+    const scheduledCard = page.locator(`[data-agenda-session="${secondSessionId}"]`);
+    await dragAgendaCard(
+      page,
+      scheduledCard.getByRole("button", { name: /Move Cooperative tension lab/ }),
+      workshopLane,
+      324,
+    );
+    await expect(page.getByText("Schedule updated")).toBeVisible();
+    await expect
+      .poll(async () => {
+        const placement = await database.query<{
+          roomId: string;
+          trackId: string | null;
+          minute: number;
+        }>(
+          `SELECT p."roomId", pt."trackId",
+                  EXTRACT(MINUTE FROM p."startsAt")::int AS minute
+             FROM "agenda_placements" p
+             LEFT JOIN "agenda_placement_tracks" pt ON pt."placementId" = p."id"
+            WHERE p."sessionId" = $1`,
+          [secondSessionId],
+        );
+        return placement.rows[0];
+      })
+      .toEqual({ roomId: secondaryRoomId, trackId: secondaryTrackId, minute: 15 });
+
+    const resizeHandle = scheduledCard.getByRole("button", { name: "Resize Cooperative tension lab" });
+    await page.locator("[data-agenda-scroll]").scrollIntoViewIfNeeded();
+    const resizeBox = await resizeHandle.boundingBox();
+    if (!resizeBox) throw new Error("Agenda resize handle was not visible.");
+    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y + resizeBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y + resizeBox.height / 2 + 18);
+    await page.mouse.up();
+    await expect
+      .poll(async () => {
+        const placement = await database.query<{ duration: number }>(
+          `SELECT EXTRACT(EPOCH FROM ("endsAt" - "startsAt"))::int / 60 AS duration
+             FROM "agenda_placements" WHERE "sessionId" = $1`,
+          [secondSessionId],
+        );
+        return placement.rows[0]?.duration;
+      })
+      .toBe(75);
+
+    await page.reload();
+    await expect(
+      page
+        .locator(`[data-agenda-lane="${secondaryRoomId}:${secondaryTrackId}"]`)
+        .locator(`[data-agenda-session="${secondSessionId}"]`),
+    ).toBeVisible();
+    const scrollContainer = page.locator("[data-agenda-scroll]");
+    await scrollContainer.evaluate((element) => {
+      element.scrollTop = 240;
+    });
+    await expect.poll(() => scrollContainer.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await scrollContainer.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+
+    const movedCard = page.locator(`[data-agenda-session="${secondSessionId}"]`);
+    await dragAgendaCard(page, movedCard.getByRole("button", { name: /Move Cooperative tension lab/ }), mainLane, 108);
+    await expect(page.getByText("Schedule change not saved")).toBeVisible();
+    await expect(page.getByText(/Resolve the agenda conflicts before saving/)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const placement = await database.query<{ roomId: string }>(
+          `SELECT "roomId" FROM "agenda_placements" WHERE "sessionId" = $1`,
+          [secondSessionId],
+        );
+        return placement.rows[0]?.roomId;
+      })
+      .toBe(secondaryRoomId);
+
+    await page.getByRole("radio", { name: "Confirm conflicts" }).click();
+    await dragAgendaCard(page, movedCard.getByRole("button", { name: /Move Cooperative tension lab/ }), mainLane, 108);
+    const dragConflictDialog = page.getByRole("alertdialog");
+    await expect(dragConflictDialog).toContainText("Save this schedule change with conflicts?");
+    await dragConflictDialog.getByRole("button", { name: "Confirm and save" }).click();
+    await expect
+      .poll(async () => {
+        const placement = await database.query<{ roomId: string }>(
+          `SELECT "roomId" FROM "agenda_placements" WHERE "sessionId" = $1`,
+          [secondSessionId],
+        );
+        return placement.rows[0]?.roomId;
+      })
+      .toBe(roomId);
+
+    await page.reload();
+    await database.query(`DELETE FROM "agenda_placements" WHERE "sessionId" = $1`, [firstSessionId]);
+    await database.query(`UPDATE "agenda_placements" SET "version" = "version" + 1 WHERE "sessionId" = $1`, [
+      secondSessionId,
+    ]);
+    const staleResizeHandle = page.getByRole("button", { name: "Resize Cooperative tension lab" });
+    await page.locator("[data-agenda-scroll]").scrollIntoViewIfNeeded();
+    const staleResizeBox = await staleResizeHandle.boundingBox();
+    if (!staleResizeBox) throw new Error("Agenda resize handle was not visible after reload.");
+    await page.mouse.move(staleResizeBox.x + staleResizeBox.width / 2, staleResizeBox.y + staleResizeBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      staleResizeBox.x + staleResizeBox.width / 2,
+      staleResizeBox.y + staleResizeBox.height / 2 + 18,
+    );
+    await page.mouse.up();
+    await expect(page.getByText(/The agenda placement changed; reload it before saving again/)).toBeVisible();
+    await expect(page.getByText(/Change reverted/)).toBeVisible();
+
+    await page.reload();
+    await page.setViewportSize({ width: 375, height: 667 });
+    await expect(page.getByText("Interactive schedule")).toBeVisible();
+    await expect(page.locator("[data-agenda-scroll]")).toBeVisible();
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Scheduled", exact: true }).click();
+    await page.getByRole("button", { name: "Edit placement for Cooperative tension lab" }).click();
     await page.getByRole("button", { name: "Remove" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Remove placement" }).click();
-    await expect(page.getByText("1 session")).toBeVisible();
-    await expect(page.getByText("Cooperative tension lab")).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const placement = await database.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count FROM "agenda_placements" WHERE "sessionId" = $1`,
+          [secondSessionId],
+        );
+        return placement.rows[0]?.count;
+      })
+      .toBe(0);
+    await expect(agendaViews.getByText("No sessions in this view")).toBeVisible();
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [event.id]);
   }

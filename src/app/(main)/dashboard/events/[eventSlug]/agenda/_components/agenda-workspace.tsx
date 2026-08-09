@@ -48,6 +48,7 @@ import {
   removeAgendaPlacement,
   saveAgendaPlacement,
 } from "../actions";
+import { AgendaScheduleBoard } from "./agenda-schedule-board";
 import { type AgendaFilter, AgendaViews } from "./agenda-views";
 
 export interface AgendaWorkspaceSession {
@@ -395,6 +396,8 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
           <AlertDescription>Agenda placements require an event-owned room.</AlertDescription>
         </Alert>
       ) : null}
+
+      <AgendaScheduleBoard event={event} sessions={sessions} rooms={rooms} tracks={tracks} />
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]">
         <AgendaViews
