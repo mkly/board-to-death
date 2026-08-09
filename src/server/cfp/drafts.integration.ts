@@ -255,6 +255,44 @@ describe("CFP submission draft persistence", () => {
     );
   });
 
+  test("rejects saving with an expired token, so an expired draft cannot be revived", async () => {
+    const scope = await createScope("expired-save");
+    const saved = await repo.save({
+      eventId: scope.eventId,
+      policyId: scope.policyId,
+      draftPolicy: CfpDraftPolicy.ALLOWED,
+      formVersionId: scope.formVersionId,
+      answers: { abstract: "expiring" },
+      participants: [],
+      categoryKeys: [],
+    });
+
+    clock.advanceBy(THIRTY_DAYS_MS + 1);
+    await expectRepositoryError(
+      repo.save({
+        eventId: scope.eventId,
+        policyId: scope.policyId,
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        formVersionId: scope.formVersionId,
+        answers: { abstract: "revived" },
+        participants: [],
+        categoryKeys: [],
+        token: saved.token,
+      }),
+      "not-found",
+    );
+    await expectRepositoryError(
+      repo.resume({
+        eventId: scope.eventId,
+        policyId: scope.policyId,
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        token: saved.token,
+        currentFormVersionId: scope.formVersionId,
+      }),
+      "not-found",
+    );
+  });
+
   test("rejects a tampered token", async () => {
     const scope = await createScope("tampering");
     const saved = await repo.save({

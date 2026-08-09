@@ -81,7 +81,9 @@ function requireToken(token: string): string {
  * links: resuming (reading) a draft never rotates or extends its token, so
  * the same resume link stays valid across repeated opens (e.g. multiple
  * tabs or devices) until it expires or the draft is discarded. Only an
- * explicit save slides the expiry forward. Every rejection - tampered,
+ * explicit save slides the expiry forward, and only while the draft is still
+ * live: once it has expired the token is inert, so a save cannot revive it.
+ * Every rejection - tampered,
  * expired, or scoped to a different policy/event - surfaces as the same
  * "not-found" error so a guessed token cannot distinguish those cases.
  */
@@ -115,7 +117,12 @@ export class CfpDraftRepository {
     if (input.token !== undefined) {
       const token = requireToken(input.token);
       const updated = await this.#database.cfpSubmissionDraft.updateMany({
-        where: { eventId: input.eventId, policyId: input.policyId, tokenHash: hashToken(token) },
+        where: {
+          eventId: input.eventId,
+          policyId: input.policyId,
+          tokenHash: hashToken(token),
+          expiresAt: { gt: now },
+        },
         data,
       });
       if (updated.count !== 1) {
