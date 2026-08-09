@@ -260,7 +260,7 @@ export class BulkCommunicationRepository {
   }
 }
 
-export class PrismaDeliveryAuditRepository implements DeliveryAuditRepository {
+export class PrismaBulkDeliveryAuditRepository implements DeliveryAuditRepository {
   readonly #client: PrismaClient;
   readonly #eventId: string;
 
@@ -418,7 +418,7 @@ export class BulkDeliveryDispatcher {
     const coordinator = new EmailDeliveryCoordinator({
       provider: this.#provider,
       providerName: this.#providerName,
-      auditRepository: new PrismaDeliveryAuditRepository(this.#client, eventId),
+      auditRepository: new PrismaBulkDeliveryAuditRepository(this.#client, eventId),
       clock: this.#clock,
       ...(this.#defaultRetryDelayMs === undefined ? {} : { defaultRetryDelayMs: this.#defaultRetryDelayMs }),
     });

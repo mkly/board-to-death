@@ -24,6 +24,7 @@ class ResizeObserverStub {
 }
 
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+HTMLElement.prototype.scrollIntoView = vi.fn();
 
 const event = {
   name: "Board to Death 2027",
@@ -92,18 +93,43 @@ describe("AgendaWorkspace", () => {
   });
   afterEach(cleanup);
 
-  test("filters scheduled and unscheduled sessions", () => {
+  test("filters scheduled and unscheduled sessions", async () => {
     renderWorkspace();
     expect(screen.getByText("Opening keynote")).toBeTruthy();
     expect(screen.getByText("Designing cooperative tension")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Unscheduled" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Unscheduled" }));
     expect(screen.getByText("Opening keynote")).toBeTruthy();
     expect(screen.queryByText("Designing cooperative tension")).toBeNull();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Scheduled" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Scheduled" }));
     expect(screen.queryByText("Opening keynote")).toBeNull();
     expect(screen.getByText("Designing cooperative tension")).toBeTruthy();
+  });
+
+  test("switches among date, track, and room views while preserving filters", async () => {
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Scheduled" }));
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Day" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Saturday, March 13, 2027")).toBeTruthy();
+    expect(screen.getByText("Designing cooperative tension")).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Week" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("Mar 8–Mar 14, 2027")).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Month" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByText("March 2027")).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Track" }), { button: 0, ctrlKey: false });
+    expect(screen.getByRole("heading", { name: "Game design" })).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Room" }), { button: 0, ctrlKey: false });
+    expect(screen.getByRole("heading", { name: "Main Hall" })).toBeTruthy();
+    expect(screen.queryByText("Opening keynote")).toBeNull();
   });
 
   test("submits keyboard-accessible placement fields", async () => {

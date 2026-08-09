@@ -158,6 +158,11 @@ required compensating SQL, apply it with `prisma db execute`, and mark the faile
 `prisma migrate resolve --rolled-back MIGRATION_NAME` before redeploying. Do not edit or mark a successfully applied
 migration as rolled back; revert the Prisma schema and create a new forward migration instead.
 
+### Production operations
+
+See [Production operations](docs/operations.md) for runtime configuration, mounted secrets, migration and startup
+commands, health checks, graceful shutdown, persistent storage, backup, and recovery guidance.
+
 ### Formatting and Linting
 
 Format, lint, and organize imports
@@ -165,6 +170,19 @@ Format, lint, and organize imports
 npx @biomejs/biome check --write
 ```
 > For more information on available rules, fixes, and CLI options, refer to the [Biome documentation](https://biomejs.dev/).
+
+### Browser tests
+
+Reset the guarded test database, then run the Playwright suite:
+
+```bash
+npm run db:test:reset
+npm run test:browser
+```
+
+Playwright starts the Next.js development server on `127.0.0.1:3100` by default, so the browser suite does not need a
+production build or production-only runtime secrets. Set `PLAYWRIGHT_WEB_SERVER_COMMAND` to use another server command,
+or `PLAYWRIGHT_BASE_URL` to test an already running application at another URL.
 
 ---
 
