@@ -104,6 +104,12 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
                 url: eventSlug ? `${url}/assignments` : "/dashboard",
                 disabled,
               },
+              {
+                id: "evaluation-results",
+                title: "Results",
+                url: eventSlug ? `${url}/results` : "/dashboard",
+                disabled,
+              },
             ],
           };
         }

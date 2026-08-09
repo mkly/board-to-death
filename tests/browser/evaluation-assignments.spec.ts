@@ -33,6 +33,7 @@ async function runFixture(action: FixtureAction, ...args: readonly string[]): Pr
 }
 
 test.describe("evaluation reviewer assignments", () => {
+  test.setTimeout(120_000);
   test.describe.configure({ mode: "serial" });
   let fixture: BrowserFixture;
 
@@ -95,10 +96,15 @@ test.describe("evaluation reviewer assignments", () => {
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Unassigned").first()).toBeVisible();
 
-    await page.getByLabel("Select all eligible submissions").click();
+    await page.reload();
+    await waitForHydration(page.getByLabel("Action"));
     await page.getByLabel("Action").selectOption("assign-committee");
     await page.getByLabel("Reviewer committee").selectOption(fixture.committeeId);
-    await applyAction();
+    const selectAll = page.getByLabel("Select all eligible submissions");
+    await waitForHydration(selectAll);
+    await selectAll.click();
+    await expect(selectAll).toBeChecked();
+    await page.getByRole("button", { name: "Apply action" }).click();
     await expect(page.getByText("4 reviewer assignments updated.")).toBeVisible();
     // Scope to the table: an unscoped text match resolves first to the hidden committee <option>.
     await expect(page.getByRole("cell", { name: /Program committee/ }).first()).toBeVisible();
@@ -128,6 +134,12 @@ test.describe("evaluation reviewer assignments", () => {
     await page.reload();
     await expect(page.getByLabel("Assigned: 1")).toBeVisible();
     await expect(page.getByLabel("Complete: 1")).toBeVisible();
+
+    await page.goto(`/dashboard/events/${fixture.eventSlug}/evaluations/results`);
+    await expect(page.getByRole("heading", { name: "Evaluation results" })).toBeVisible();
+    await expect(page.getByText("2/2 complete", { exact: true })).toBeVisible();
+    await expect(page.getByText("4.75", { exact: true })).toBeVisible();
+    await expect(page.getByText("1 incomplete", { exact: true })).toBeVisible();
   });
 
   test("shows a safe disabled state when the event has no active reviewers", async ({ page }) => {
