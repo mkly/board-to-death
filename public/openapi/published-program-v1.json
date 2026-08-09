@@ -1,0 +1,304 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Board to Death Published Program API",
+    "version": "1.0.0",
+    "description": "Credential-free, read-only access to the current immutable published program. An X-API-Key may be supplied for gateway metering, but it never expands fields or access. Responses never use cookies."
+  },
+  "servers": [{ "url": "/" }],
+  "security": [{}, { "ApiKeyAuth": [] }],
+  "paths": {
+    "/api/v1/events/{id}/sessions": {
+      "get": {
+        "operationId": "listPublishedSessions",
+        "summary": "List published sessions",
+        "parameters": [
+          { "$ref": "#/components/parameters/EventId" },
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/SessionSuccess" },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidPagination" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "410": { "$ref": "#/components/responses/Unpublished" }
+        }
+      }
+    },
+    "/api/v1/events/{id}/speakers": {
+      "get": {
+        "operationId": "listPublishedSpeakers",
+        "summary": "List speakers who consented to public profile publication",
+        "parameters": [
+          { "$ref": "#/components/parameters/EventId" },
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/SpeakerSuccess" },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidPagination" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "410": { "$ref": "#/components/responses/Unpublished" }
+        }
+      }
+    },
+    "/api/v1/events/{id}/agenda": {
+      "get": {
+        "operationId": "listPublishedAgenda",
+        "summary": "List published agenda placements",
+        "parameters": [
+          { "$ref": "#/components/parameters/EventId" },
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/AgendaSuccess" },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidPagination" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "410": { "$ref": "#/components/responses/Unpublished" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Optional gateway metering key. The application response is identical without it and it grants no private access."
+      }
+    },
+    "parameters": {
+      "EventId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Event UUID or unique slug.",
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "description": "One-based page number. Pages beyond the result set return an empty data array.",
+        "schema": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "PageSize": {
+        "name": "pageSize",
+        "in": "query",
+        "description": "Maximum records per page.",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 25 }
+      }
+    },
+    "headers": {
+      "AccessControlAllowOrigin": {
+        "description": "Always *; published reads never use credentials or cookies.",
+        "schema": { "type": "string", "const": "*" }
+      },
+      "CacheControl": {
+        "description": "Public browser and intermediary cache policy.",
+        "schema": { "type": "string", "example": "public, max-age=60, stale-while-revalidate=300" }
+      },
+      "ETag": {
+        "description": "Changes with publication version, resource, page, and page size; send in If-None-Match for a 304 response.",
+        "schema": { "type": "string", "example": "\"event-id:v3:sessions:p1:s25\"" }
+      }
+    },
+    "schemas": {
+      "EventMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "slug", "timezone"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "timezone": { "type": "string", "example": "America/Los_Angeles" }
+        }
+      },
+      "PublicationMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "publishedAt"],
+        "properties": {
+          "version": { "type": "integer", "minimum": 1 },
+          "publishedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page", "pageSize", "total", "totalPages"],
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "total": { "type": "integer", "minimum": 0 },
+          "totalPages": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "Metadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event", "publication", "pagination"],
+        "properties": {
+          "event": { "$ref": "#/components/schemas/EventMetadata" },
+          "publication": { "$ref": "#/components/schemas/PublicationMetadata" },
+          "pagination": { "$ref": "#/components/schemas/Pagination" }
+        }
+      },
+      "Links": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["self", "next", "previous"],
+        "properties": {
+          "self": { "type": "string", "format": "uri" },
+          "next": { "type": ["string", "null"], "format": "uri" },
+          "previous": { "type": ["string", "null"], "format": "uri" }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "description", "durationMinutes", "trackId", "speakerIds"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "durationMinutes": { "type": "integer", "minimum": 1 },
+          "trackId": { "type": ["string", "null"] },
+          "speakerIds": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Speaker": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "givenName",
+          "familyName",
+          "preferredName",
+          "pronouns",
+          "organization",
+          "jobTitle",
+          "biography",
+          "websiteUrl"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "givenName": { "type": "string" },
+          "familyName": { "type": "string" },
+          "preferredName": { "type": ["string", "null"] },
+          "pronouns": { "type": ["string", "null"] },
+          "organization": { "type": ["string", "null"] },
+          "jobTitle": { "type": ["string", "null"] },
+          "biography": { "type": ["string", "null"] },
+          "websiteUrl": { "type": ["string", "null"], "format": "uri" }
+        }
+      },
+      "AgendaPlacement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "sessionId", "roomId", "startsAt", "endsAt", "trackIds", "speakerIds"],
+        "properties": {
+          "id": { "type": "string" },
+          "sessionId": { "type": "string" },
+          "roomId": { "type": "string" },
+          "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "trackIds": { "type": "array", "items": { "type": "string" } },
+          "speakerIds": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": { "code": { "type": "string" }, "message": { "type": "string" } }
+          }
+        }
+      },
+      "SessionPage": { "$ref": "#/components/x-pageSchemas/SessionPage" },
+      "SpeakerPage": { "$ref": "#/components/x-pageSchemas/SpeakerPage" },
+      "AgendaPage": { "$ref": "#/components/x-pageSchemas/AgendaPage" }
+    },
+    "x-pageSchemas": {
+      "SessionPage": {
+        "type": "object",
+        "required": ["data", "meta", "links"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Session" } },
+          "meta": { "$ref": "#/components/schemas/Metadata" },
+          "links": { "$ref": "#/components/schemas/Links" }
+        }
+      },
+      "SpeakerPage": {
+        "type": "object",
+        "required": ["data", "meta", "links"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Speaker" } },
+          "meta": { "$ref": "#/components/schemas/Metadata" },
+          "links": { "$ref": "#/components/schemas/Links" }
+        }
+      },
+      "AgendaPage": {
+        "type": "object",
+        "required": ["data", "meta", "links"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/AgendaPlacement" } },
+          "meta": { "$ref": "#/components/schemas/Metadata" },
+          "links": { "$ref": "#/components/schemas/Links" }
+        }
+      }
+    },
+    "responses": {
+      "SessionSuccess": {
+        "description": "Current published sessions. Draft edits remain invisible until republish.",
+        "headers": {
+          "Access-Control-Allow-Origin": { "$ref": "#/components/headers/AccessControlAllowOrigin" },
+          "Cache-Control": { "$ref": "#/components/headers/CacheControl" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SessionPage" } } }
+      },
+      "SpeakerSuccess": {
+        "description": "Current published speakers. Email, phone, storage keys, and administrative fields are never returned.",
+        "headers": {
+          "Access-Control-Allow-Origin": { "$ref": "#/components/headers/AccessControlAllowOrigin" },
+          "Cache-Control": { "$ref": "#/components/headers/CacheControl" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SpeakerPage" } } }
+      },
+      "AgendaSuccess": {
+        "description": "Current published placements with UTC instants; meta.event.timezone identifies the display time zone.",
+        "headers": {
+          "Access-Control-Allow-Origin": { "$ref": "#/components/headers/AccessControlAllowOrigin" },
+          "Cache-Control": { "$ref": "#/components/headers/CacheControl" },
+          "ETag": { "$ref": "#/components/headers/ETag" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgendaPage" } } }
+      },
+      "NotModified": { "description": "The requested page still matches If-None-Match." },
+      "InvalidPagination": {
+        "description": "Malformed, duplicate, or out-of-range pagination.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "EVENT_NOT_FOUND for an unknown identifier or PROGRAM_NOT_PUBLISHED for a known event with no publication history.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Unpublished": {
+        "description": "PROGRAM_UNPUBLISHED: the event has publication history but its latest version is explicitly unpublished.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  }
+}

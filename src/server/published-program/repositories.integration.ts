@@ -234,4 +234,33 @@ describe("published-program lifecycle", () => {
     );
     assert.equal(await publications.latest(fixture.event.id), null);
   });
+
+  test("resolves only the current public snapshot by event id or slug and reports publication state", async () => {
+    const fixture = await createProgramFixture();
+    const operations = new PublishedProgramOperations(publications, async () => principal(fixture.event.id));
+
+    assert.deepEqual(await publications.findPublic("unknown-event"), { status: "event-not-found" });
+    assert.deepEqual(await publications.findPublic(fixture.event.slug), {
+      status: "not-published",
+      eventId: fixture.event.id,
+    });
+
+    const first = await operations.publish(fixture.event.id);
+    const byId = await publications.findPublic(fixture.event.id);
+    assert.equal(byId.status, "published");
+    if (byId.status !== "published") return;
+    assert.equal(byId.version.versionNumber, first.versionNumber);
+    assert.deepEqual(
+      byId.version.snapshot.sessions.map(({ id }) => id),
+      [fixture.session.id],
+    );
+    assert.doesNotMatch(JSON.stringify(byId.version.snapshot), /private@example\.test|Outside session/);
+
+    await operations.unpublish(fixture.event.id, first.versionNumber);
+    assert.deepEqual(await publications.findPublic(fixture.event.slug), {
+      status: "unpublished",
+      eventId: fixture.event.id,
+      versionNumber: 2,
+    });
+  });
 });

@@ -75,6 +75,19 @@ export interface PersistedPublishedProgramVersion {
   readonly createdAt: Date;
 }
 
+export type PublicPublishedProgramLookup =
+  | { readonly status: "event-not-found" }
+  | { readonly status: "not-published"; readonly eventId: string }
+  | { readonly status: "unpublished"; readonly eventId: string; readonly versionNumber: number }
+  | {
+      readonly status: "published";
+      readonly version: {
+        readonly versionNumber: number;
+        readonly snapshot: PublishedProgramSnapshot;
+        readonly createdAt: Date;
+      };
+    };
+
 interface PublicationInput {
   readonly eventId: string;
   readonly actorPrincipalId: string;
@@ -301,6 +314,45 @@ export class PublishedProgramRepository {
     return versions.map(fromStored);
   }
 
+  async findPublic(identifier: string): Promise<PublicPublishedProgramLookup> {
+    const event = await this.client.event.findFirst({
+      where: UUID_PATTERN.test(identifier) ? { OR: [{ id: identifier }, { slug: identifier }] } : { slug: identifier },
+      select: {
+        id: true,
+        publishedProgram: {
+          select: {
+            versions: {
+              orderBy: { versionNumber: "desc" },
+              take: 1,
+              select: {
+                versionNumber: true,
+                state: true,
+                snapshot: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!event) return { status: "event-not-found" };
+
+    const latest = event.publishedProgram?.versions[0];
+    if (!latest) return { status: "not-published", eventId: event.id };
+    if (latest.state === PublishedProgramState.UNPUBLISHED || !latest.snapshot) {
+      return { status: "unpublished", eventId: event.id, versionNumber: latest.versionNumber };
+    }
+
+    return {
+      status: "published",
+      version: {
+        versionNumber: latest.versionNumber,
+        snapshot: latest.snapshot as unknown as PublishedProgramSnapshot,
+        createdAt: latest.createdAt,
+      },
+    };
+  }
+
   private async createPublishedVersion(
     input: PublicationInput,
     initial: boolean,
@@ -345,3 +397,5 @@ export class PublishedProgramRepository {
     }
   }
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
