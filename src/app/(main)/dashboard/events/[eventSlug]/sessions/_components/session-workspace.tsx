@@ -7,6 +7,11 @@ import Link from "next/link";
 import { Archive, CalendarClock, ClipboardPlus, FilePlus2, Save } from "lucide-react";
 
 import {
+  type CustomFieldInputDefinition,
+  CustomFieldInputs,
+  type CustomFieldInputValue,
+} from "@/components/custom-fields/custom-field-inputs";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -60,6 +65,7 @@ export interface SessionWorkspaceSession {
   readonly speakerIds: readonly string[];
   readonly speakerNames: readonly string[];
   readonly versionNumber: number;
+  readonly customFieldValues: readonly CustomFieldInputValue[];
 }
 
 interface SessionWorkspaceProps {
@@ -67,6 +73,7 @@ interface SessionWorkspaceProps {
   readonly sessions: readonly SessionWorkspaceSession[];
   readonly speakers: readonly { readonly id: string; readonly name: string; readonly email: string }[];
   readonly tracks: readonly { readonly id: string; readonly name: string }[];
+  readonly customFieldDefinitions: readonly CustomFieldInputDefinition[];
   readonly initialSessionId?: string;
 }
 
@@ -101,12 +108,14 @@ function SessionForm({
   session,
   speakers,
   tracks,
+  customFieldDefinitions,
   onSaved,
 }: {
   readonly eventSlug: string;
   readonly session: SessionWorkspaceSession | null;
   readonly speakers: SessionWorkspaceProps["speakers"];
   readonly tracks: SessionWorkspaceProps["tracks"];
+  readonly customFieldDefinitions: SessionWorkspaceProps["customFieldDefinitions"];
   readonly onSaved: (sessionId: string) => void;
 }) {
   const [state, formAction, pending] = useActionState(
@@ -233,6 +242,11 @@ function SessionForm({
               )}
               <FieldError>{fieldError(state, "speakerIds")}</FieldError>
             </FieldSet>
+            <CustomFieldInputs
+              definitions={customFieldDefinitions}
+              values={session?.customFieldValues}
+              disabled={session?.archived}
+            />
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
@@ -251,7 +265,14 @@ function SessionForm({
   );
 }
 
-export function SessionWorkspace({ event, sessions, speakers, tracks, initialSessionId }: SessionWorkspaceProps) {
+export function SessionWorkspace({
+  event,
+  sessions,
+  speakers,
+  tracks,
+  customFieldDefinitions,
+  initialSessionId,
+}: SessionWorkspaceProps) {
   const [filter, setFilter] = useState<SessionFilter>("all");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     sessions.some(({ id }) => id === initialSessionId) ? (initialSessionId ?? null) : null,
@@ -406,6 +427,7 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
               session={selectedSession}
               speakers={speakers}
               tracks={tracks}
+              customFieldDefinitions={customFieldDefinitions}
               onSaved={(sessionId) => {
                 setSelectedSessionId(sessionId);
                 setCreating(false);

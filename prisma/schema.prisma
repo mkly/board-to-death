@@ -212,6 +212,25 @@ enum ProgramSessionKind {
   PROMOTED
 }
 
+enum CustomFieldEntityType {
+  CONTACT
+  PROGRAM_SESSION
+  CONTACT_GROUP
+  CFP_SUBMISSION
+}
+
+enum CustomFieldType {
+  SINGLE_LINE_TEXT
+  LONG_TEXT
+  NUMBER
+  DATE
+  SINGLE_SELECT
+  MULTI_SELECT
+  CHECKBOX
+  URL
+  FILE
+}
+
 enum IntegrationProvider {
   ACCELEVENTS
 }
@@ -335,6 +354,8 @@ model Event {
   contactGroups             ContactGroup[]
   fileRequests              FileRequest[]
   fileRequestAssignments    FileRequestAssignment[]
+  customFieldDefinitions    CustomFieldDefinition[]
+  customFieldValues         CustomFieldValue[]
 
   @@map("events")
 }
@@ -389,6 +410,7 @@ model Contact {
   event        Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   memberships  ContactGroupMember[]
   assignments  FileRequestAssignment[]
+  customFieldValues CustomFieldValue[]
 
   @@unique([eventId, email])
   @@unique([eventId, id])
@@ -408,6 +430,7 @@ model ContactGroup {
   event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members     ContactGroupMember[]
   assignments FileRequestAssignment[]
+  customFieldValues CustomFieldValue[]
 
   @@unique([eventId, slug])
   @@unique([eventId, id])
@@ -716,6 +739,7 @@ model CfpSubmission {
   participants           CfpSubmissionParticipant[]
   promotedSession        ProgramSession?              @relation("ProgramSessionSourceSubmission")
   fileRequestAssignments FileRequestAssignment[]
+  customFieldValues      CustomFieldValue[]
 
   @@unique([eventId, id])
   @@unique([eventId, intakeClientIdentifier])
@@ -983,12 +1007,68 @@ model ProgramSession {
   sourceSubmission   CfpSubmission?          @relation("ProgramSessionSourceSubmission", fields: [eventId, sourceSubmissionId], references: [eventId, id], onDelete: NoAction)
   versions           ProgramSessionVersion[]
   agendaPlacement    AgendaPlacement?
+  customFieldValues  CustomFieldValue[]
 
   @@unique([eventId, id])
   @@unique([eventId, intakeClientIdentifier])
   @@unique([eventId, sourceSubmissionId])
   @@index([eventId, kind, archivedAt])
   @@map("program_sessions")
+}
+
+model CustomFieldDefinition {
+  id             String                @id @default(uuid()) @db.Uuid
+  eventId        String                @db.Uuid
+  entityType     CustomFieldEntityType
+  key            String
+  label          String
+  description    String?
+  type           CustomFieldType
+  required       Boolean               @default(false)
+  position       Int
+  characterLimit Int?
+  options        Json?
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
+  event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  values         CustomFieldValue[]
+
+  @@unique([eventId, id])
+  @@unique([eventId, entityType, key])
+  @@unique([eventId, entityType, position])
+  @@index([eventId, entityType])
+  @@map("custom_field_definitions")
+}
+
+model CustomFieldValue {
+  id             String                @id @default(uuid()) @db.Uuid
+  eventId        String                @db.Uuid
+  definitionId   String                @db.Uuid
+  contactId      String?               @db.Uuid
+  sessionId      String?               @db.Uuid
+  groupId        String?               @db.Uuid
+  submissionId   String?               @db.Uuid
+  value          Json
+  normalizedText String?
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
+  event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  definition     CustomFieldDefinition @relation(fields: [eventId, definitionId], references: [eventId, id], onDelete: Restrict)
+  contact        Contact?              @relation(fields: [eventId, contactId], references: [eventId, id], onDelete: Cascade)
+  session        ProgramSession?       @relation(fields: [eventId, sessionId], references: [eventId, id], onDelete: Cascade)
+  group          ContactGroup?         @relation(fields: [eventId, groupId], references: [eventId, id], onDelete: Cascade)
+  submission     CfpSubmission?        @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([definitionId, contactId])
+  @@unique([definitionId, sessionId])
+  @@unique([definitionId, groupId])
+  @@unique([definitionId, submissionId])
+  @@index([eventId, definitionId, normalizedText])
+  @@index([eventId, contactId])
+  @@index([eventId, sessionId])
+  @@index([eventId, groupId])
+  @@index([eventId, submissionId])
+  @@map("custom_field_values")
 }
 
 model ProgramSessionVersion {
