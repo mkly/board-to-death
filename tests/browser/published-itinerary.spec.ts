@@ -5,7 +5,6 @@ import { Pool } from "pg";
 import type { PublishedProgramSnapshot } from "../../src/server/published-program/repositories.ts";
 import { randomUUID } from "node:crypto";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 const databaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
@@ -245,7 +244,11 @@ test("renders inside a hostile host page without inheriting its styles", async (
   const embedPath = `/embed/${fixture.eventSlug}?kind=itinerary&theme=light&density=compact&filter=search&instance=browser-test`;
 
   try {
-    await page.goto(baseURL);
+    // Warm the embed route before framing it. The suite runs against `next dev`, which compiles routes
+    // on demand, and an iframe injected through setContent gets only the 5s expect budget to compile,
+    // load, and render — a budget a direct navigation never has to meet.
+    await page.goto(embedPath);
+    await expect(page.getByRole("heading", { level: 1, name: "Itinerary" })).toBeVisible({ timeout: 30_000 });
     await page.setContent(`
       <style>* { color: rgb(255, 0, 255) !important; font-size: 41px !important; }</style>
       <h1>Host page heading</h1>
@@ -263,7 +266,7 @@ test("renders inside a hostile host page without inheriting its styles", async (
 
     const frame = page.getByTitle("Hosted itinerary");
     const heading = frame.contentFrame().getByRole("heading", { level: 1, name: "Itinerary" });
-    await expect(heading).toBeVisible();
+    await expect(heading).toBeVisible({ timeout: 30_000 });
 
     // The frame bridge grows the iframe past its placeholder height.
     await expect(async () => {
