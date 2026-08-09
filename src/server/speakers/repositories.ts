@@ -54,7 +54,7 @@ export interface UpdateSubmissionParticipantFilesInput {
   readonly supportingDocumentObjectKey?: string | null;
 }
 
-interface ValidatedProfile {
+export interface ValidatedSpeakerProfile {
   readonly email: string;
   readonly givenName: string;
   readonly familyName: string;
@@ -116,7 +116,7 @@ function normalizeUrl(value: string | null | undefined): string | null {
   return url.toString();
 }
 
-function validateProfile(input: SpeakerProfileInput): ValidatedProfile {
+export function validateSpeakerProfileInput(input: SpeakerProfileInput): ValidatedSpeakerProfile {
   const consentToPublishProfile = input.consentToPublishProfile ?? false;
   const consentToReceiveEmail = input.consentToReceiveEmail ?? false;
   const consentedAt =
@@ -228,7 +228,7 @@ export class SpeakerRepository {
   }
 
   async create(input: CreateSpeakerInput): Promise<PersistedSpeaker> {
-    const profile = validateProfile(input);
+    const profile = validateSpeakerProfileInput(input);
     try {
       const speaker = await this.client.speaker.create({
         data: {
@@ -277,7 +277,7 @@ export class SpeakerRepository {
         if (expectedVersionNumber !== undefined && previous.profile.versionNumber !== expectedVersionNumber) {
           throw new RepositoryError("conflict", "The speaker profile changed after this form was loaded.");
         }
-        const profile = validateProfile({ ...profileInput(previous.profile), ...input });
+        const profile = validateSpeakerProfileInput({ ...profileInput(previous.profile), ...input });
         await transaction.speaker.update({
           where: { id: speakerId },
           data: {

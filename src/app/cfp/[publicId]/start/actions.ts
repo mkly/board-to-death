@@ -1,9 +1,15 @@
 "use server";
 
+import { z } from "zod";
+
 import type { CfpFormDefinition } from "@/lib/cfp";
 import { validateCfpAnswers } from "@/lib/cfp";
 import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
-import { CfpCategoryRepository, CfpSubmissionRepository } from "@/server/cfp/submissions";
+import {
+  CfpCategoryRepository,
+  type CfpSubmissionParticipantInput,
+  CfpSubmissionRepository,
+} from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
 
 export interface PublicCfpFormActionState {
@@ -28,6 +34,101 @@ function valuesFromFormData(definition: CfpFormDefinition, formData: FormData): 
   return values;
 }
 
+type SpeakerParseResult =
+  | { readonly ok: true; readonly participants: readonly CfpSubmissionParticipantInput[] }
+  | { readonly ok: false; readonly errors: Readonly<Record<string, readonly string[]>> };
+
+function speakerValuesFromFormData(definition: CfpFormDefinition, formData: FormData): SpeakerParseResult {
+  const speakerEntries = Array.from(formData.entries()).filter(([name]) => name.startsWith("speaker."));
+  const minimum = definition.minimumSpeakerCount;
+  const maximum = definition.maximumSpeakerCount;
+  if (minimum === undefined || maximum === undefined) {
+    return speakerEntries.length === 0
+      ? { ok: true, participants: [] }
+      : { ok: false, errors: { participants: ["Speaker fields are not enabled for this form."] } };
+  }
+
+  const requiredFields = new Set(definition.requiredSpeakerFields ?? []);
+  const allowedFields = new Set(["email", "givenName", "familyName"]);
+  if (requiredFields.has("contact")) allowedFields.add("phone");
+  if (requiredFields.has("biography")) allowedFields.add("biography");
+  if (requiredFields.has("consent")) allowedFields.add("consent");
+
+  const rawParticipants = new Map<number, Record<string, FormDataEntryValue>>();
+  const errors: Record<string, string[]> = {};
+  for (const [name, value] of speakerEntries) {
+    const match = /^speaker\.(\d+)\.([A-Za-z][A-Za-z0-9]*)$/.exec(name);
+    if (!match) {
+      errors.participants = ["The submitted speaker fields are invalid."];
+      continue;
+    }
+    const index = Number(match[1]);
+    const field = match[2];
+    if (!allowedFields.has(field)) {
+      errors[name] = ["This field is not present in the published form."];
+      continue;
+    }
+    const participant = rawParticipants.get(index) ?? {};
+    participant[field] = value;
+    rawParticipants.set(index, participant);
+  }
+
+  const indexes = [...rawParticipants.keys()].sort((left, right) => left - right);
+  if (indexes.some((index, position) => index !== position)) {
+    errors.participants = ["The submitted speakers are out of sequence."];
+  }
+  if (indexes.length < minimum || indexes.length > maximum) {
+    errors.participants = [`Add between ${minimum} and ${maximum} speakers.`];
+  }
+
+  const speakerSchema = z.object({
+    givenName: z.string().trim().min(1, "Enter a first name."),
+    familyName: z.string().trim().min(1, "Enter a last name."),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(z.email({ message: "Enter a valid email address." })),
+    phone: requiredFields.has("contact")
+      ? z.string().trim().min(1, "Enter a contact phone number.")
+      : z.string().optional(),
+    biography: requiredFields.has("biography") ? z.string().trim().min(1, "Enter a biography.") : z.string().optional(),
+    consent: requiredFields.has("consent") ? z.literal("on", { error: "Consent is required." }) : z.string().optional(),
+  });
+  const participants: CfpSubmissionParticipantInput[] = [];
+  const participantIndexes: number[] = [];
+  for (const index of indexes) {
+    const raw = rawParticipants.get(index) ?? {};
+    const parsed = speakerSchema.safeParse(raw);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        const field = String(issue.path[0] ?? "participant");
+        const errorKey = `speaker.${index}.${field}`;
+        errors[errorKey] = [...(errors[errorKey] ?? []), issue.message];
+      }
+      continue;
+    }
+    participantIndexes.push(index);
+    participants.push({
+      email: parsed.data.email,
+      givenName: parsed.data.givenName,
+      familyName: parsed.data.familyName,
+      ...(requiredFields.has("contact") ? { phone: parsed.data.phone } : {}),
+      ...(requiredFields.has("biography") ? { biography: parsed.data.biography } : {}),
+      ...(requiredFields.has("consent") ? { consent: true } : {}),
+    });
+  }
+  const emails = participants.map(({ email }) => email);
+  if (new Set(emails).size !== emails.length) {
+    emails.forEach((email, position) => {
+      if (emails.indexOf(email) !== position) {
+        errors[`speaker.${participantIndexes[position]}.email`] = ["Each speaker needs a unique email."];
+      }
+    });
+  }
+  return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, participants };
+}
+
 export async function submitPublicCfpForm(
   publicId: string,
   _previousState: PublicCfpFormActionState,
@@ -39,13 +140,18 @@ export async function submitPublicCfpForm(
     return { status: "error", message: "This CFP is no longer accepting responses. Refresh the page to continue." };
   }
   const validation = validateCfpAnswers(lookup.form.definition, valuesFromFormData(lookup.form.definition, formData));
+  const speakers = speakerValuesFromFormData(lookup.form.definition, formData);
   const consentErrors: Readonly<Record<string, readonly string[]>> =
     lookup.form.consentRequired && formData.get("consent") === null ? { consent: ["Consent is required."] } : {};
-  if (!validation.ok || Object.keys(consentErrors).length > 0) {
+  if (!validation.ok || !speakers.ok || Object.keys(consentErrors).length > 0) {
     return {
       status: "error",
       message: "Review the form and fix the highlighted questions.",
-      errors: { ...(validation.ok ? {} : validation.errors), ...consentErrors },
+      errors: {
+        ...(validation.ok ? {} : validation.errors),
+        ...(speakers.ok ? {} : speakers.errors),
+        ...consentErrors,
+      },
     };
   }
 
@@ -65,6 +171,7 @@ export async function submitPublicCfpForm(
       kind: lookup.form.definition.submissionKind ?? "ABSTRACT",
       answers: validation.answers,
       categoryIds,
+      participants: speakers.participants,
     });
     return {
       status: "success",

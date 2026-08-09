@@ -12,7 +12,7 @@ import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
 import { CfpFormRepository } from "./repositories.ts";
-import { CfpCategoryRepository, CfpSubmissionRepository } from "./submissions.ts";
+import { CfpCategoryRepository, type CfpSubmissionParticipantInput, CfpSubmissionRepository } from "./submissions.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -155,6 +155,86 @@ describe("CFP submission persistence", () => {
       }),
       1,
     );
+  });
+
+  test("creates ordered speaker profiles atomically within the published speaker contract", async () => {
+    const event = await events.create({ ...eventInput, slug: "public-speaker-contract" });
+    const form = await forms.create({
+      eventId: event.id,
+      key: "speaker-cfp",
+      definition: {
+        ...definition(),
+        minimumSpeakerCount: 1,
+        maximumSpeakerCount: 2,
+        requiredSpeakerFields: ["biography", "contact", "consent"],
+      },
+    });
+    const version = await client.cfpFormVersion.findUniqueOrThrow({
+      where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
+    });
+    const participant = {
+      email: "alex@example.test",
+      givenName: "Alex",
+      familyName: "Rivera",
+      phone: "+1 555 0100",
+      biography: "Designs cooperative games.",
+      consent: true,
+    } as const;
+
+    const draft = await submissions.createDraft({
+      eventId: event.id,
+      formVersionId: version.id,
+      kind: CfpSubmissionKind.ABSTRACT,
+      answers: [],
+      participants: [participant, { ...participant, email: "sam@example.test", givenName: "Sam" }],
+    });
+    const persisted = await speakers.listSubmissionParticipants(event.id, draft.id);
+
+    assert.deepEqual(
+      persisted.map(({ sortOrder, speaker }) => [sortOrder, speaker.profile.email, speaker.profile.givenName]),
+      [
+        [0, "alex@example.test", "Alex"],
+        [1, "sam@example.test", "Sam"],
+      ],
+    );
+    assert.equal(persisted[0]?.speaker.profile.biography, "Designs cooperative games.");
+    assert.equal(persisted[0]?.speaker.profile.consentToPublishProfile, true);
+    assert.ok(persisted[0]?.speaker.profile.consentedAt);
+
+    await expectRepositoryError(
+      submissions.createDraft({
+        eventId: event.id,
+        formVersionId: version.id,
+        kind: CfpSubmissionKind.ABSTRACT,
+        answers: [],
+        participants: [],
+      }),
+      "invalid-input",
+    );
+    await expectRepositoryError(
+      submissions.createDraft({
+        eventId: event.id,
+        formVersionId: version.id,
+        kind: CfpSubmissionKind.ABSTRACT,
+        answers: [],
+        participants: [participant, { ...participant, email: " ALEX@EXAMPLE.TEST " }],
+      }),
+      "invalid-input",
+    );
+    await expectRepositoryError(
+      submissions.createDraft({
+        eventId: event.id,
+        formVersionId: version.id,
+        kind: CfpSubmissionKind.ABSTRACT,
+        answers: [],
+        participants: [
+          { ...participant, websiteUrl: "https://example.test" } as unknown as CfpSubmissionParticipantInput,
+        ],
+      }),
+      "invalid-input",
+    );
+    assert.equal(await client.cfpSubmission.count({ where: { eventId: event.id } }), 1);
+    assert.equal(await client.speaker.count({ where: { eventId: event.id } }), 2);
   });
 
   test("audits the allowed review outcomes and reserves confirmation for the speaker path", async () => {

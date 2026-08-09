@@ -9,6 +9,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { type SpeakerProfileInput, validateSpeakerProfileInput } from "../speakers/repositories.ts";
 import { cfpDefinitionInputFromStored } from "./definition.ts";
 
 export interface CreateCfpCategoryInput {
@@ -23,12 +24,22 @@ export interface CfpSubmissionAnswerInput {
   readonly value: unknown;
 }
 
+export interface CfpSubmissionParticipantInput {
+  readonly email: string;
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly phone?: string;
+  readonly biography?: string;
+  readonly consent?: boolean;
+}
+
 export interface CreateCfpSubmissionDraftInput {
   readonly eventId: string;
   readonly formVersionId: string;
   readonly kind: CfpSubmissionKind;
   readonly answers: readonly CfpSubmissionAnswerInput[];
   readonly categoryIds?: readonly string[];
+  readonly participants?: readonly CfpSubmissionParticipantInput[];
 }
 
 export interface SaveCfpSubmissionDraftInput {
@@ -389,6 +400,58 @@ function answerData(answers: readonly CfpSubmissionAnswerInput[], definition: Cf
   });
 }
 
+function participantData(
+  participants: readonly CfpSubmissionParticipantInput[] | undefined,
+  definition: CfpFormDefinition,
+): readonly ReturnType<typeof validateSpeakerProfileInput>[] {
+  if (participants === undefined) return [];
+  const minimum = definition.minimumSpeakerCount;
+  const maximum = definition.maximumSpeakerCount;
+  if (minimum === undefined || maximum === undefined) {
+    if (participants.length > 0) invalid("The published form does not accept speaker fields.");
+    return [];
+  }
+  if (participants.length < minimum || participants.length > maximum) {
+    invalid(`participants must contain between ${minimum} and ${maximum} speakers.`);
+  }
+
+  const requiredFields = new Set(definition.requiredSpeakerFields ?? []);
+  const allowedFields = new Set(["email", "givenName", "familyName"]);
+  if (requiredFields.has("contact")) allowedFields.add("phone");
+  if (requiredFields.has("biography")) allowedFields.add("biography");
+  if (requiredFields.has("consent")) allowedFields.add("consent");
+
+  const now = new Date();
+  const profiles = participants.map((participant, index) => {
+    const unsupportedField = Object.keys(participant).find((field) => !allowedFields.has(field));
+    if (unsupportedField) invalid(`participants.${index}.${unsupportedField} is not present in the published form.`);
+    if (requiredFields.has("contact") && !participant.phone?.trim()) {
+      invalid(`participants.${index}.phone is required.`);
+    }
+    if (requiredFields.has("biography") && !participant.biography?.trim()) {
+      invalid(`participants.${index}.biography is required.`);
+    }
+    if (requiredFields.has("consent") && participant.consent !== true) {
+      invalid(`participants.${index}.consent is required.`);
+    }
+    const profile: SpeakerProfileInput = {
+      email: participant.email,
+      givenName: participant.givenName,
+      familyName: participant.familyName,
+      ...(requiredFields.has("contact") ? { phone: participant.phone } : {}),
+      ...(requiredFields.has("biography") ? { biography: participant.biography } : {}),
+      ...(requiredFields.has("consent")
+        ? { consentToPublishProfile: true, consentToReceiveEmail: true, consentedAt: now }
+        : {}),
+    };
+    return validateSpeakerProfileInput(profile);
+  });
+  if (new Set(profiles.map(({ email }) => email)).size !== profiles.length) {
+    invalid("participants must contain unique email addresses.");
+  }
+  return profiles;
+}
+
 async function requireCategories(
   transaction: Prisma.TransactionClient,
   eventId: string,
@@ -523,8 +586,34 @@ export class CfpSubmissionRepository {
         });
         if (!formVersion) throw new RepositoryError("not-found", "The event-owned CFP form version was not found.");
         const definition = definitionFromStored(formVersion);
+        const participantProfiles = participantData(input.participants, definition);
         const categoryIds = input.categoryIds ?? [];
         await requireCategories(transaction, input.eventId, categoryIds);
+        const speakerIds: string[] = [];
+        for (const profile of participantProfiles) {
+          const existing = await transaction.speaker.findUnique({
+            where: { eventId_normalizedEmail: { eventId: input.eventId, normalizedEmail: profile.email } },
+            include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+          });
+          if (existing) {
+            const latestVersion = existing.profileVersions[0]?.versionNumber ?? 0;
+            await transaction.speaker.update({
+              where: { id: existing.id },
+              data: { profileVersions: { create: { versionNumber: latestVersion + 1, ...profile } } },
+            });
+            speakerIds.push(existing.id);
+          } else {
+            const speaker = await transaction.speaker.create({
+              data: {
+                eventId: input.eventId,
+                normalizedEmail: profile.email,
+                profileVersions: { create: { versionNumber: 1, ...profile } },
+              },
+              select: { id: true },
+            });
+            speakerIds.push(speaker.id);
+          }
+        }
         const submission = await transaction.cfpSubmission.create({
           data: {
             eventId: input.eventId,
@@ -532,6 +621,9 @@ export class CfpSubmissionRepository {
             kind: input.kind,
             categories: {
               create: categoryIds.map((categoryId, sortOrder) => ({ categoryId, sortOrder })),
+            },
+            participants: {
+              create: speakerIds.map((speakerId, sortOrder) => ({ speakerId, sortOrder })),
             },
             revisions: {
               create: {
