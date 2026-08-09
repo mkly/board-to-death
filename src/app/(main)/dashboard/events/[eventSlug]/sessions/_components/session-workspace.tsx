@@ -406,7 +406,9 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
                         <div className="flex min-w-48 flex-col gap-1 whitespace-normal">
                           <span className="font-medium">{session.title}</span>
                           {session.parentSessionTitle ? (
-                            <span className="text-muted-foreground text-xs">Subsession of {session.parentSessionTitle}</span>
+                            <span className="text-muted-foreground text-xs">
+                              Subsession of {session.parentSessionTitle}
+                            </span>
                           ) : null}
                           <span className="text-muted-foreground text-xs">
                             {session.speakerNames.length === 0 ? "No participants" : session.speakerNames.join(", ")}

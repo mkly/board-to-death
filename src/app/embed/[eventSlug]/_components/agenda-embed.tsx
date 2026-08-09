@@ -93,34 +93,29 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
     () => [...new Set(placements.map((placement) => dayKey(placement.startsAt, event.timezone)))],
     [event.timezone, placements],
   );
-  const visiblePlacements = useMemo(
-    () => {
-      const filtered = placements.filter(
-        (placement) =>
-          (!enabledFilters.has("search") || search === "" || matchesSearch(placement, search)) &&
-          (!enabledFilters.has("room") || roomId === "all" || placement.room.id === roomId) &&
-          (!enabledFilters.has("track") ||
-            trackId === "all" ||
-            placement.tracks.some((track) => track.id === trackId)) &&
-          (!enabledFilters.has("day") || day === "all" || dayKey(placement.startsAt, event.timezone) === day),
+  const visiblePlacements = useMemo(() => {
+    const filtered = placements.filter(
+      (placement) =>
+        (!enabledFilters.has("search") || search === "" || matchesSearch(placement, search)) &&
+        (!enabledFilters.has("room") || roomId === "all" || placement.room.id === roomId) &&
+        (!enabledFilters.has("track") || trackId === "all" || placement.tracks.some((track) => track.id === trackId)) &&
+        (!enabledFilters.has("day") || day === "all" || dayKey(placement.startsAt, event.timezone) === day),
+    );
+    const bySessionId = new Map(filtered.map((placement) => [placement.sessionId, placement]));
+    return filtered.toSorted((left, right) => {
+      const leftRoot =
+        left.parentSessionId && bySessionId.has(left.parentSessionId) ? left.parentSessionId : left.sessionId;
+      const rightRoot =
+        right.parentSessionId && bySessionId.has(right.parentSessionId) ? right.parentSessionId : right.sessionId;
+      const rootTime = (bySessionId.get(leftRoot)?.startsAt ?? left.startsAt).localeCompare(
+        bySessionId.get(rightRoot)?.startsAt ?? right.startsAt,
       );
-      const bySessionId = new Map(filtered.map((placement) => [placement.sessionId, placement]));
-      return filtered.toSorted((left, right) => {
-        const leftRoot = left.parentSessionId && bySessionId.has(left.parentSessionId) ? left.parentSessionId : left.sessionId;
-        const rightRoot =
-          right.parentSessionId && bySessionId.has(right.parentSessionId) ? right.parentSessionId : right.sessionId;
-        const rootTime =
-          (bySessionId.get(leftRoot)?.startsAt ?? left.startsAt).localeCompare(
-            bySessionId.get(rightRoot)?.startsAt ?? right.startsAt,
-          );
-        if (rootTime !== 0) return rootTime;
-        if (left.parentSessionId === null) return -1;
-        if (right.parentSessionId === null) return 1;
-        return left.startsAt.localeCompare(right.startsAt);
-      });
-    },
-    [day, enabledFilters, event.timezone, placements, roomId, search, trackId],
-  );
+      if (rootTime !== 0) return rootTime;
+      if (left.parentSessionId === null) return -1;
+      if (right.parentSessionId === null) return 1;
+      return left.startsAt.localeCompare(right.startsAt);
+    });
+  }, [day, enabledFilters, event.timezone, placements, roomId, search, trackId]);
   const groupedPlacements = useMemo(
     () =>
       visiblePlacements.reduce<Map<string, AgendaEmbedPlacement[]>>((groups, placement) => {

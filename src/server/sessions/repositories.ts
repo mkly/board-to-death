@@ -252,7 +252,8 @@ export class ProgramSessionRepository {
           });
         }
         await this.createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
-        if (parentSessionId) await this.attachParticipantsToParent(transaction, eventId, parentSessionId, version.speakerIds);
+        if (parentSessionId)
+          await this.attachParticipantsToParent(transaction, eventId, parentSessionId, version.speakerIds);
       });
       return await this.require(eventId, sessionId);
     } catch (error) {
@@ -404,7 +405,8 @@ export class ProgramSessionRepository {
       if (
         childPlacement &&
         parent.agendaPlacement &&
-        (childPlacement.startsAt < parent.agendaPlacement.startsAt || childPlacement.endsAt > parent.agendaPlacement.endsAt)
+        (childPlacement.startsAt < parent.agendaPlacement.startsAt ||
+          childPlacement.endsAt > parent.agendaPlacement.endsAt)
       ) {
         invalid("The existing placement must fit inside the parent session window.");
       }
