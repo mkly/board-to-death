@@ -214,17 +214,16 @@ export class EvaluationResultsRepository {
       };
     });
 
+    const comparableAverages = mapped.flatMap(({ weightedAverage }) =>
+      weightedAverage === null ? [] : [weightedAverage],
+    );
     const ranked = mapped.map((submission): EvaluationSubmissionResult => {
       if (submission.weightedAverage === null) return submission;
       const submissionAverage = submission.weightedAverage;
-      const comparable = mapped.filter((candidate) => candidate.weightedAverage !== null);
       return {
         ...submission,
-        rank:
-          1 +
-          comparable.filter((candidate) => (candidate.weightedAverage ?? Number.NEGATIVE_INFINITY) > submissionAverage)
-            .length,
-        tied: comparable.filter((candidate) => candidate.weightedAverage === submissionAverage).length > 1,
+        rank: 1 + comparableAverages.filter((average) => average > submissionAverage).length,
+        tied: comparableAverages.filter((average) => average === submissionAverage).length > 1,
       };
     });
 
