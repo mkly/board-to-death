@@ -274,6 +274,27 @@ describe("program session persistence", () => {
     await expectRepositoryError(sessions.update(eventId, session.id, { title: "Resurrected" }), "invalid-input");
   });
 
+  test("clones a session as a distinguishable unscheduled manual session", async () => {
+    const eventId = await createEvent("cloned-session");
+    const speaker = await createSpeaker(eventId, "clone@example.test", "Clone");
+    const source = await sessions.createGuaranteed({
+      eventId,
+      title: "Opening Keynote",
+      description: "Original details",
+      durationMinutes: 45,
+      participants: [{ speakerId: speaker.id, role: ProgramSessionParticipantRole.CHAIRPERSON }],
+    });
+
+    const clone = await sessions.clone(eventId, source.id);
+
+    assert.equal(clone.kind, ProgramSessionKind.MANUAL);
+    assert.equal(clone.sourceSubmissionId, null);
+    assert.equal(clone.version.title, "Opening Keynote (copy)");
+    assert.equal(clone.version.description, source.version.description);
+    assert.deepEqual(clone.version.participants, source.version.participants);
+    assert.equal(await client.agendaPlacement.count({ where: { eventId, sessionId: clone.id } }), 0);
+  });
+
   test("rejects source submissions, speakers, and tracks from another event", async () => {
     const eventId = await createEvent("session-event");
     const otherEventId = await createEvent("other-session-event");

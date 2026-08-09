@@ -146,7 +146,7 @@ async function requireVersionReferences(
   version: ValidatedVersion,
 ): Promise<void> {
   const [event, speakerCount, categoryCount, trackCount] = await Promise.all([
-    transaction.event.findUnique({ where: { id: eventId }, select: { id: true } }),
+    transaction.event.findUnique({ where: { id: eventId }, select: { id: true, archivedAt: true } }),
     transaction.speaker.count({
       where: { eventId, id: { in: version.participants.map(({ speakerId }) => speakerId) } },
     }),
@@ -158,6 +158,7 @@ async function requireVersionReferences(
       : transaction.track.count({ where: { eventId, id: version.trackId } }),
   ]);
   if (!event) throw new RepositoryError("not-found", "The event was not found.");
+  if (event.archivedAt !== null) invalid("An archived event is read-only. Restore it before editing.");
   if (speakerCount !== version.participants.length) {
     throw new RepositoryError("not-found", "Every participant must be a speaker in the session event.");
   }
@@ -423,6 +424,45 @@ export class ProgramSessionRepository {
           await this.attachParticipantsToParent(transaction, eventId, parentSessionId, version.participants);
       });
       return await this.require(eventId, sessionId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async clone(eventId: string, sessionId: string): Promise<PersistedProgramSession> {
+    try {
+      const clonedId = await this.client.$transaction(async (transaction) => {
+        const source = await transaction.programSession.findFirst({
+          where: { eventId, id: sessionId },
+          include: {
+            versions: {
+              orderBy: { versionNumber: "desc" },
+              take: 1,
+              include: { participants: { orderBy: { sortOrder: "asc" } } },
+            },
+          },
+        });
+        const sourceVersion = source?.versions[0];
+        if (!source || !sourceVersion) {
+          throw new RepositoryError("not-found", "The event-owned session was not found.");
+        }
+        const version = validateVersion({
+          title: `${sourceVersion.title} (copy)`,
+          description: sourceVersion.description,
+          durationMinutes: sourceVersion.durationMinutes,
+          categoryId: sourceVersion.categoryId,
+          trackId: sourceVersion.trackId,
+          participants: sourceVersion.participants.map(({ speakerId, role }) => ({ speakerId, role })),
+        });
+        await requireVersionReferences(transaction, eventId, version);
+        const clone = await transaction.programSession.create({
+          data: { eventId, kind: ProgramSessionKind.MANUAL },
+          select: { id: true },
+        });
+        await createVersion(transaction, eventId, clone.id, 1, version);
+        return clone.id;
+      });
+      return await this.require(eventId, clonedId);
     } catch (error) {
       return mapDatabaseError(error);
     }

@@ -362,6 +362,8 @@ model Event {
   sponsorsEnabled           Boolean                    @default(false)
   logoObjectKey             String?
   backgroundObjectKey       String?
+  archivedAt                DateTime?                  @db.Timestamptz(3)
+  clonedFromEventId         String?                    @db.Uuid
   createdAt                 DateTime                   @default(now()) @db.Timestamptz(3)
   updatedAt                 DateTime                   @updatedAt @db.Timestamptz(3)
   rooms                     Room[]
@@ -398,7 +400,11 @@ model Event {
   assignedSpeakerProspects  SpeakerProspect[]          @relation("SpeakerProspectAssignedEvent")
   speakerProspectActivities SpeakerProspectActivity[]
   savedReports              SavedReport[]
+  clonedFromEvent           Event?                     @relation("EventClones", fields: [clonedFromEventId], references: [id], onDelete: SetNull)
+  clones                    Event[]                    @relation("EventClones")
 
+  @@index([archivedAt, startsAt])
+  @@index([clonedFromEventId])
   @@map("events")
 }
 

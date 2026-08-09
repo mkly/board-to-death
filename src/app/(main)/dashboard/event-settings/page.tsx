@@ -15,8 +15,11 @@ export default async function Page({ searchParams }: PageProps) {
   const database = getDatabaseClient();
   const events = new EventRepository(database);
   const eventOptions = (
-    await database.event.findMany({ orderBy: { startsAt: "asc" }, select: { id: true, name: true } })
-  ).map(({ id, name }) => ({ id, name }));
+    await database.event.findMany({
+      orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { startsAt: "asc" }],
+      select: { id: true, name: true, archivedAt: true },
+    })
+  ).map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt !== null }));
   const requestedEventId = (await searchParams).event;
   const eventId = eventOptions.some(({ id }) => id === requestedEventId) ? requestedEventId : eventOptions[0]?.id;
 
@@ -29,7 +32,12 @@ export default async function Page({ searchParams }: PageProps) {
     ]);
     if (event) {
       initialSnapshot = {
-        event: { ...event, startsAt: event.startsAt.toISOString(), endsAt: event.endsAt.toISOString() },
+        event: {
+          ...event,
+          startsAt: event.startsAt.toISOString(),
+          endsAt: event.endsAt.toISOString(),
+          archivedAt: event.archivedAt?.toISOString() ?? null,
+        },
         rooms: rooms.map(({ id, name, sortOrder }) => ({ id, name, sortOrder })),
         tracks: tracks.map(({ id, name, color, sortOrder }) => ({ id, name, color, sortOrder })),
       };

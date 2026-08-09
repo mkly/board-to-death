@@ -15,6 +15,7 @@ export interface EventSettingsEvent {
   readonly sponsorsEnabled: boolean;
   readonly logoObjectKey: string | null;
   readonly backgroundObjectKey: string | null;
+  readonly archivedAt: string | null;
 }
 
 export interface EventSettingsRoom {
@@ -36,6 +37,7 @@ export interface EventSettingsSnapshot {
 export interface EventOption {
   readonly id: string;
   readonly name: string;
+  readonly archived: boolean;
 }
 
 export interface MutationResult {
