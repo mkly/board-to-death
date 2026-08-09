@@ -66,13 +66,13 @@ async function publishedSpeakerList(
 
   const { snapshot } = publication.version;
   const sessionsBySpeaker = new Map<string, { readonly id: string; readonly title: string; readonly href: string }[]>();
+  const query = serializeEmbedConfiguration({
+    kind: "session-list",
+    theme: configuration.theme,
+    density: configuration.density,
+    filters: ["search", "track"],
+  });
   for (const session of snapshot.sessions) {
-    const query = serializeEmbedConfiguration({
-      kind: "session-list",
-      theme: configuration.theme,
-      density: configuration.density,
-      filters: ["search", "track"],
-    });
     const linkedSession = {
       id: session.id,
       title: session.title,

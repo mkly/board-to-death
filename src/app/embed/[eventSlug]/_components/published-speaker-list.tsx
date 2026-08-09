@@ -120,14 +120,18 @@ export function PublishedSpeakerList({ density, enabledFilters, eventName, speak
         </FieldGroup>
       ) : null}
 
+      <p aria-live="polite" className="sr-only" role="status">
+        {visibleSpeakers.length === 1 ? "1 speaker shown" : `${visibleSpeakers.length} speakers shown`}
+      </p>
+
       {visibleSpeakers.length > 0 ? (
-        <ul aria-live="polite" className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-3">
           {visibleSpeakers.map((speaker) => (
             <li key={speaker.id}>
               <Card size={density === "compact" ? "sm" : "default"}>
                 <CardHeader className="grid grid-cols-[auto_1fr] gap-x-3">
-                  <Avatar aria-label={`${speaker.name} profile image`} className="row-span-2" size="lg">
-                    <AvatarFallback>{speaker.initials}</AvatarFallback>
+                  <Avatar aria-label={`${speaker.name} profile image`} className="row-span-2" role="img" size="lg">
+                    <AvatarFallback aria-hidden="true">{speaker.initials}</AvatarFallback>
                   </Avatar>
                   <CardTitle className="min-w-0 break-words">{speaker.name}</CardTitle>
                   <CardDescription className="min-w-0 break-words">
