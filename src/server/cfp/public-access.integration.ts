@@ -1,11 +1,17 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { CfpAdminRole, CfpDraftPolicy, CfpPolicyStatus, EventType, PrismaClient } from "../../generated/prisma/client.ts";
+import {
+  CfpAdminRole,
+  CfpDraftPolicy,
+  CfpPolicyStatus,
+  EventType,
+  PrismaClient,
+} from "../../generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { EventRepository } from "../events/repositories.ts";
 import { CfpAdministratorRepository, type CfpPolicyDefinition, CfpPolicyRepository } from "./policies.ts";
-import { CfpFormRepository } from "./repositories.ts";
 import { CfpPublicAccessRepository } from "./public-access.ts";
+import { CfpFormRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -57,7 +63,12 @@ function policyDefinition(
     conditionalVisibility: [],
     categoryRouting: [],
     adminAssignments: [
-      { administratorId: ownerId, role: CfpAdminRole.OWNER, notifyOnNewSubmission: true, notifyOnSubmissionUpdate: true },
+      {
+        administratorId: ownerId,
+        role: CfpAdminRole.OWNER,
+        notifyOnNewSubmission: true,
+        notifyOnSubmissionUpdate: true,
+      },
     ],
   };
 }
@@ -68,7 +79,11 @@ async function setup(
 ) {
   const event = await events.create({ ...eventInput, slug, name: slug });
   const form = await forms.create({ eventId: event.id, key: "main-cfp", definition: formDefinition() });
-  const owner = await administrators.create({ eventId: event.id, externalId: "owner@example.com", displayName: "Owner" });
+  const owner = await administrators.create({
+    eventId: event.id,
+    externalId: "owner@example.com",
+    displayName: "Owner",
+  });
   const created = await policies.create({
     eventId: event.id,
     key: "main-cfp",

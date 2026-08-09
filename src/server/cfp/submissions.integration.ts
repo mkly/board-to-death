@@ -86,7 +86,12 @@ function policyDefinition(ownerId: string, maxSubmissionsPerSpeaker: number): Cf
     conditionalVisibility: [],
     categoryRouting: [],
     adminAssignments: [
-      { administratorId: ownerId, role: CfpAdminRole.OWNER, notifyOnNewSubmission: true, notifyOnSubmissionUpdate: true },
+      {
+        administratorId: ownerId,
+        role: CfpAdminRole.OWNER,
+        notifyOnNewSubmission: true,
+        notifyOnSubmissionUpdate: true,
+      },
     ],
   };
 }
@@ -235,7 +240,7 @@ describe("CFP submission persistence", () => {
     await policies.create({
       eventId: event.id,
       key: "speaker-cfp",
-      definition: policyDefinition(owner.id, 1),
+      definition: policyDefinition(owner.id, 2),
     });
     const participant = { email: "concurrent@example.test", givenName: "Con", familyName: "Current" } as const;
     const buildInput = (label: string) =>
@@ -251,6 +256,13 @@ describe("CFP submission persistence", () => {
         participants: [participant],
       }) as const;
 
+    // Seed the speaker's first submission sequentially so the racing pair both
+    // resolve an existing speaker row. Without it the two transactions collide
+    // on the speaker's unique event-scoped email and the loser fails with the
+    // same "conflict" code the limit check raises, which would let this test
+    // pass with the limit enforcement removed entirely.
+    await submissions.createFinalized(buildInput("Seed"));
+
     const results = await Promise.allSettled([
       submissions.createFinalized(buildInput("First")),
       submissions.createFinalized(buildInput("Second")),
@@ -260,11 +272,11 @@ describe("CFP submission persistence", () => {
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     assert.equal(fulfilled.length, 1);
     assert.equal(rejected.length, 1);
-    assert.ok(rejected[0]?.reason instanceof RepositoryError && rejected[0].reason.code === "conflict");
-    assert.equal(
-      await client.cfpSubmission.count({ where: { eventId: event.id, submittedAt: { not: null } } }),
-      1,
-    );
+    const reason: unknown = rejected[0]?.reason;
+    assert.ok(reason instanceof RepositoryError);
+    assert.equal(reason.code, "conflict");
+    assert.match(reason.message, /already reached the limit of 2 submissions/);
+    assert.equal(await client.cfpSubmission.count({ where: { eventId: event.id, submittedAt: { not: null } } }), 2);
   });
 
   test("rolls back public submission participants when finalization rejects a forged answer", async () => {

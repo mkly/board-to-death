@@ -483,10 +483,24 @@ async function currentSubmissionLimits(
 }
 
 /**
- * Locks are taken in sorted speaker-id order, before counting, so two
- * concurrent finalizations sharing a speaker serialize on that speaker
- * instead of both reading a stale count and both passing the check.
+ * Locks are taken in sorted participant-email order, before the speaker rows
+ * are read or written, so two concurrent finalizations sharing a participant
+ * serialize on that participant. Keying on the event-scoped email rather than
+ * the speaker id covers the speaker that does not exist yet: otherwise both
+ * transactions race to insert the same `eventId_normalizedEmail` row, or to
+ * append the same next profile version, and the loser fails with a generic
+ * unique-violation conflict before the limit check ever runs.
  */
+async function lockSubmissionParticipants(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  emails: readonly string[],
+): Promise<void> {
+  for (const email of [...new Set(emails)].sort()) {
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${eventId}:${email}`}))`;
+  }
+}
+
 async function enforceSubmissionLimitPerSpeaker(
   transaction: Prisma.TransactionClient,
   formId: string,
@@ -495,9 +509,6 @@ async function enforceSubmissionLimitPerSpeaker(
 ): Promise<void> {
   const uniqueSpeakerIds = [...new Set(speakerIds)].sort();
   if (uniqueSpeakerIds.length === 0) return;
-  for (const speakerId of uniqueSpeakerIds) {
-    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${speakerId}))`;
-  }
   const counts = await transaction.cfpSubmissionParticipant.groupBy({
     by: ["speakerId"],
     where: {
@@ -535,6 +546,13 @@ async function createSubmission(
   const submissionLimits = await currentSubmissionLimits(transaction, input.eventId, formVersion.form.key);
   if (submissionLimits && participantProfiles.length > submissionLimits.maxParticipantsPerSubmission) {
     invalid(`Add at most ${submissionLimits.maxParticipantsPerSubmission} speakers to this submission.`);
+  }
+  if (options.finalized) {
+    await lockSubmissionParticipants(
+      transaction,
+      input.eventId,
+      participantProfiles.map(({ email }) => email),
+    );
   }
   const speakerIds: string[] = [];
   for (const profile of participantProfiles) {
