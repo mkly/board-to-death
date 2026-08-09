@@ -142,7 +142,7 @@ describe("agenda placement persistence", () => {
 
   test("constrains subsessions to the parent placement window and permits their intentional overlap", async () => {
     const fixture = await createFixture("subsession-window");
-    await placements.place({
+    const parent = await placements.place({
       eventId: fixture.event.id,
       sessionId: fixture.session.id,
       startsAt: new Date("2027-03-13T18:00:00.000Z"),
@@ -175,6 +175,19 @@ describe("agenda placement persistence", () => {
       }),
       "invalid-input",
     );
+    await expectRepositoryError(
+      placements.update(fixture.event.id, parent.id, {
+        expectedVersion: parent.version,
+        startsAt: new Date("2027-03-13T18:00:00.000Z"),
+        durationMinutes: 15,
+      }),
+      "invalid-input",
+    );
+    await expectRepositoryError(placements.remove(fixture.event.id, parent.id, parent.version), "invalid-input");
+
+    await placements.remove(fixture.event.id, nested.id, nested.version);
+    await placements.remove(fixture.event.id, parent.id, parent.version);
+    assert.equal(await placements.get(fixture.event.id, parent.id), null);
   });
 
   test("updates repeatedly, preserves omitted values, removes placements, and rejects stale writes", async () => {

@@ -144,6 +144,10 @@ async function requirePlacementReferences(
   const speakerCount = await transaction.speaker.count({
     where: { eventId, id: { in: [...placement.speakerIds] } },
   });
+  const subsessionPlacements = await transaction.agendaPlacement.findMany({
+    where: { eventId, session: { parentSessionId: sessionId, archivedAt: null } },
+    select: { startsAt: true, endsAt: true },
+  });
   if (!event) throw new RepositoryError("not-found", "The event was not found.");
   if (!session) throw new RepositoryError("not-found", "The active event-owned session was not found.");
   if (!room) throw new RepositoryError("not-found", "The event-owned room was not found.");
@@ -162,6 +166,9 @@ async function requirePlacementReferences(
     if (placement.startsAt < parentPlacement.startsAt || placement.endsAt > parentPlacement.endsAt) {
       invalid("A subsession placement must stay within its parent session window.");
     }
+  }
+  if (subsessionPlacements.some((child) => child.startsAt < placement.startsAt || child.endsAt > placement.endsAt)) {
+    invalid("This placement must still contain every scheduled subsession of its session.");
   }
   return event;
 }
@@ -350,9 +357,15 @@ export class AgendaPlacementRepository {
       invalid("expectedVersion must be a positive integer.");
     const existing = await this.client.agendaPlacement.findFirst({
       where: { eventId, id: placementId },
-      select: { id: true },
+      select: { id: true, sessionId: true },
     });
     if (!existing) throw new RepositoryError("not-found", "The event-owned agenda placement was not found.");
+    const placedSubsessions = await this.client.agendaPlacement.count({
+      where: { eventId, session: { parentSessionId: existing.sessionId, archivedAt: null } },
+    });
+    if (placedSubsessions > 0) {
+      invalid("Remove this session's subsession placements before removing its own.");
+    }
     const removed = await this.client.agendaPlacement.deleteMany({
       where: { eventId, id: placementId, version: expectedVersion },
     });
