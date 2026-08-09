@@ -4,13 +4,16 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
+import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
+import { CfpAdminRole } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
+import { validateCfpMessageSettings } from "@/lib/cfp/messages";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
-import { CfpFormRepository } from "@/server/cfp/repositories";
+import { CfpFormRepository, type PersistedCfpFormDefinition } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 
@@ -76,6 +79,27 @@ export interface SaveCfpSetupState {
   readonly message?: string;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
 }
+
+export interface SaveCfpAdministratorsState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+const administratorSettingsSchema = z
+  .object({
+    administratorIds: z.array(z.string().uuid()).min(1, "Assign at least one administrator."),
+    newSubmissionAdministratorIds: z.array(z.string().uuid()),
+    submissionUpdateAdministratorIds: z.array(z.string().uuid()),
+  })
+  .superRefine((input, context) => {
+    const assigned = new Set(input.administratorIds);
+    for (const administratorId of [...input.newSubmissionAdministratorIds, ...input.submissionUpdateAdministratorIds]) {
+      if (!assigned.has(administratorId)) {
+        context.addIssue({ code: "custom", message: "Alert recipients must also be assigned administrators." });
+        break;
+      }
+    }
+  });
 
 function value(formData: FormData, name: string): string {
   const result = formData.get(name);
@@ -194,6 +218,12 @@ export async function saveCfpSetupStep(
   }
 }
 
+export interface SaveCfpMessageSettingsState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly errors?: Readonly<Record<string, readonly string[]>>;
+}
+
 export interface SaveCfpPolicySettingsState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
@@ -275,7 +305,14 @@ export async function saveCfpPolicySettings(
           },
           conditionalVisibility: [],
           categoryRouting: [],
-          adminAssignments: [{ administratorId: administrator.id, role: "OWNER" }],
+          adminAssignments: [
+            {
+              administratorId: administrator.id,
+              role: "OWNER",
+              notifyOnNewSubmission: false,
+              notifyOnSubmissionUpdate: false,
+            },
+          ],
         },
       });
     }
@@ -286,6 +323,173 @@ export async function saveCfpPolicySettings(
       status: "success",
       message: existing ? "Submission settings saved as a new version." : "Submission settings saved.",
     };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+function defaultPolicyDates(startsAt: Date, timezone: string): { opensAt: Date; closesAt: Date } {
+  const eventStart = Temporal.Instant.fromEpochMilliseconds(startsAt.getTime()).toZonedDateTimeISO(timezone);
+  return {
+    opensAt: new Date(eventStart.subtract({ days: 120 }).toInstant().epochMilliseconds),
+    closesAt: new Date(eventStart.subtract({ days: 60 }).toInstant().epochMilliseconds),
+  };
+}
+
+async function createPolicyForForm(
+  event: { readonly id: string; readonly startsAt: Date; readonly timezone: string },
+  form: PersistedCfpFormDefinition,
+  administratorId: string,
+  messages: {
+    readonly remindersEnabled: boolean;
+    readonly reminderDaysBeforeClose: number;
+    readonly reminderSendAtMinute: number;
+    readonly submissionConfirmation: string;
+    readonly thankYou: string;
+  },
+): Promise<void> {
+  const dates = defaultPolicyDates(event.startsAt, event.timezone);
+  await new CfpPolicyRepository(getDatabaseClient()).create({
+    eventId: event.id,
+    key: form.key,
+    definition: {
+      submissionOpensAt: dates.opensAt,
+      submissionClosesAt: dates.closesAt,
+      confirmationClosesAt: null,
+      draftPolicy: "ALLOWED",
+      submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+      messages: {
+        introduction: form.definition.description ?? `Submit a proposal for ${form.definition.title}.`,
+        submissionConfirmation: messages.submissionConfirmation,
+        closed: "This call for proposals is closed.",
+        thankYou: messages.thankYou,
+        reminder: {
+          enabled: messages.remindersEnabled,
+          daysBeforeClose: messages.reminderDaysBeforeClose,
+          sendAtMinute: messages.reminderSendAtMinute,
+        },
+      },
+      conditionalVisibility: [],
+      categoryRouting: [],
+      adminAssignments: [
+        { administratorId, role: "OWNER", notifyOnNewSubmission: false, notifyOnSubmissionUpdate: false },
+      ],
+    },
+  });
+}
+
+export async function saveCfpMessageSettings(
+  eventSlug: string,
+  formId: string,
+  _previousState: SaveCfpMessageSettingsState,
+  formData: FormData,
+): Promise<SaveCfpMessageSettingsState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!isAuthorizedAdminSession(session)) {
+    return { status: "error", message: "Your session expired. Sign in and try again." };
+  }
+
+  const validation = validateCfpMessageSettings({
+    remindersEnabled: value(formData, "remindersEnabled") === "true",
+    reminderDaysBeforeClose: value(formData, "reminderDaysBeforeClose"),
+    reminderSendAt: value(formData, "reminderSendAt"),
+    submissionConfirmation: value(formData, "submissionConfirmation"),
+    thankYou: value(formData, "thankYou"),
+  });
+  if (!validation.fields) {
+    return { status: "error", message: "Fix the highlighted message settings.", errors: validation.errors };
+  }
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, formId);
+  if (!form) notFound();
+
+  const policies = new CfpPolicyRepository(client);
+  try {
+    const existing = await policies.getByKey(event.id, form.key);
+    if (existing) {
+      await policies.createVersion(event.id, existing.id, {
+        ...existing.definition,
+        messages: {
+          ...existing.definition.messages,
+          submissionConfirmation: validation.fields.submissionConfirmation,
+          thankYou: validation.fields.thankYou,
+          reminder: {
+            enabled: validation.fields.remindersEnabled,
+            daysBeforeClose: validation.fields.reminderDaysBeforeClose,
+            sendAtMinute: validation.fields.reminderSendAtMinute,
+          },
+        },
+      });
+    } else {
+      const administrator = await new CfpAdministratorRepository(client).ensure({
+        eventId: event.id,
+        externalId: session.user.email,
+        displayName: session.user.name.trim() || session.user.email,
+      });
+      await createPolicyForForm(event, form, administrator.id, validation.fields);
+    }
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
+    return {
+      status: "success",
+      message: existing ? "Message settings saved as a new version." : "Message settings saved.",
+    };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+export async function saveCfpAdministrators(
+  eventSlug: string,
+  formId: string,
+  _previousState: SaveCfpAdministratorsState,
+  formData: FormData,
+): Promise<SaveCfpAdministratorsState> {
+  const validation = administratorSettingsSchema.safeParse({
+    administratorIds: formData.getAll("administratorIds"),
+    newSubmissionAdministratorIds: formData.getAll("newSubmissionAdministratorIds"),
+    submissionUpdateAdministratorIds: formData.getAll("submissionUpdateAdministratorIds"),
+  });
+  if (!validation.success) {
+    return { status: "error", message: validation.error.issues[0]?.message ?? "Review the administrator settings." };
+  }
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, formId);
+  if (!form) notFound();
+  const policies = new CfpPolicyRepository(client);
+  const policy = await policies.getByKey(event.id, form.key);
+  if (!policy) notFound();
+
+  const currentAssignments = new Map(
+    policy.definition.adminAssignments.map((assignment) => [assignment.administratorId, assignment]),
+  );
+  const notifyOnNewSubmission = new Set(validation.data.newSubmissionAdministratorIds);
+  const notifyOnSubmissionUpdate = new Set(validation.data.submissionUpdateAdministratorIds);
+
+  try {
+    await policies.updateAdministratorAssignments(
+      event.id,
+      policy.id,
+      shell.user.email.toLowerCase(),
+      validation.data.administratorIds.map((administratorId) => ({
+        administratorId,
+        role: currentAssignments.get(administratorId)?.role ?? CfpAdminRole.EDITOR,
+        notifyOnNewSubmission: notifyOnNewSubmission.has(administratorId),
+        notifyOnSubmissionUpdate: notifyOnSubmissionUpdate.has(administratorId),
+      })),
+    );
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
+    return { status: "success", message: "Administrator assignments and alert preferences saved." };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;

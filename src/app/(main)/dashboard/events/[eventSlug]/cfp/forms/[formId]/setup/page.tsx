@@ -5,8 +5,9 @@ import { ArrowLeft } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
 import { Button } from "@/components/ui/button";
+import { DEFAULT_REMINDER_DAYS, DEFAULT_REMINDER_SEND_AT_MINUTE, reminderTimeFromMinute } from "@/lib/cfp/messages";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
-import { CfpPolicyRepository } from "@/server/cfp/policies";
+import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -43,10 +44,17 @@ export default async function CfpFormSetupPage({
     redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "cfp") : "/dashboard");
   }
 
-  const database = getDatabaseClient();
-  const form = await new CfpFormRepository(database).get(event.id, formId);
+  const client = getDatabaseClient();
+  const [form, eventDetails] = await Promise.all([
+    new CfpFormRepository(client).get(event.id, formId),
+    client.event.findUnique({ where: { id: event.id }, select: { location: true } }),
+  ]);
   if (!form) notFound();
-  const policy = await new CfpPolicyRepository(database).getByKey(event.id, form.key);
+  const [eligibleAdministrators, policy] = await Promise.all([
+    new CfpAdministratorRepository(client).list(event.id),
+    new CfpPolicyRepository(client).getByKey(event.id, form.key),
+  ]);
+  const reminder = policy?.definition.messages.reminder;
   const initialSettings = policy
     ? {
         submissionOpensAt: localDateTime(policy.definition.submissionOpensAt, event.timezone),
@@ -62,6 +70,24 @@ export default async function CfpFormSetupPage({
         maxSubmissionsPerSpeaker: 3,
         maxParticipantsPerSubmission: 4,
       };
+  const assignments = new Map(
+    policy?.definition.adminAssignments.map((assignment) => [assignment.administratorId, assignment]) ?? [],
+  );
+  const currentAdministrator = eligibleAdministrators.find(
+    ({ externalId }) => externalId.toLowerCase() === shell.user.email.toLowerCase(),
+  );
+  const canManageAdministrators = assignments.get(currentAdministrator?.id ?? "")?.role === "OWNER";
+  const administrators = eligibleAdministrators.map(({ displayName, externalId, id }) => {
+    const assignment = assignments.get(id);
+    return {
+      id,
+      displayName,
+      externalId,
+      role: assignment?.role ?? null,
+      notifyOnNewSubmission: assignment?.notifyOnNewSubmission ?? false,
+      notifyOnSubmissionUpdate: assignment?.notifyOnSubmissionUpdate ?? false,
+    };
+  });
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
@@ -77,11 +103,34 @@ export default async function CfpFormSetupPage({
           {form.definition.title}
         </h1>
         <p className="max-w-2xl text-muted-foreground text-sm">
-          Configure applicant access, speaker requirements, welcome content, and consent terms. Each save creates a new
-          draft version.
+          Configure applicant access, speaker requirements, welcome content, consent terms, administrators, and alerts.
+          Each save creates a new draft version.
         </p>
       </header>
-      <CfpSetupWorkspace definition={form.definition} eventSlug={event.slug} formId={form.formId} />
+      <CfpSetupWorkspace
+        administrators={administrators}
+        canManageAdministrators={canManageAdministrators}
+        definition={form.definition}
+        event={{
+          name: event.name,
+          slug: event.slug,
+          startsAt: event.startsAt.toLocaleDateString("en-US", { dateStyle: "long", timeZone: event.timezone }),
+          location: eventDetails?.location ?? null,
+        }}
+        eventSlug={event.slug}
+        formId={form.formId}
+        initialMessageSettings={{
+          remindersEnabled: reminder?.enabled ?? false,
+          reminderDaysBeforeClose: reminder?.daysBeforeClose ?? DEFAULT_REMINDER_DAYS,
+          reminderSendAt: reminderTimeFromMinute(reminder?.sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE),
+          submissionConfirmation:
+            policy?.definition.messages.submissionConfirmation ??
+            "We received your proposal for **{{event.name}}**. A confirmation was sent to {{recipient.email}}.",
+          thankYou:
+            policy?.definition.messages.thankYou ??
+            "Thank you, {{recipient.name}}, for sharing your proposal with **{{event.name}}**.",
+        }}
+      />
       <CfpPolicySettings
         eventSlug={event.slug}
         formId={form.formId}

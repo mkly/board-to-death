@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
-import { ArrowRight, Check, FileText, Save, Settings2, Sparkles, UserRound } from "lucide-react";
+import { ArrowRight, Check, FileText, MailCheck, Save, Settings2, Sparkles, UserRound, UsersRound } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,10 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CfpFormDefinition } from "@/lib/cfp";
 
 import { type SaveCfpSetupState, saveCfpSetupStep } from "../actions";
+import { type CfpAdministratorSetting, CfpAdministratorSettings } from "./cfp-administrator-settings";
+import { CfpMessageSettings, type InitialCfpMessageSettings } from "./cfp-message-settings";
 
-type SetupStep = "setup" | "speakers" | "welcome" | "terms";
+type SetupStep = "setup" | "speakers" | "welcome" | "terms" | "messages" | "administrators";
 
 const INITIAL_STATE: SaveCfpSetupState = { status: "idle" };
 
@@ -451,13 +453,26 @@ function TermsForm({
 }
 
 export function CfpSetupWorkspace({
+  administrators,
+  canManageAdministrators,
   definition,
+  event,
   eventSlug,
   formId,
+  initialMessageSettings,
 }: {
+  readonly administrators: readonly CfpAdministratorSetting[];
+  readonly canManageAdministrators: boolean;
   readonly definition: CfpFormDefinition;
+  readonly event: {
+    readonly name: string;
+    readonly slug: string;
+    readonly startsAt: string;
+    readonly location: string | null;
+  };
   readonly eventSlug: string;
   readonly formId: string;
+  readonly initialMessageSettings: InitialCfpMessageSettings;
 }) {
   const [step, setStep] = useState<SetupStep>("setup");
   const router = useRouter();
@@ -489,6 +504,14 @@ export function CfpSetupWorkspace({
         <TabsTrigger value="terms">
           <FileText data-icon="inline-start" />
           Terms
+        </TabsTrigger>
+        <TabsTrigger value="messages">
+          <MailCheck data-icon="inline-start" />
+          Messages
+        </TabsTrigger>
+        <TabsTrigger value="administrators">
+          <UsersRound data-icon="inline-start" />
+          Administrators
         </TabsTrigger>
       </TabsList>
       <div className="min-w-0 flex-1">
@@ -525,6 +548,15 @@ export function CfpSetupWorkspace({
             definition={definition}
             eventSlug={eventSlug}
             formId={formId}
+            onSaved={() => saved("messages")}
+          />
+        </TabsContent>
+        <TabsContent value="messages">
+          <CfpMessageSettings
+            event={event}
+            eventSlug={eventSlug}
+            formId={formId}
+            initialSettings={initialMessageSettings}
             onSaved={() => saved()}
           />
           <Alert className="mt-4">
@@ -534,6 +566,14 @@ export function CfpSetupWorkspace({
               Every saved step preserves the previous draft so later editors never rewrite history.
             </AlertDescription>
           </Alert>
+        </TabsContent>
+        <TabsContent value="administrators">
+          <CfpAdministratorSettings
+            administrators={administrators}
+            canManage={canManageAdministrators}
+            eventSlug={eventSlug}
+            formId={formId}
+          />
         </TabsContent>
       </div>
     </Tabs>

@@ -1,6 +1,7 @@
+import { test } from "vitest";
+
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { test } from "node:test";
 
 test("published-program OpenAPI contract describes all public routes without private speaker fields", async () => {
   const contractUrl = new URL("../../../public/openapi/published-program-v1.json", import.meta.url);
