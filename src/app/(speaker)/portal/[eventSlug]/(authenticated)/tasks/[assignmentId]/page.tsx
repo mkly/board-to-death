@@ -52,9 +52,10 @@ export default async function SpeakerTaskPage({ params }: SpeakerTaskPageProps) 
   const overdue = open && task.dueAt !== null && task.dueAt < new Date();
   const latestSubmission = task.submissions.at(-1);
   const latestResponse = latestSubmission?.response ?? null;
-  const latestFeedback = task.transitions.findLast(
-    ({ note, toStatus }) => toStatus === "REVISION_REQUESTED" && Boolean(note),
-  )?.note;
+  const latestFeedback =
+    task.status === "REVISION_REQUESTED"
+      ? task.transitions.findLast(({ note, toStatus }) => toStatus === "REVISION_REQUESTED" && Boolean(note))?.note
+      : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -166,10 +167,10 @@ export default async function SpeakerTaskPage({ params }: SpeakerTaskPageProps) 
                     {value?.approved === true ? <p className="text-sm">Completion confirmed.</p> : null}
                     {typeof value?.objectKey === "string" ? (
                       <Button asChild variant="outline" size="sm" className="w-fit">
-                        <Link href={portalHref(eventSlug, `/tasks/${assignmentId}/files/${submission.attemptNumber}`)}>
+                        <a href={portalHref(eventSlug, `/tasks/${assignmentId}/files/${submission.attemptNumber}`)}>
                           <FileTextIcon data-icon="inline-start" aria-hidden="true" />
                           {typeof value.fileName === "string" ? value.fileName : "Download response file"}
-                        </Link>
+                        </a>
                       </Button>
                     ) : null}
                   </li>
