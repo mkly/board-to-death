@@ -458,6 +458,11 @@ model CfpSubmission {
   reviewStartedAt       DateTime?                  @db.Timestamptz(3)
   decidedAt             DateTime?                  @db.Timestamptz(3)
   confirmedAt           DateTime?                  @db.Timestamptz(3)
+  intakeClientIdentifier String?
+  intakePayloadHash      String?
+  intakeCreatedBy        String?
+  intakeUpdatedBy        String?
+  intakeImportedAt       DateTime?                  @db.Timestamptz(3)
   createdAt             DateTime                   @default(now()) @db.Timestamptz(3)
   updatedAt             DateTime                   @updatedAt @db.Timestamptz(3)
   event                 Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -471,6 +476,7 @@ model CfpSubmission {
   promotedSession       ProgramSession?            @relation("ProgramSessionSourceSubmission")
 
   @@unique([eventId, id])
+  @@unique([eventId, intakeClientIdentifier])
   @@index([eventId, status])
   @@index([formVersionId])
   @@map("cfp_submissions")
@@ -704,6 +710,11 @@ model ProgramSession {
   kind               ProgramSessionKind
   sourceSubmissionId String?                 @unique @db.Uuid
   archivedAt         DateTime?               @db.Timestamptz(3)
+  intakeClientIdentifier String?
+  intakePayloadHash      String?
+  intakeCreatedBy        String?
+  intakeUpdatedBy        String?
+  intakeImportedAt       DateTime?            @db.Timestamptz(3)
   createdAt          DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime                @updatedAt @db.Timestamptz(3)
   event              Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -712,6 +723,7 @@ model ProgramSession {
   agendaPlacement    AgendaPlacement?
 
   @@unique([eventId, id])
+  @@unique([eventId, intakeClientIdentifier])
   @@unique([eventId, sourceSubmissionId])
   @@index([eventId, kind, archivedAt])
   @@map("program_sessions")
