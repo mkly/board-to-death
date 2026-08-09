@@ -4,8 +4,10 @@ import { betterAuth } from "better-auth/minimal";
 import { magicLink } from "better-auth/plugins";
 
 import { CfpAdminRole, CfpDraftPolicy, EventType, PrismaClient } from "../../../src/generated/prisma/client.ts";
+import type { CfpQuestion } from "../../../src/lib/cfp/types.ts";
 import { CfpAdministratorRepository, CfpPolicyRepository } from "../../../src/server/cfp/policies.ts";
 import { CfpFormRepository } from "../../../src/server/cfp/repositories.ts";
+import { CfpCategoryRepository } from "../../../src/server/cfp/submissions.ts";
 import { EventRepository } from "../../../src/server/events/repositories.ts";
 import { randomUUID } from "node:crypto";
 
@@ -17,7 +19,12 @@ const mode = process.argv[2];
 const baseURL = process.argv[3] ?? "http://127.0.0.1:3100";
 const adminEmail = "admin@example.test";
 
-async function setup() {
+interface FixtureOptions {
+  readonly questions?: readonly CfpQuestion[];
+  readonly categories?: ReadonlyArray<{ key: string; label: string }>;
+}
+
+async function createEventFormAndPolicy(options: FixtureOptions = {}) {
   const eventSlug = `cfp-setup-${randomUUID()}`;
   const event = await new EventRepository(client).create({
     name: "Board to Death CFP Workshop",
@@ -40,7 +47,7 @@ async function setup() {
       instructions: "Complete each required field before submitting your proposal.",
       termsContent: "",
       consentRequired: false,
-      sections: [{ id: "proposal", kind: "questions", title: "Proposal", questions: [] }],
+      sections: [{ id: "proposal", kind: "questions", title: "Proposal", questions: [...(options.questions ?? [])] }],
     },
   });
   const administrators = new CfpAdministratorRepository(client);
@@ -54,6 +61,13 @@ async function setup() {
     externalId: "editor@example.test",
     displayName: "Program Editor",
   });
+  const categoryRepository = new CfpCategoryRepository(client);
+  const categories = [];
+  for (const category of options.categories ?? []) {
+    categories.push(
+      await categoryRepository.create({ eventId: event.id, key: category.key, label: category.label }),
+    );
+  }
   await new CfpPolicyRepository(client).create({
     eventId: event.id,
     key: form.key,
@@ -81,6 +95,10 @@ async function setup() {
     },
   });
 
+  return { eventSlug, event, form, owner, editor, categories };
+}
+
+async function signIn(): Promise<string> {
   let magicLinkUrl = "";
   const auth = betterAuth({
     appName: "Board to Death",
@@ -91,7 +109,7 @@ async function setup() {
       magicLink({
         expiresIn: 600,
         storeToken: "hashed",
-        sendMagicLink: async ({ email, url }) => {
+        sendMagicLink: async ({ email, url }: { email: string; url: string }) => {
           if (email === adminEmail) magicLinkUrl = url;
         },
       }),
@@ -109,7 +127,47 @@ async function setup() {
   const verified = await auth.handler(new Request(magicLinkUrl, { redirect: "manual" }));
   const sessionToken = verified.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
   if (!sessionToken) throw new Error("Expected Better Auth to create a browser-test session.");
+  return sessionToken;
+}
+
+async function setup() {
+  const { eventSlug, event, form, editor } = await createEventFormAndPolicy();
+  const sessionToken = await signIn();
   console.log(JSON.stringify({ editorId: editor.id, eventId: event.id, eventSlug, formId: form.formId, sessionToken }));
+}
+
+async function categoryRouting() {
+  const { eventSlug, event, form, editor, categories } = await createEventFormAndPolicy({
+    questions: [
+      {
+        id: "topic",
+        type: "select",
+        label: "Topic",
+        required: true,
+        constraints: {
+          options: [
+            { value: "game-design", label: "Game design" },
+            { value: "publishing", label: "Publishing" },
+          ],
+        },
+      },
+    ],
+    categories: [
+      { key: "game-design", label: "Game Design" },
+      { key: "publishing", label: "Publishing" },
+    ],
+  });
+  const sessionToken = await signIn();
+  console.log(
+    JSON.stringify({
+      editorId: editor.id,
+      eventId: event.id,
+      eventSlug,
+      formId: form.formId,
+      sessionToken,
+      categories: categories.map(({ id, key, label }) => ({ id, key, label })),
+    }),
+  );
 }
 
 async function cleanup(eventSlug: string | undefined) {
@@ -135,6 +193,8 @@ try {
   await client.$connect();
   if (mode === "setup") {
     await setup();
+  } else if (mode === "categoryRouting") {
+    await categoryRouting();
   } else if (mode === "cleanup") {
     await cleanup(process.argv[3]);
   } else if (mode === "publication") {

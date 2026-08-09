@@ -4,8 +4,14 @@ export {
   validateCfpAnswers,
   visibleCfpQuestionIds,
 } from "./answers.ts";
+export {
+  type CfpPolicyCategoryRoute,
+  resolveCfpPolicyCategoryId,
+  validateCfpPolicyCategoryRouting,
+} from "./category-routing.ts";
 export type { CfpParseError, CfpParseErrorCode } from "./errors.ts";
 export { type CfpParseResult, parseCfpDefinition } from "./parser.ts";
+export { cfpVisibilityRuleSchema } from "./schema.ts";
 export {
   type CfpPublicationIssue,
   publicCfpHref,

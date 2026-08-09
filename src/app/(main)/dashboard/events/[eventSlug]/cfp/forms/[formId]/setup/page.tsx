@@ -9,10 +9,12 @@ import { DEFAULT_REMINDER_DAYS, DEFAULT_REMINDER_SEND_AT_MINUTE, reminderTimeFro
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
+import { CfpCategoryRepository } from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { getDashboardShellData } from "../../../../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../../../../_lib/dashboard-shell";
+import { CfpCategoryRouting } from "./_components/cfp-category-routing";
 import { CfpPolicySettings } from "./_components/cfp-policy-settings";
 import { CfpPublicationControls } from "./_components/cfp-publication-controls";
 import { CfpSetupWorkspace } from "./_components/cfp-setup-workspace";
@@ -51,9 +53,10 @@ export default async function CfpFormSetupPage({
     client.event.findUnique({ where: { id: event.id }, select: { location: true } }),
   ]);
   if (!form) notFound();
-  const [eligibleAdministrators, policy] = await Promise.all([
+  const [eligibleAdministrators, policy, categories] = await Promise.all([
     new CfpAdministratorRepository(client).list(event.id),
     new CfpPolicyRepository(client).getByKey(event.id, form.key),
+    new CfpCategoryRepository(client).list(event.id),
   ]);
   const reminder = policy?.definition.messages.reminder;
   const initialSettings = policy
@@ -147,6 +150,15 @@ export default async function CfpFormSetupPage({
         timezone={event.timezone}
         initialSettings={initialSettings}
       />
+      {policy ? (
+        <CfpCategoryRouting
+          eventSlug={event.slug}
+          formId={form.formId}
+          definition={form.definition}
+          categories={categories.map(({ id, label }) => ({ id, label }))}
+          initialRouting={policy.definition.categoryRouting}
+        />
+      ) : null}
     </div>
   );
 }
