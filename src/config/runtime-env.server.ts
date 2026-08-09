@@ -21,9 +21,18 @@ const SERVER_KEYS = [
   "AUTH_ALLOWED_EMAILS",
   "AUTH_MAGIC_LINK_WEBHOOK_URL",
   "AUTH_MAGIC_LINK_WEBHOOK_TOKEN",
+  "RESEND_API_KEY",
+  "RESEND_FROM_EMAIL",
   "FILE_STORAGE_PATH",
 ] as const;
-const REQUIRED_PRODUCTION_SERVER_KEYS = SERVER_KEYS.filter((key) => key !== "AUTH_MAGIC_LINK_WEBHOOK_TOKEN");
+const REQUIRED_PRODUCTION_SERVER_KEYS = [
+  "AUTH_SECRET",
+  "DATABASE_URL",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+  "AUTH_ALLOWED_EMAILS",
+  "FILE_STORAGE_PATH",
+] as const;
 
 type ServerRuntimeKey = (typeof SERVER_KEYS)[number];
 type ServerRuntimeValues = Partial<Record<ServerRuntimeKey, string>>;
@@ -78,6 +87,8 @@ const serverSchema = z.object({
     })
     .optional(),
   AUTH_MAGIC_LINK_WEBHOOK_TOKEN: z.string().optional(),
+  RESEND_API_KEY: z.string().min(1, "must not be empty").optional(),
+  RESEND_FROM_EMAIL: z.string().email("must be a valid email address").optional(),
   FILE_STORAGE_PATH: z.string().min(1, "must not be empty"),
 });
 
@@ -129,6 +140,21 @@ export function parseServerRuntimeConfig(environment: Environment): ServerRuntim
 
   if (!result.success) {
     throw new RuntimeConfigError(formatIssues(result.error));
+  }
+
+  const hasResendApiKey = result.data.RESEND_API_KEY !== undefined;
+  const hasResendFromEmail = result.data.RESEND_FROM_EMAIL !== undefined;
+
+  if (hasResendApiKey !== hasResendFromEmail) {
+    throw new RuntimeConfigError([
+      `${hasResendApiKey ? "RESEND_FROM_EMAIL" : "RESEND_API_KEY"} is required when Resend delivery is configured`,
+    ]);
+  }
+
+  if (mode === "production" && !result.data.AUTH_MAGIC_LINK_WEBHOOK_URL && !hasResendApiKey) {
+    throw new RuntimeConfigError([
+      "AUTH_MAGIC_LINK_WEBHOOK_URL or both RESEND_API_KEY and RESEND_FROM_EMAIL are required when NODE_ENV=production",
+    ]);
   }
 
   if (mode === "production" && !isAbsolute(result.data.FILE_STORAGE_PATH)) {

@@ -32,6 +32,8 @@ const productionProcessEnvironment = Object.fromEntries(
         "FILE_STORAGE_PATH",
         "NEXT_PUBLIC_APP_URL",
         "NEXT_RUNTIME",
+        "RESEND_API_KEY",
+        "RESEND_FROM_EMAIL",
       ].includes(key),
   ),
 );
@@ -69,7 +71,6 @@ test("production requires every configured server and public value", () => {
         "BETTER_AUTH_SECRET is required when NODE_ENV=production",
         "BETTER_AUTH_URL is required when NODE_ENV=production",
         "AUTH_ALLOWED_EMAILS is required when NODE_ENV=production",
-        "AUTH_MAGIC_LINK_WEBHOOK_URL is required when NODE_ENV=production",
         "FILE_STORAGE_PATH is required when NODE_ENV=production",
         "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
       ]);
@@ -159,6 +160,45 @@ test("production requires an absolute persistent file-storage path", () => {
       assert.ok(error instanceof RuntimeConfigError);
       assert.deepEqual(error.issues, ["FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production"]);
       assert.doesNotMatch(error.message, /ephemeral-files/);
+      return true;
+    },
+  );
+});
+
+test("production accepts complete Resend delivery configuration and rejects partial configuration", () => {
+  const resendEnvironment = {
+    ...productionEnvironment,
+    AUTH_MAGIC_LINK_WEBHOOK_TOKEN: undefined,
+    AUTH_MAGIC_LINK_WEBHOOK_URL: undefined,
+    RESEND_API_KEY: "re_test_key",
+    RESEND_FROM_EMAIL: "noreply@updates.example.com",
+  };
+
+  const config = parseServerRuntimeConfig(resendEnvironment);
+  assert.equal(config.RESEND_API_KEY, "re_test_key");
+  assert.equal(config.RESEND_FROM_EMAIL, "noreply@updates.example.com");
+
+  assert.throws(
+    () =>
+      parseServerRuntimeConfig({
+        ...productionEnvironment,
+        AUTH_MAGIC_LINK_WEBHOOK_TOKEN: undefined,
+        AUTH_MAGIC_LINK_WEBHOOK_URL: undefined,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, [
+        "AUTH_MAGIC_LINK_WEBHOOK_URL or both RESEND_API_KEY and RESEND_FROM_EMAIL are required when NODE_ENV=production",
+      ]);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => parseServerRuntimeConfig({ ...resendEnvironment, RESEND_FROM_EMAIL: undefined }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, ["RESEND_FROM_EMAIL is required when Resend delivery is configured"]);
       return true;
     },
   );

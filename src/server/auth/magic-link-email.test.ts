@@ -1,0 +1,54 @@
+import { afterEach, describe, expect, test, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
+import { createConfiguredMagicLinkSender } from "./magic-link-email";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("configured magic-link delivery", () => {
+  test("sends magic links through Resend when configured", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const send = createConfiguredMagicLinkSender({
+      resendApiKey: "re_test_key",
+      resendFromEmail: "noreply@updates.example.com",
+    });
+
+    await send({ email: "admin@example.com", url: "https://events.example.com/sign-in?token=a&next=%2Fdashboard" });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [requestUrl, request] = fetchMock.mock.calls[0] ?? [];
+    expect(requestUrl).toBe("https://api.resend.com/emails");
+    expect(request?.headers).toEqual({
+      authorization: "Bearer re_test_key",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(request?.body))).toEqual({
+      from: "Board to Death <noreply@updates.example.com>",
+      to: ["admin@example.com"],
+      subject: "Sign in to Board to Death",
+      text: "Use this single-use link to sign in. It expires in 10 minutes: https://events.example.com/sign-in?token=a&next=%2Fdashboard",
+      html: '<p>Use this single-use link to sign in:</p><p><a href="https://events.example.com/sign-in?token=a&amp;next=%2Fdashboard">Sign in to Board to Death</a></p><p>This link expires in 10 minutes.</p>',
+    });
+  });
+
+  test("surfaces rejected Resend deliveries without exposing the response body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("sensitive provider detail", { status: 403 })),
+    );
+    const send = createConfiguredMagicLinkSender({
+      resendApiKey: "re_test_key",
+      resendFromEmail: "noreply@updates.example.com",
+    });
+
+    await expect(send({ email: "admin@example.com", url: "https://events.example.com/sign-in" })).rejects.toThrow(
+      "Resend rejected magic-link delivery with status 403",
+    );
+  });
+});

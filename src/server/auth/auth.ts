@@ -16,6 +16,8 @@ export const auth = createAuth({
   isAllowedEmail: (email) => isAllowedAdminEmail(email, allowedAdminEmails),
   secret: runtimeConfig.BETTER_AUTH_SECRET,
   sendMagicLink: createConfiguredMagicLinkSender({
+    resendApiKey: runtimeConfig.RESEND_API_KEY,
+    resendFromEmail: runtimeConfig.RESEND_FROM_EMAIL,
     webhookToken: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_TOKEN,
     webhookUrl: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_URL,
   }),
