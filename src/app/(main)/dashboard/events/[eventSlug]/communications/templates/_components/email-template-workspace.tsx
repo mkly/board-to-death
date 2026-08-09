@@ -2,6 +2,8 @@
 
 import { useActionState, useMemo, useState } from "react";
 
+import Link from "next/link";
+
 import { FilePlus2, Save } from "lucide-react";
 
 import { SanitizedMarkdown } from "@/components/content/sanitized-markdown";
@@ -128,10 +130,17 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
             Create safe, reusable messages scoped to this event. Every save keeps the previous version.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={() => setDraft(NEW_TEMPLATE)}>
-          <FilePlus2 data-icon="inline-start" />
-          New template
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/dashboard/events/${encodeURIComponent(event.slug)}/communications/audience`}>
+              Recipient audience
+            </Link>
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setDraft(NEW_TEMPLATE)}>
+            <FilePlus2 data-icon="inline-start" />
+            New template
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)]">

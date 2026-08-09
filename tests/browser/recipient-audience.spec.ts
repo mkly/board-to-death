@@ -1,0 +1,55 @@
+import { type BrowserContext, expect, test } from "@playwright/test";
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const runFile = promisify(execFile);
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
+const databaseUrl =
+  process.env.TEST_DATABASE_URL ??
+  "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
+
+interface RecipientAudienceFixture {
+  readonly eventSlug: string;
+  readonly sessionCookie: string;
+}
+
+async function prepareAudience(context: BrowserContext): Promise<string> {
+  const { stdout } = await runFile(
+    process.execPath,
+    ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "tests/browser/fixtures/recipient-audience.ts"],
+    { env: { ...process.env, BASE_URL: baseURL, DATABASE_URL: databaseUrl } },
+  );
+  const fixture = JSON.parse(stdout) as RecipientAudienceFixture;
+  await context.addCookies([{ name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL }]);
+  return fixture.eventSlug;
+}
+
+test("previews a deduplicated live audience with exact recipients and explained exclusions", async ({
+  context,
+  page,
+}) => {
+  const eventSlug = await prepareAudience(context);
+  await page.goto(`/dashboard/events/${eventSlug}/communications/audience`);
+
+  await expect(page.getByRole("heading", { name: "Recipient audience" })).toBeVisible();
+  await page.getByRole("checkbox", { name: "Ada Lovelace" }).check();
+  await page.getByRole("checkbox", { name: "Accepted" }).check();
+  await page.getByRole("checkbox", { name: "Opening keynote" }).check();
+  await page.getByRole("checkbox", { name: "Game design" }).check();
+  await page.getByRole("checkbox", { name: "Approved" }).check();
+  await page.getByRole("button", { name: "Preview audience" }).click();
+
+  await expect(page.getByRole("heading", { name: "2 eligible recipients" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toHaveCount(1);
+  await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toContainText("Selected directly");
+  await expect(page.getByRole("row", { name: /Grace Hopper/ })).toContainText("Onboarding approved");
+  await expect(page.getByRole("row", { name: /Lin Speaker/ })).toContainText("Email consent is not active");
+  await expect(page.getByText("Ready for confirmation")).toBeVisible();
+
+  await page.getByRole("link", { name: "Clear" }).click();
+  await page.getByRole("checkbox", { name: "Rejected" }).check();
+  await page.getByRole("button", { name: "Preview audience" }).click();
+  await expect(page.getByRole("heading", { name: "0 eligible recipients" })).toBeVisible();
+  await expect(page.getByText("No currently eligible speaker matches the selected criteria.")).toBeVisible();
+});
