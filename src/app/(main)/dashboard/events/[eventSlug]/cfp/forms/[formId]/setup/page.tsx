@@ -139,6 +139,7 @@ export default async function CfpFormSetupPage({
             policy?.definition.messages.thankYou ??
             "Thank you, {{recipient.name}}, for sharing your proposal with **{{event.name}}**.",
         }}
+        versionNumber={form.versionNumber}
       />
       <CfpPolicySettings
         eventSlug={event.slug}

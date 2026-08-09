@@ -4,7 +4,18 @@ import { useActionState, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
-import { ArrowRight, Check, FileText, MailCheck, Save, Settings2, Sparkles, UserRound, UsersRound } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  FileQuestion,
+  FileText,
+  MailCheck,
+  Save,
+  Settings2,
+  Sparkles,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -31,8 +42,9 @@ import type { CfpFormDefinition } from "@/lib/cfp";
 import { type SaveCfpSetupState, saveCfpSetupStep } from "../actions";
 import { type CfpAdministratorSetting, CfpAdministratorSettings } from "./cfp-administrator-settings";
 import { CfpMessageSettings, type InitialCfpMessageSettings } from "./cfp-message-settings";
+import { CfpQuestionEditor } from "./cfp-question-editor";
 
-type SetupStep = "setup" | "speakers" | "welcome" | "terms" | "messages" | "administrators";
+type SetupStep = "setup" | "questions" | "speakers" | "welcome" | "terms" | "messages" | "administrators";
 
 const INITIAL_STATE: SaveCfpSetupState = { status: "idle" };
 
@@ -460,6 +472,7 @@ export function CfpSetupWorkspace({
   eventSlug,
   formId,
   initialMessageSettings,
+  versionNumber,
 }: {
   readonly administrators: readonly CfpAdministratorSetting[];
   readonly canManageAdministrators: boolean;
@@ -473,6 +486,7 @@ export function CfpSetupWorkspace({
   readonly eventSlug: string;
   readonly formId: string;
   readonly initialMessageSettings: InitialCfpMessageSettings;
+  readonly versionNumber: number;
 }) {
   const [step, setStep] = useState<SetupStep>("setup");
   const router = useRouter();
@@ -492,6 +506,10 @@ export function CfpSetupWorkspace({
         <TabsTrigger value="setup">
           <Settings2 data-icon="inline-start" />
           Setup
+        </TabsTrigger>
+        <TabsTrigger value="questions">
+          <FileQuestion data-icon="inline-start" />
+          Questions
         </TabsTrigger>
         <TabsTrigger value="speakers">
           <UserRound data-icon="inline-start" />
@@ -521,7 +539,15 @@ export function CfpSetupWorkspace({
             definition={definition}
             eventSlug={eventSlug}
             formId={formId}
-            onSaved={() => saved("speakers")}
+            onSaved={() => saved("questions")}
+          />
+        </TabsContent>
+        <TabsContent value="questions">
+          <CfpQuestionEditor
+            definition={definition}
+            eventSlug={eventSlug}
+            formId={formId}
+            versionNumber={versionNumber}
           />
         </TabsContent>
         <TabsContent value="speakers">

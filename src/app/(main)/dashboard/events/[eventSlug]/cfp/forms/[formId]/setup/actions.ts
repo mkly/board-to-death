@@ -8,7 +8,7 @@ import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { CfpAdminRole, CfpPolicyStatus } from "@/generated/prisma/client";
-import { type CfpFormDefinition, validateCfpDefinitionForPublication } from "@/lib/cfp";
+import { type CfpFormDefinition, parseCfpDefinition, validateCfpDefinitionForPublication } from "@/lib/cfp";
 import { validateCfpMessageSettings } from "@/lib/cfp/messages";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
@@ -78,6 +78,13 @@ export interface SaveCfpSetupState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface SaveCfpQuestionsState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly versionNumber?: number;
+  readonly errors?: readonly string[];
 }
 
 export interface SaveCfpAdministratorsState {
@@ -218,6 +225,79 @@ export async function saveCfpSetupStep(
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
     return { status: "success", message: "Changes saved as a new draft version." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+const questionRequestSchema = z.object({
+  eventSlug: z.string().trim().min(1),
+  formId: z.string().uuid(),
+  definition: z.string().max(250_000, "The question definition is too large."),
+});
+
+export async function saveCfpQuestions(
+  _previousState: SaveCfpQuestionsState,
+  formData: FormData,
+): Promise<SaveCfpQuestionsState> {
+  const request = questionRequestSchema.safeParse({
+    eventSlug: value(formData, "eventSlug"),
+    formId: value(formData, "formId"),
+    definition: value(formData, "definition"),
+  });
+  if (!request.success) {
+    return { status: "error", message: "The question editor request is invalid." };
+  }
+
+  let rawDefinition: unknown;
+  try {
+    rawDefinition = JSON.parse(request.data.definition);
+  } catch {
+    return { status: "error", message: "The question definition is not valid JSON." };
+  }
+  const submitted = parseCfpDefinition(rawDefinition);
+  if (!submitted.ok) {
+    return {
+      status: "error",
+      message: "Fix the question definition before saving.",
+      errors: submitted.errors.map(({ path, message }) => `${path}: ${message}`),
+    };
+  }
+
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, request.data.eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const repository = new CfpFormRepository(getDatabaseClient());
+  const current = await repository.get(event.id, request.data.formId);
+  if (!current) notFound();
+
+  const updated = parseCfpDefinition({
+    ...current.definition,
+    sections: submitted.definition.sections,
+    customQuestionTypes: submitted.definition.customQuestionTypes,
+    categoryRouting: submitted.definition.categoryRouting,
+  });
+  if (!updated.ok) {
+    return {
+      status: "error",
+      message: "Fix the question definition before saving.",
+      errors: updated.errors.map(({ path, message }) => `${path}: ${message}`),
+    };
+  }
+
+  try {
+    const saved = await repository.createVersion(event.id, request.data.formId, updated.definition);
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
+    revalidatePath(
+      `/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(saved.formId)}/setup`,
+    );
+    return {
+      status: "success",
+      message: `Questions saved as version ${saved.versionNumber}.`,
+      versionNumber: saved.versionNumber,
+    };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;
