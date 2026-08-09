@@ -1,7 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EventSettingsWorkspace } from "@/app/(main)/dashboard/event-settings/_components/event-settings-workspace";
 import type { EventSettingsSnapshot } from "@/app/(main)/dashboard/event-settings/types";
+import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { getDatabaseClient } from "@/server/database";
 import { EventRepository, RoomRepository, TrackRepository } from "@/server/events";
 
@@ -15,7 +16,10 @@ interface EventSettingsPageProps {
 export default async function EventSettingsPage({ params }: EventSettingsPageProps) {
   const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
   const authorizedEvent = findAuthorizedEvent(shell.events, eventSlug);
-  if (!authorizedEvent || shell.activeEvent?.id !== authorizedEvent.id) notFound();
+  if (!authorizedEvent) notFound();
+  if (shell.activeEvent?.id !== authorizedEvent.id) {
+    redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "settings") : "/dashboard");
+  }
 
   const database = getDatabaseClient();
   const [event, rooms, tracks] = await Promise.all([
