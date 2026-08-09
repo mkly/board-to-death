@@ -180,11 +180,13 @@ describe("speaker persistence", () => {
     await speakers.replaceSubmissionParticipants(eventId, submissionId, [primary.id, coSpeaker.id]);
 
     assert.deepEqual(
-      await speakers.getSubmissionParticipant(eventId, submissionId, primary.id).then((participant) => [
-        participant?.speaker.id,
-        participant?.slidesObjectKey,
-        participant?.supportingDocumentObjectKey,
-      ]),
+      await speakers
+        .getSubmissionParticipant(eventId, submissionId, primary.id)
+        .then((participant) => [
+          participant?.speaker.id,
+          participant?.slidesObjectKey,
+          participant?.supportingDocumentObjectKey,
+        ]),
       [primary.id, null, null],
     );
 
