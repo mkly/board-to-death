@@ -56,6 +56,7 @@ describe("program workspace navigation", () => {
       "submissions",
       "sessions",
       "speakers",
+      "speaker-sourcing",
       "contacts",
       "groups",
       "records",
