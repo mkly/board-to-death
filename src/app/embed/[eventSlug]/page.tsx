@@ -16,6 +16,7 @@ import { getDatabaseClient } from "@/server/database/client";
 import { PublishedProgramRepository } from "@/server/published-program";
 
 import { EmbedFrameBridge } from "../_components/embed-frame-bridge";
+import { PublishedSessionList, type PublishedSessionListItem } from "./_components/published-session-list";
 import { PublishedSpeakerList, type PublishedSpeakerListItem } from "./_components/published-speaker-list";
 
 const KIND_ICONS = {
@@ -104,6 +105,41 @@ async function publishedSpeakerList(
   };
 }
 
+async function publishedSessionList(
+  eventSlug: string,
+): Promise<
+  | { readonly status: "available"; readonly eventName: string; readonly sessions: readonly PublishedSessionListItem[] }
+  | { readonly status: "unavailable" }
+> {
+  const publication = await new PublishedProgramRepository(getDatabaseClient()).findPublic(eventSlug);
+  if (publication.status !== "published") return { status: "unavailable" };
+
+  const { snapshot } = publication.version;
+  const tracksById = new Map(snapshot.tracks.map((track) => [track.id, track]));
+  const speakersById = new Map(snapshot.speakers.map((speaker) => [speaker.id, speaker]));
+
+  return {
+    status: "available",
+    eventName: snapshot.event.name,
+    sessions: snapshot.sessions
+      .map((session) => {
+        const track = session.trackId ? tracksById.get(session.trackId) : undefined;
+        return {
+          id: session.id,
+          title: session.title,
+          description: session.description,
+          durationMinutes: session.durationMinutes,
+          track: track ? { id: track.id, name: track.name } : null,
+          speakers: session.speakerIds.flatMap((speakerId) => {
+            const speaker = speakersById.get(speakerId);
+            return speaker ? [{ id: speaker.id, name: speakerName(speaker) }] : [];
+          }),
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title)),
+  };
+}
+
 export default async function PublishedEmbedPreview({
   params,
   searchParams,
@@ -119,6 +155,7 @@ export default async function PublishedEmbedPreview({
   const Icon = KIND_ICONS[configuration.kind];
   const speakerList =
     configuration.kind === "speaker-list" ? await publishedSpeakerList(eventSlug, configuration) : null;
+  const sessionList = configuration.kind === "session-list" ? await publishedSessionList(eventSlug) : null;
   let content: ReactNode;
   if (speakerList?.status === "available") {
     content = (
@@ -140,6 +177,29 @@ export default async function PublishedEmbedPreview({
             </CardTitle>
           </div>
           <CardDescription>This event does not currently have a published speaker list.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  } else if (sessionList?.status === "available") {
+    content = (
+      <PublishedSessionList
+        density={configuration.density}
+        enabledFilters={configuration.filters}
+        eventName={sessionList.eventName}
+        sessions={sessionList.sessions}
+      />
+    );
+  } else if (configuration.kind === "session-list") {
+    content = (
+      <Card className="mx-auto w-full max-w-4xl" size={configuration.density === "compact" ? "sm" : "default"}>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <LayoutList aria-hidden="true" />
+            <CardTitle>
+              <h1>Sessions unavailable</h1>
+            </CardTitle>
+          </div>
+          <CardDescription>This event does not currently have a published session list.</CardDescription>
         </CardHeader>
       </Card>
     );

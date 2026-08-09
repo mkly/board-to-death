@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function PublishedEmbedLoading() {
   return (
-    <main aria-busy="true" aria-label="Loading published speakers" className="min-h-64 bg-background p-4 sm:p-6">
+    <main aria-busy="true" aria-label="Loading published program" className="min-h-64 bg-background p-4 sm:p-6">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
         <div className="flex flex-col gap-2">
           <Skeleton className="h-4 w-36" />
