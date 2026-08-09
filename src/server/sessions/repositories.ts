@@ -242,11 +242,17 @@ async function createVersion(
   }
 }
 
-export async function promoteAcceptedSubmission(
+async function promoteSubmission(
   transaction: Prisma.TransactionClient,
   eventId: string,
   sourceSubmissionId: string,
-): Promise<string> {
+  optional: boolean,
+): Promise<string | null> {
+  const unpromotable = (message: string): null => {
+    if (optional) return null;
+    invalid(message);
+  };
+
   await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`program-session-promotion:${sourceSubmissionId}`}))`;
 
   const existing = await transaction.programSession.findFirst({
@@ -274,12 +280,14 @@ export async function promoteAcceptedSubmission(
     },
   });
   if (!source) throw new RepositoryError("not-found", "The event-owned source submission was not found.");
-  if (source.kind !== CfpSubmissionKind.ABSTRACT) invalid("Only an abstract submission can be promoted.");
-  if (source.status !== CfpSubmissionStatus.ACCEPTED) invalid("Only an accepted submission can be promoted.");
+  if (source.kind !== CfpSubmissionKind.ABSTRACT) return unpromotable("Only an abstract submission can be promoted.");
+  if (source.status !== CfpSubmissionStatus.ACCEPTED) {
+    return unpromotable("Only an accepted submission can be promoted.");
+  }
   const revision = source.revisions[0];
-  if (!revision) invalid("The accepted submission does not have a revision to promote.");
+  if (!revision) return unpromotable("The accepted submission does not have a revision to promote.");
   const title = snapshotAnswer(revision, titleQuestionIds, titleQuestionLabels);
-  if (!title) invalid("The accepted submission does not have a title answer to promote.");
+  if (!title) return unpromotable("The accepted submission does not have a title answer to promote.");
   const version = validateVersion({
     title,
     description: snapshotAnswer(revision, descriptionQuestionIds, descriptionQuestionLabels),
@@ -294,6 +302,28 @@ export async function promoteAcceptedSubmission(
   });
   await createVersion(transaction, eventId, session.id, 1, version);
   return session.id;
+}
+
+export async function promoteAcceptedSubmission(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  sourceSubmissionId: string,
+): Promise<string> {
+  const sessionId = await promoteSubmission(transaction, eventId, sourceSubmissionId, false);
+  if (sessionId === null) invalid("The submission could not be promoted into a session.");
+  return sessionId;
+}
+
+/**
+ * Promotes the submission when it is eligible and returns null when it is not, so recording an
+ * acceptance never fails over a submission that simply cannot become a session.
+ */
+export async function promoteAcceptedSubmissionIfPromotable(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  sourceSubmissionId: string,
+): Promise<string | null> {
+  return promoteSubmission(transaction, eventId, sourceSubmissionId, true);
 }
 
 export class ProgramSessionRepository {
