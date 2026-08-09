@@ -220,7 +220,7 @@ const unscheduled = await database.programSession.create({
     eventId: event.id,
     kind: "PROMOTED",
     sourceSubmissionId: accepted.id,
-    versions: { create: { eventId: event.id, versionNumber: 1, title: "Unscheduled keynote", durationMinutes: 45 } },
+    versions: { create: { versionNumber: 1, title: "Unscheduled keynote", durationMinutes: 45 } },
   },
 });
 // Promoted from a submission that was later rejected, so it must not be reported as awaiting a slot.
@@ -229,7 +229,7 @@ await database.programSession.create({
     eventId: event.id,
     kind: "PROMOTED",
     sourceSubmissionId: rejected.id,
-    versions: { create: { eventId: event.id, versionNumber: 1, title: "Withdrawn keynote", durationMinutes: 45 } },
+    versions: { create: { versionNumber: 1, title: "Withdrawn keynote", durationMinutes: 45 } },
   },
 });
 await database.programSession.create({
@@ -237,7 +237,7 @@ await database.programSession.create({
     eventId: otherEvent.id,
     kind: "MANUAL",
     versions: {
-      create: { eventId: otherEvent.id, versionNumber: 1, title: "Other event secret talk", durationMinutes: 30 },
+      create: { versionNumber: 1, title: "Other event secret talk", durationMinutes: 30 },
     },
   },
 });
