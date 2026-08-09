@@ -68,6 +68,17 @@ if [[ ! -r "${DEFINITION}" ]]; then
   exit 1
 fi
 
+# The image is a reusable development base. Runtime secrets belong to each
+# leased instance, never to the image definition where every consumer could
+# recover them. Reject the production-only variables that would be especially
+# damaging if they were added as literal assignments.
+for secret_name in AUTH_SECRET BETTER_AUTH_SECRET AUTH_MAGIC_LINK_WEBHOOK_TOKEN; do
+  if grep -Eq "^[[:space:]]*${secret_name}=" "${DEFINITION}"; then
+    echo "The image definition embeds ${secret_name}; provide it at instance runtime instead." >&2
+    exit 1
+  fi
+done
+
 echo "Validating ${DEFINITION}..."
 sudo -- distrobuilder validate "${DEFINITION}"
 
@@ -119,6 +130,33 @@ incus exec "${SMOKE_INSTANCE}" -- \
   runuser -u nobody -- env PATH=/usr/local/bin:/usr/bin:/bin sh -c \
   'command -v sh && command -v git && git --version && command -v node && node --version && command -v npm && npm --version && command -v cc && cc --version'
 
+echo "Checking image-owned files and enabled boot services..."
+for owned_path in \
+  /usr/local/sbin/board-to-death-pg-bootstrap:root:root:755 \
+  /etc/systemd/system/board-to-death-pg-bootstrap.service:root:root:644; do
+  path="${owned_path%%:*}"
+  expected_metadata="${owned_path#*:}"
+  actual_metadata="$(incus exec "${SMOKE_INSTANCE}" -- stat -c '%U:%G:%a' "${path}")"
+  if [[ "${actual_metadata}" != "${expected_metadata}" ]]; then
+    echo "Expected ${path} metadata ${expected_metadata}, got ${actual_metadata}." >&2
+    exit 1
+  fi
+done
+
+for enabled_unit in postgresql.service board-to-death-pg-bootstrap.service; do
+  if ! incus exec "${SMOKE_INSTANCE}" -- systemctl is-enabled --quiet "${enabled_unit}"; then
+    echo "${enabled_unit} is not enabled in the built image." >&2
+    exit 1
+  fi
+done
+
+if incus exec "${SMOKE_INSTANCE}" -- sh -c \
+  "grep -R -E '^(AUTH_SECRET|BETTER_AUTH_SECRET|AUTH_MAGIC_LINK_WEBHOOK_TOKEN)=' \
+    /etc/environment /etc/default /etc/systemd/system 2>/dev/null"; then
+  echo "The built image contains a production runtime secret assignment." >&2
+  exit 1
+fi
+
 # Crabbox skips its boot-time `apt-get update` -- a 20s package-index download
 # that finds nothing to do -- only when the image-ready marker is present *and*
 # every tool its readiness check names is installed. A missing piece silently
@@ -166,6 +204,19 @@ for smoke_db in board_to_death board_to_death_test; do
     exit 1
   fi
 done
+
+postgres_data_directory="$(
+  incus exec "${SMOKE_INSTANCE}" -- \
+    runuser -u postgres -- psql -tAc 'SHOW data_directory' | tr -d '[:space:]'
+)"
+if [[ "${postgres_data_directory}" != /var/lib/postgresql/* ]]; then
+  echo "PostgreSQL data must live below /var/lib/postgresql, got '${postgres_data_directory}'." >&2
+  exit 1
+fi
+if [[ "$(incus exec "${SMOKE_INSTANCE}" -- stat -c '%U:%G' "${postgres_data_directory}")" != "postgres:postgres" ]]; then
+  echo "PostgreSQL data directory is not owned by postgres:postgres." >&2
+  exit 1
+fi
 
 incus delete --force "${SMOKE_INSTANCE}"
 SMOKE_INSTANCE=""
