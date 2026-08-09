@@ -61,6 +61,8 @@ export async function applyBulkEdit(eventSlug: string, input: BulkEditActionInpu
     });
     revalidatePath(`/dashboard/events/${event.slug}/records`);
     if (parsed.data.entityType === "SESSION") revalidatePath(`/dashboard/events/${event.slug}/sessions`);
+    if (parsed.data.entityType === "CONTACT") revalidatePath(`/dashboard/events/${event.slug}/contacts`);
+    if (parsed.data.entityType === "GROUP") revalidatePath(`/dashboard/events/${event.slug}/groups`);
     if (result.failures.length > 0) {
       return {
         status: "partial",
