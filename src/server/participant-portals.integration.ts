@@ -67,7 +67,11 @@ describe("participant portals", () => {
     await client.integrationSyncRecord.deleteMany();
     await client.event.deleteMany();
   });
-  after(async () => client.$disconnect());
+  after(async () => {
+    await client.integrationSyncRecord.deleteMany();
+    await client.event.deleteMany();
+    await client.$disconnect();
+  });
 
   test("uses ordered audience precedence and an event-scoped default", async () => {
     const fixture = await createRepresentativeFixtures(client);
