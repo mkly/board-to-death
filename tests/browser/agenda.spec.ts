@@ -189,8 +189,8 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await concurrentPage.goto(`/dashboard/events/${event.slug}/agenda`);
     await concurrentPage.getByRole("combobox", { name: "Status" }).click();
     await concurrentPage.getByRole("option", { name: "Scheduled", exact: true }).click();
-    await expect(concurrentPage.getByRole("link", { name: "Opening keynote" })).toBeVisible();
-    await expect(concurrentPage.getByRole("link", { name: "Cooperative tension lab" })).toBeVisible();
+    await expect(concurrentPage.getByRole("link", { name: "Opening keynote", exact: true })).toBeVisible();
+    await expect(concurrentPage.getByRole("link", { name: "Cooperative tension lab", exact: true })).toBeVisible();
     await concurrentPage.close();
 
     await page.reload();
