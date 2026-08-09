@@ -1,10 +1,17 @@
 import { CfpAccessPolicy, CfpPolicyStatus, type PrismaClient } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { cfpDefinitionInputFromStored } from "./definition.ts";
+import type { CfpPolicyMessages } from "./policies.ts";
 
 export interface CfpPublicAccessEvent {
   readonly id: string;
   readonly name: string;
+}
+
+export interface CfpPublicAccessPolicy {
+  readonly id: string;
+  readonly versionNumber: number;
+  readonly messages: CfpPolicyMessages;
 }
 
 export interface CfpPublicAccessForm {
@@ -27,8 +34,14 @@ export type CfpPublicAccessLookup =
   | {
       readonly status: "open";
       readonly publicId: string;
-      readonly event: CfpPublicAccessEvent & { readonly timezone: string; readonly theme: string | null };
+      readonly event: CfpPublicAccessEvent & {
+        readonly timezone: string;
+        readonly theme: string | null;
+        readonly startsAt: Date;
+        readonly location: string | null;
+      };
       readonly form: CfpPublicAccessForm;
+      readonly policy: CfpPublicAccessPolicy;
       readonly opensAt: Date | null;
       readonly closesAt: Date | null;
     };
@@ -53,8 +66,9 @@ export class CfpPublicAccessRepository {
     const policy = await this.client.cfpPolicy.findUnique({
       where: { publicId },
       select: {
+        id: true,
         status: true,
-        event: { select: { id: true, name: true, timezone: true, theme: true } },
+        event: { select: { id: true, name: true, timezone: true, theme: true, startsAt: true, location: true } },
         publishedFormVersion: {
           select: {
             id: true,
@@ -100,7 +114,7 @@ export class CfpPublicAccessRepository {
         versions: {
           orderBy: { versionNumber: "desc" },
           take: 1,
-          select: { submissionOpensAt: true, submissionClosesAt: true },
+          select: { versionNumber: true, submissionOpensAt: true, submissionClosesAt: true, messages: true },
         },
       },
     });
@@ -119,6 +133,7 @@ export class CfpPublicAccessRepository {
     }
 
     const policyVersion = policy.versions[0];
+    if (!policyVersion) return { status: "unknown" };
     const now = new Date();
     if (policyVersion && now < policyVersion.submissionOpensAt) {
       return { status: "not-yet-open", event, opensAt: policyVersion.submissionOpensAt };
@@ -140,7 +155,13 @@ export class CfpPublicAccessRepository {
     return {
       status: "open",
       publicId,
-      event: { ...event, timezone: policy.event.timezone, theme: policy.event.theme },
+      event: {
+        ...event,
+        timezone: policy.event.timezone,
+        theme: policy.event.theme,
+        startsAt: policy.event.startsAt,
+        location: policy.event.location,
+      },
       form: {
         versionId: stored.id,
         definition: parsed.definition,
@@ -151,8 +172,13 @@ export class CfpPublicAccessRepository {
         termsContent: stored.termsContent,
         consentRequired: stored.consentRequired ?? false,
       },
-      opensAt: policyVersion?.submissionOpensAt ?? null,
-      closesAt: policyVersion?.submissionClosesAt ?? null,
+      policy: {
+        id: policy.id,
+        versionNumber: policyVersion.versionNumber,
+        messages: policyVersion.messages as unknown as CfpPolicyMessages,
+      },
+      opensAt: policyVersion.submissionOpensAt,
+      closesAt: policyVersion.submissionClosesAt,
     };
   }
 }
