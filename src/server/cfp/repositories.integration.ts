@@ -152,6 +152,56 @@ describe("CFP form persistence", () => {
     assert.equal((await forms.get(event.id, first.formId, 1))?.definition.title, "First");
   });
 
+  test("pins the exact saved definition at publication and keeps it through close and reopen", async () => {
+    const event = await events.create(eventInput);
+    const administrator = await administrators.create({
+      eventId: event.id,
+      externalId: "publisher@example.com",
+      displayName: "Publisher",
+    });
+    const first = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition("First") });
+    const previewed = await forms.createVersion(event.id, first.formId, definition("Previewed and published"));
+    const policy = await policies.create({
+      eventId: event.id,
+      key: first.key,
+      definition: {
+        submissionOpensAt: new Date("2027-01-01T08:00:00.000Z"),
+        submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+        messages: { introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" },
+        conditionalVisibility: [],
+        categoryRouting: [],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
+      },
+    });
+
+    await policies.publishByForm(event.id, first.formId, previewed.versionNumber, administrator.externalId);
+    await forms.createVersion(event.id, first.formId, definition("Later draft"));
+
+    const reloadedForms = new CfpFormRepository(client);
+    const published = await reloadedForms.getPublishedByPublicId(policy.publicId);
+    assert.equal(published?.definition.title, "Previewed and published");
+    assert.equal(published?.versionNumber, previewed.versionNumber);
+    assert.equal(published?.status, CfpPolicyStatus.PUBLISHED);
+    assert.deepEqual(published?.definition, previewed.definition);
+
+    await policies.transitionByForm(event.id, first.formId, CfpPolicyStatus.CLOSED, administrator.externalId);
+    assert.equal((await reloadedForms.getPublishedByPublicId(policy.publicId))?.status, CfpPolicyStatus.CLOSED);
+    await policies.transitionByForm(event.id, first.formId, CfpPolicyStatus.PUBLISHED, administrator.externalId);
+    assert.equal(
+      (await reloadedForms.getPublishedByPublicId(policy.publicId))?.definition.title,
+      "Previewed and published",
+    );
+  });
+
   test("lists latest event-scoped form details with policy state, assignments, and responses", async () => {
     const event = await events.create(eventInput);
     const otherEvent = await events.create({ ...eventInput, name: "Other", slug: "other" });
