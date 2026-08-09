@@ -510,9 +510,10 @@ model CfpSubmissionDraft {
   answers       Json
   participants  Json
   categoryKeys  Json
-  expiresAt     DateTime       @db.Timestamptz(3)
-  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
+  remindersOptedOut Boolean        @default(false)
+  expiresAt         DateTime       @db.Timestamptz(3)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
   policy        CfpPolicy      @relation(fields: [eventId, policyId], references: [eventId, id], onDelete: Cascade)
   formVersion   CfpFormVersion @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
 
