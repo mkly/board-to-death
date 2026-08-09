@@ -7,10 +7,20 @@ import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { PublicCfpForm } from "./_components/public-cfp-form";
+import { randomUUID } from "node:crypto";
 
 interface PublicCfpStartPageProps {
   readonly params: Promise<{ readonly publicId: string }>;
 }
+
+// This route has a dynamic segment but no generateStaticParams and no dynamic
+// API, so Next would render it once on demand and then serve it from the full
+// route cache. That would freeze both the published form definition and the
+// per-render submissionKey below, and a frozen key is silent data loss: the
+// second applicant's answers would be swallowed by createFinalized's replay
+// path and they would be shown the first applicant's submission id. Every
+// request has to render its own key.
+export const dynamic = "force-dynamic";
 
 export default async function PublicCfpStartPage({ params }: PublicCfpStartPageProps) {
   const { publicId } = await params;
@@ -32,7 +42,7 @@ export default async function PublicCfpStartPage({ params }: PublicCfpStartPageP
           </p>
         </header>
 
-        <PublicCfpForm definition={lookup.form.definition} publicId={publicId} />
+        <PublicCfpForm definition={lookup.form.definition} publicId={publicId} submissionKey={randomUUID()} />
 
         <Button asChild className="self-start" variant="ghost">
           <Link href={publicCfpHref(publicId)}>Back to CFP details</Link>

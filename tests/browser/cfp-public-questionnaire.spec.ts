@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { Pool } from "pg";
 
+import { signInAsAdmin } from "./fixtures/magic-link-webhook";
 import { randomUUID } from "node:crypto";
 
 const testDatabaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 const database = new Pool({ connectionString: testDatabaseUrl });
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 
 test.setTimeout(120_000);
 
@@ -14,7 +16,7 @@ test.afterAll(async () => {
   await database.end();
 });
 
-test("renders and accepts every built-in published question type with conditional visibility", async ({ page }) => {
+test("finalizes one published submission and shows it in the correct event dashboard", async ({ context, page }) => {
   const eventId = randomUUID();
   const formId = randomUUID();
   const versionId = randomUUID();
@@ -22,12 +24,13 @@ test("renders and accepts every built-in published question type with conditiona
   const categoryId = randomUUID();
   const policyId = randomUUID();
   const publicId = randomUUID();
+  const eventSlug = `public-questionnaire-${publicId.slice(0, 8)}`;
   const now = new Date();
 
   await database.query(
     `INSERT INTO "events" ("id", "name", "slug", "type", "timezone", "startsAt", "endsAt", "updatedAt")
      VALUES ($1, 'Plan Screen 20 Conference', $2, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5)`,
-    [eventId, `public-questionnaire-${publicId.slice(0, 8)}`, new Date("2027-03-13"), new Date("2027-03-15"), now],
+    [eventId, eventSlug, new Date("2027-03-13"), new Date("2027-03-15"), now],
   );
   await database.query(`INSERT INTO "cfp_forms" ("id", "eventId", "key", "updatedAt") VALUES ($1, $2, 'main', $3)`, [
     formId,
@@ -153,8 +156,8 @@ test("renders and accepts every built-in published question type with conditiona
     await page.locator("form").evaluate((form) => {
       form.setAttribute("novalidate", "");
     });
-    await page.getByRole("button", { name: "Save responses" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "could not save" })).toBeVisible();
+    await page.getByRole("button", { name: "Submit proposal" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "could not submit" })).toBeVisible();
     await expect(page.getByText("This question is required.").first()).toBeVisible();
 
     await page.getByLabel("Session title", { exact: false }).fill("Schema-driven CFPs");
@@ -173,15 +176,29 @@ test("renders and accepts every built-in published question type with conditiona
     await page.getByLabel("Available date", { exact: false }).fill("2026-10-05");
     await page.getByLabel("Workshop room needs", { exact: false }).fill("Tables and power outlets");
     await page.getByLabel("I agree to the terms and consent to this submission.").check();
-    await page.getByRole("button", { name: "Save responses" }).click();
+    await page.locator("form").evaluate((element) => {
+      const form = element as HTMLFormElement;
+      form.requestSubmit();
+      form.requestSubmit();
+    });
 
-    await expect(page.getByRole("heading", { name: "Responses saved" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Proposal submitted" })).toBeVisible();
+    const submission = await database.query(
+      `SELECT s."id", s."kind", s."status", s."submittedAt", r."kind" AS "revisionKind"
+       FROM "cfp_submissions" s
+       JOIN "cfp_submission_revisions" r ON r."submissionId" = s."id"
+       WHERE s."eventId" = $1`,
+      [eventId],
+    );
+    expect(submission.rows).toHaveLength(1);
+    expect(submission.rows[0]).toMatchObject({ kind: "ABSTRACT", status: "SUBMITTED", revisionKind: "FINAL" });
+    expect(submission.rows[0].submittedAt).toBeInstanceOf(Date);
     const persisted = await database.query(
       `SELECT a."questionId", a."value"
        FROM "cfp_submissions" s
        JOIN "cfp_submission_revisions" r ON r."submissionId" = s."id"
        JOIN "cfp_submission_answers" a ON a."revisionId" = r."id"
-       WHERE s."eventId" = $1
+       WHERE s."eventId" = $1 AND r."kind" = 'FINAL'
        ORDER BY a."sortOrder"`,
       [eventId],
     );
@@ -202,6 +219,13 @@ test("renders and accepts every built-in published question type with conditiona
       [eventId],
     );
     expect(routedCategory.rows).toEqual([{ categoryId }]);
+
+    await signInAsAdmin(page);
+    await context.addCookies([{ name: "board_to_death_active_event", value: eventId, url: baseURL }]);
+    await page.goto(`/dashboard/events/${eventSlug}/submissions`);
+    await expect(page.getByText("Showing 1–1 of 1")).toBeVisible();
+    await expect(page.getByText("Share your session")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Submitted 1" })).toBeVisible();
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [eventId]);
   }

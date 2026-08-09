@@ -14,6 +14,7 @@ import { SpeakerRepository } from "../speakers/repositories.ts";
 import { CfpFormRepository } from "./repositories.ts";
 import { CfpCategoryRepository, type CfpSubmissionParticipantInput, CfpSubmissionRepository } from "./submissions.ts";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, describe, test } from "node:test";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -155,6 +156,83 @@ describe("CFP submission persistence", () => {
       }),
       1,
     );
+  });
+
+  test("creates one finalized public submission when the same request is retried concurrently", async () => {
+    const { eventId, formVersionId } = await createEventAndForm();
+    const category = await categories.create({ eventId, key: "design", label: "Game design" });
+    const idempotencyKey = randomUUID();
+    const input = {
+      eventId,
+      formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      idempotencyKey,
+      categoryIds: [category.id],
+      answers: [
+        { questionId: "abstract", value: "An idempotent public proposal" },
+        { questionId: "duration", value: 45 },
+      ],
+    } as const;
+
+    const [created, replayed] = await Promise.all([
+      submissions.createFinalized(input),
+      submissions.createFinalized(input),
+    ]);
+
+    assert.equal(created.id, idempotencyKey);
+    assert.equal(replayed.id, idempotencyKey);
+    assert.equal(created.status, CfpSubmissionStatus.SUBMITTED);
+    assert.ok(created.submittedAt);
+    assert.deepEqual(created.categoryIds, [category.id]);
+    assert.deepEqual(
+      created.revisions.map(({ versionNumber, kind }) => [versionNumber, kind]),
+      [[1, CfpSubmissionRevisionKind.FINAL]],
+    );
+    assert.equal(await client.cfpSubmission.count({ where: { eventId } }), 1);
+    assert.equal(
+      await client.cfpSubmissionRevision.count({
+        where: { submissionId: idempotencyKey, kind: CfpSubmissionRevisionKind.FINAL },
+      }),
+      1,
+    );
+  });
+
+  test("rolls back public submission participants when finalization rejects a forged answer", async () => {
+    const event = await events.create({ ...eventInput, slug: "atomic-public-finalization" });
+    const form = await forms.create({
+      eventId: event.id,
+      key: "speaker-cfp",
+      definition: {
+        ...definition(),
+        minimumSpeakerCount: 1,
+        maximumSpeakerCount: 1,
+        requiredSpeakerFields: [],
+      },
+    });
+    const version = await client.cfpFormVersion.findUniqueOrThrow({
+      where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
+    });
+
+    await expectRepositoryError(
+      submissions.createFinalized({
+        eventId: event.id,
+        formVersionId: version.id,
+        kind: CfpSubmissionKind.GUARANTEED_SESSION,
+        idempotencyKey: randomUUID(),
+        answers: [{ questionId: "forged-question", value: "Not in the published definition" }],
+        participants: [
+          {
+            email: "rollback@example.test",
+            givenName: "Roll",
+            familyName: "Back",
+          },
+        ],
+      }),
+      "invalid-input",
+    );
+
+    assert.equal(await client.cfpSubmission.count({ where: { eventId: event.id } }), 0);
+    assert.equal(await client.speaker.count({ where: { eventId: event.id } }), 0);
   });
 
   test("creates ordered speaker profiles atomically within the published speaker contract", async () => {

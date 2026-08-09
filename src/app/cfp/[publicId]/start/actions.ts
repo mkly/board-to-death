@@ -134,6 +134,10 @@ export async function submitPublicCfpForm(
   _previousState: PublicCfpFormActionState,
   formData: FormData,
 ): Promise<PublicCfpFormActionState> {
+  const idempotencyKey = z.uuid().safeParse(formData.get("submissionKey"));
+  if (!idempotencyKey.success) {
+    return { status: "error", message: "This submission request is invalid. Refresh the page and try again." };
+  }
   const client = getDatabaseClient();
   const lookup = await new CfpPublicAccessRepository(client).findByPublicId(publicId);
   if (lookup.status !== "open") {
@@ -165,20 +169,21 @@ export async function submitPublicCfpForm(
     if (categoryIds.length !== validation.categoryKeys.length) {
       return { status: "error", message: "This CFP has an invalid category configuration. Contact the organizer." };
     }
-    const submission = await new CfpSubmissionRepository(client).createDraft({
+    const submission = await new CfpSubmissionRepository(client).createFinalized({
       eventId: lookup.event.id,
       formVersionId: lookup.form.versionId,
       kind: lookup.form.definition.submissionKind ?? "ABSTRACT",
+      idempotencyKey: idempotencyKey.data,
       answers: validation.answers,
       categoryIds,
       participants: speakers.participants,
     });
     return {
       status: "success",
-      message: "Your responses were saved.",
+      message: "Your proposal was submitted.",
       submissionId: submission.id,
     };
   } catch {
-    return { status: "error", message: "Your responses could not be saved. Try again." };
+    return { status: "error", message: "Your proposal could not be submitted. Try again." };
   }
 }
