@@ -8,15 +8,15 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  id                 String              @id
+  name               String
+  email              String
+  emailVerified      Boolean             @default(false)
+  image              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  sessions           Session[]
+  accounts           Account[]
   cfpSubmissionViews CfpSubmissionView[]
 
   @@unique([email])
@@ -268,6 +268,28 @@ enum DashboardWidgetDataSource {
   UNSCHEDULED_SESSIONS
 }
 
+enum ContactGroupKind {
+  EXHIBITOR
+  SPONSOR
+}
+
+enum FileRequestTargetKind {
+  CONTACT
+  GROUP
+  SUBMISSION
+}
+
+enum FileRequestReplacementPolicy {
+  REPLACE_LATEST
+  KEEP_HISTORY
+}
+
+enum FileRequestAssignmentStatus {
+  PENDING
+  FULFILLED
+  WITHDRAWN
+}
+
 model Event {
   id                        String                     @id @default(uuid()) @db.Uuid
   name                      String
@@ -309,6 +331,10 @@ model Event {
   publishedProgram          PublishedProgram?
   speakerResourcePages      SpeakerResourcePage[]
   customDashboards          CustomDashboard[]
+  contacts                  Contact[]
+  contactGroups             ContactGroup[]
+  fileRequests              FileRequest[]
+  fileRequestAssignments    FileRequestAssignment[]
 
   @@map("events")
 }
@@ -348,6 +374,147 @@ model DashboardWidget {
   @@map("dashboard_widgets")
 }
 
+model Contact {
+  id           String                  @id @default(uuid()) @db.Uuid
+  eventId      String                  @db.Uuid
+  email        String
+  givenName    String
+  familyName   String
+  organization String?
+  jobTitle     String?
+  phone        String?
+  archivedAt   DateTime?               @db.Timestamptz(3)
+  createdAt    DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime                @updatedAt @db.Timestamptz(3)
+  event        Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  memberships  ContactGroupMember[]
+  assignments  FileRequestAssignment[]
+
+  @@unique([eventId, email])
+  @@unique([eventId, id])
+  @@index([eventId, archivedAt])
+  @@map("contacts")
+}
+
+model ContactGroup {
+  id          String                  @id @default(uuid()) @db.Uuid
+  eventId     String                  @db.Uuid
+  kind        ContactGroupKind
+  name        String
+  slug        String
+  archivedAt  DateTime?               @db.Timestamptz(3)
+  createdAt   DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                @updatedAt @db.Timestamptz(3)
+  event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  members     ContactGroupMember[]
+  assignments FileRequestAssignment[]
+
+  @@unique([eventId, slug])
+  @@unique([eventId, id])
+  @@index([eventId, kind, archivedAt])
+  @@map("contact_groups")
+}
+
+model ContactGroupMember {
+  id        String       @id @default(uuid()) @db.Uuid
+  eventId   String       @db.Uuid
+  groupId   String       @db.Uuid
+  contactId String       @db.Uuid
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  group     ContactGroup @relation(fields: [eventId, groupId], references: [eventId, id], onDelete: Cascade)
+  contact   Contact      @relation(fields: [eventId, contactId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([groupId, contactId])
+  @@index([eventId, contactId])
+  @@map("contact_group_members")
+}
+
+model FileRequest {
+  id          String                  @id @default(uuid()) @db.Uuid
+  eventId     String                  @db.Uuid
+  key         String
+  targetKind  FileRequestTargetKind
+  archivedAt  DateTime?               @db.Timestamptz(3)
+  createdAt   DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                @updatedAt @db.Timestamptz(3)
+  event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions    FileRequestVersion[]
+  assignments FileRequestAssignment[]
+
+  @@unique([eventId, key])
+  @@unique([eventId, id])
+  @@index([eventId, targetKind, archivedAt])
+  @@map("file_requests")
+}
+
+model FileRequestVersion {
+  id                  String                       @id @default(uuid()) @db.Uuid
+  eventId             String                       @db.Uuid
+  requestId           String                       @db.Uuid
+  versionNumber       Int
+  title               String
+  instructions        String?
+  dueOffsetDays       Int?
+  allowedContentTypes String[]
+  maxBytes            Int
+  replacementPolicy   FileRequestReplacementPolicy @default(REPLACE_LATEST)
+  createdAt           DateTime                     @default(now()) @db.Timestamptz(3)
+  request             FileRequest                  @relation(fields: [eventId, requestId], references: [eventId, id], onDelete: Cascade)
+  assignments         FileRequestAssignment[]
+
+  @@unique([requestId, versionNumber])
+  @@unique([eventId, requestId, id])
+  @@index([eventId, createdAt])
+  @@map("file_request_versions")
+}
+
+model FileRequestAssignment {
+  id               String                      @id @default(uuid()) @db.Uuid
+  eventId          String                      @db.Uuid
+  requestId        String                      @db.Uuid
+  requestVersionId String                      @db.Uuid
+  contactId        String?                     @db.Uuid
+  groupId          String?                     @db.Uuid
+  submissionId     String?                     @db.Uuid
+  status           FileRequestAssignmentStatus @default(PENDING)
+  dueAt            DateTime?                   @db.Timestamptz(3)
+  assignedAt       DateTime                    @default(now()) @db.Timestamptz(3)
+  fulfilledAt      DateTime?                   @db.Timestamptz(3)
+  withdrawnAt      DateTime?                   @db.Timestamptz(3)
+  updatedAt        DateTime                    @updatedAt @db.Timestamptz(3)
+  event            Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  request          FileRequest                 @relation(fields: [eventId, requestId], references: [eventId, id], onDelete: Restrict)
+  requestVersion   FileRequestVersion          @relation(fields: [eventId, requestId, requestVersionId], references: [eventId, requestId, id], onDelete: Restrict)
+  contact          Contact?                    @relation(fields: [eventId, contactId], references: [eventId, id], onDelete: Restrict)
+  group            ContactGroup?               @relation(fields: [eventId, groupId], references: [eventId, id], onDelete: Restrict)
+  submission       CfpSubmission?              @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Restrict)
+  files            FileRequestFile[]
+
+  @@unique([eventId, id])
+  @@unique([requestId, contactId])
+  @@unique([requestId, groupId])
+  @@unique([requestId, submissionId])
+  @@index([eventId, status])
+  @@index([requestId, status])
+  @@map("file_request_assignments")
+}
+
+model FileRequestFile {
+  id           String                @id @default(uuid()) @db.Uuid
+  assignmentId String                @db.Uuid
+  objectKey    String                @unique
+  fileName     String
+  contentType  String
+  size         Int
+  uploadedAt   DateTime              @default(now()) @db.Timestamptz(3)
+  supersededAt DateTime?             @db.Timestamptz(3)
+  assignment   FileRequestAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId, supersededAt])
+  @@index([assignmentId, uploadedAt])
+  @@map("file_request_files")
+}
+
 model CfpForm {
   id        String           @id @default(uuid()) @db.Uuid
   eventId   String           @db.Uuid
@@ -363,32 +530,32 @@ model CfpForm {
 }
 
 model CfpFormVersion {
-  id              String                  @id @default(uuid()) @db.Uuid
-  formId          String                  @db.Uuid
-  versionNumber   Int
-  schemaVersion   Int
-  title           String
-  description     String?
-  submissionKind  CfpSubmissionKind?
-  accessPolicy    CfpAccessPolicy?
-  welcomeTitle    String?
-  welcomeContent  String?
-  instructions    String?
-  termsContent    String?
-  consentRequired Boolean?
-  minimumSpeakerCount Int?
-  maximumSpeakerCount Int?
+  id                    String                  @id @default(uuid()) @db.Uuid
+  formId                String                  @db.Uuid
+  versionNumber         Int
+  schemaVersion         Int
+  title                 String
+  description           String?
+  submissionKind        CfpSubmissionKind?
+  accessPolicy          CfpAccessPolicy?
+  welcomeTitle          String?
+  welcomeContent        String?
+  instructions          String?
+  termsContent          String?
+  consentRequired       Boolean?
+  minimumSpeakerCount   Int?
+  maximumSpeakerCount   Int?
   requiredSpeakerFields Json?
-  customTypes     Json
-  categories      Json?
-  categoryRules   Json?
-  createdAt       DateTime                @default(now()) @db.Timestamptz(3)
-  form            CfpForm                 @relation(fields: [formId], references: [id], onDelete: Cascade)
-  steps           CfpFormStep[]
-  submissions     CfpSubmission[]
-  revisions       CfpSubmissionRevision[]
-  publishedByPolicies CfpPolicy[]
-  submissionDrafts CfpSubmissionDraft[]
+  customTypes           Json
+  categories            Json?
+  categoryRules         Json?
+  createdAt             DateTime                @default(now()) @db.Timestamptz(3)
+  form                  CfpForm                 @relation(fields: [formId], references: [id], onDelete: Cascade)
+  steps                 CfpFormStep[]
+  submissions           CfpSubmission[]
+  revisions             CfpSubmissionRevision[]
+  publishedByPolicies   CfpPolicy[]
+  submissionDrafts      CfpSubmissionDraft[]
 
   @@unique([formId, versionNumber])
   @@index([formId])
@@ -431,19 +598,19 @@ model CfpAdministrator {
 }
 
 model CfpPolicy {
-  id          String                @id @default(uuid()) @db.Uuid
-  eventId     String                @db.Uuid
-  key         String
-  publicId    String                @unique @default(uuid()) @db.Uuid
-  status      CfpPolicyStatus       @default(DRAFT)
-  publishedFormVersionId String?     @db.Uuid
-  createdAt   DateTime              @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime              @updatedAt @db.Timestamptz(3)
-  event       Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  versions    CfpPolicyVersion[]
-  transitions CfpPolicyTransition[]
-  publishedFormVersion CfpFormVersion? @relation(fields: [publishedFormVersionId], references: [id], onDelete: SetNull)
-  submissionDrafts CfpSubmissionDraft[]
+  id                     String                @id @default(uuid()) @db.Uuid
+  eventId                String                @db.Uuid
+  key                    String
+  publicId               String                @unique @default(uuid()) @db.Uuid
+  status                 CfpPolicyStatus       @default(DRAFT)
+  publishedFormVersionId String?               @db.Uuid
+  createdAt              DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime              @updatedAt @db.Timestamptz(3)
+  event                  Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions               CfpPolicyVersion[]
+  transitions            CfpPolicyTransition[]
+  publishedFormVersion   CfpFormVersion?       @relation(fields: [publishedFormVersionId], references: [id], onDelete: SetNull)
+  submissionDrafts       CfpSubmissionDraft[]
 
   @@unique([eventId, key])
   @@unique([eventId, id])
@@ -491,14 +658,14 @@ model CfpPolicyCategoryRoute {
 }
 
 model CfpPolicyAdminAssignment {
-  eventId                    String           @db.Uuid
-  versionId                  String           @db.Uuid
-  administratorId            String           @db.Uuid
-  role                       CfpAdminRole
-  notifyOnNewSubmission      Boolean          @default(false)
-  notifyOnSubmissionUpdate   Boolean          @default(false)
-  version                    CfpPolicyVersion @relation(fields: [eventId, versionId], references: [eventId, id], onDelete: Cascade)
-  administrator              CfpAdministrator @relation(fields: [eventId, administratorId], references: [eventId, id], onDelete: NoAction)
+  eventId                  String           @db.Uuid
+  versionId                String           @db.Uuid
+  administratorId          String           @db.Uuid
+  role                     CfpAdminRole
+  notifyOnNewSubmission    Boolean          @default(false)
+  notifyOnSubmissionUpdate Boolean          @default(false)
+  version                  CfpPolicyVersion @relation(fields: [eventId, versionId], references: [eventId, id], onDelete: Cascade)
+  administrator            CfpAdministrator @relation(fields: [eventId, administratorId], references: [eventId, id], onDelete: NoAction)
 
   @@id([versionId, administratorId])
   @@index([eventId, administratorId])
@@ -522,31 +689,32 @@ model CfpPolicyTransition {
 }
 
 model CfpSubmission {
-  id                    String                     @id @default(uuid()) @db.Uuid
-  eventId               String                     @db.Uuid
-  formVersionId         String                     @db.Uuid
-  kind                  CfpSubmissionKind
-  status                CfpSubmissionStatus        @default(DRAFT)
-  submittedAt           DateTime?                  @db.Timestamptz(3)
-  reviewStartedAt       DateTime?                  @db.Timestamptz(3)
-  decidedAt             DateTime?                  @db.Timestamptz(3)
-  confirmedAt           DateTime?                  @db.Timestamptz(3)
+  id                     String                     @id @default(uuid()) @db.Uuid
+  eventId                String                     @db.Uuid
+  formVersionId          String                     @db.Uuid
+  kind                   CfpSubmissionKind
+  status                 CfpSubmissionStatus        @default(DRAFT)
+  submittedAt            DateTime?                  @db.Timestamptz(3)
+  reviewStartedAt        DateTime?                  @db.Timestamptz(3)
+  decidedAt              DateTime?                  @db.Timestamptz(3)
+  confirmedAt            DateTime?                  @db.Timestamptz(3)
   intakeClientIdentifier String?
   intakePayloadHash      String?
   intakeCreatedBy        String?
   intakeUpdatedBy        String?
   intakeImportedAt       DateTime?                  @db.Timestamptz(3)
-  createdAt             DateTime                   @default(now()) @db.Timestamptz(3)
-  updatedAt             DateTime                   @updatedAt @db.Timestamptz(3)
-  event                 Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  formVersion           CfpFormVersion             @relation(fields: [formVersionId], references: [id], onDelete: Restrict)
-  revisions             CfpSubmissionRevision[]
-  categories            CfpSubmissionCategory[]
-  transitions           CfpSubmissionTransition[]
-  evaluationAssignments EvaluationAssignment[]
-  evaluationDecisions   EvaluationDecision[]
-  participants          CfpSubmissionParticipant[]
-  promotedSession       ProgramSession?            @relation("ProgramSessionSourceSubmission")
+  createdAt              DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime                   @updatedAt @db.Timestamptz(3)
+  event                  Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  formVersion            CfpFormVersion             @relation(fields: [formVersionId], references: [id], onDelete: Restrict)
+  revisions              CfpSubmissionRevision[]
+  categories             CfpSubmissionCategory[]
+  transitions            CfpSubmissionTransition[]
+  evaluationAssignments  EvaluationAssignment[]
+  evaluationDecisions    EvaluationDecision[]
+  participants           CfpSubmissionParticipant[]
+  promotedSession        ProgramSession?            @relation("ProgramSessionSourceSubmission")
+  fileRequestAssignments FileRequestAssignment[]
 
   @@unique([eventId, id])
   @@unique([eventId, intakeClientIdentifier])
