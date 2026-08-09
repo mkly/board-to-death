@@ -171,6 +171,19 @@ npx @biomejs/biome check --write
 ```
 > For more information on available rules, fixes, and CLI options, refer to the [Biome documentation](https://biomejs.dev/).
 
+### Browser tests
+
+Reset the guarded test database, then run the Playwright suite:
+
+```bash
+npm run db:test:reset
+npm run test:browser
+```
+
+Playwright starts the Next.js development server on `127.0.0.1:3100` by default, so the browser suite does not need a
+production build or production-only runtime secrets. Set `PLAYWRIGHT_WEB_SERVER_COMMAND` to use another server command,
+or `PLAYWRIGHT_BASE_URL` to test an already running application at another URL.
+
 ---
 
 > [!IMPORTANT]  

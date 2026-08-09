@@ -60,6 +60,10 @@ NODE_ENV=production npm run start -- --hostname 127.0.0.1 --port 3000
 The launcher validates configuration and the file volume again before starting Next.js. It forwards `SIGINT` and
 `SIGTERM`; allow 10–30 seconds for Next.js to drain in-flight requests before an orchestrator sends `SIGKILL`.
 
+The Playwright test runner does not use this production launcher by default. `npm run test:browser` starts `npm run dev`
+on `127.0.0.1:3100`, which keeps browser tests independent of production-only storage and secret requirements. Use
+`PLAYWRIGHT_WEB_SERVER_COMMAND` only when the suite should start a different server command.
+
 ## Health and restart
 
 `GET /api/health` returns `200` only when PostgreSQL answers a query and `FILE_STORAGE_PATH` is readable and writable.

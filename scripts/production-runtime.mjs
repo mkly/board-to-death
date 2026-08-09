@@ -1,9 +1,9 @@
+import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import { access, mkdir } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawn } from "node:child_process";
 
 const SIGNALS = ["SIGINT", "SIGTERM"];
 

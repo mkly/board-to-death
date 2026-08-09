@@ -1,9 +1,9 @@
-import { constants } from "node:fs";
-import { access } from "node:fs/promises";
-
 import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { getDatabaseClient } from "@/server/database";
 import { checkReadiness, createReadinessResponse } from "@/server/runtime/readiness";
+
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

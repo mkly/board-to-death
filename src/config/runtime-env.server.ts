@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { isAbsolute } from "node:path";
 
 import {
   type Environment,
@@ -11,6 +10,7 @@ import {
   RuntimeConfigError,
   type RuntimeMode,
 } from "./public-env.ts";
+import { isAbsolute } from "node:path";
 
 const SERVER_KEYS = [
   "AUTH_SECRET",
