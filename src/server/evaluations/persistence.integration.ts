@@ -236,7 +236,7 @@ describe("evaluation persistence", () => {
     assert.equal(assignments.length, 2);
     assert.equal(assignments[0]?.status, EvaluationAssignmentStatus.COMPLETED);
     assert.equal(assignments[0]?.evaluation?.status, EvaluationStatus.FINAL);
-    assert.equal(assignments[0]?.evaluation?.results[0]?.score.toString(), "4");
+    assert.equal(assignments[0]?.evaluation?.results[0]?.score?.toString(), "4");
     assert.equal(assignments[1]?.id, secondAssignment.id);
     assert.equal(assignments[1]?.evaluation?.status, EvaluationStatus.DRAFT);
     await assert.rejects(

@@ -110,3 +110,44 @@ export async function manageEvaluationAssignments(
     throw error;
   }
 }
+
+const reopenSchema = z.object({
+  eventSlug: z.string().min(1),
+  assignmentId: z.string().uuid(),
+});
+
+export async function reopenEvaluationAssignment(
+  _previousState: ManageAssignmentsState,
+  formData: FormData,
+): Promise<ManageAssignmentsState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const allowedEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
+  if (!session || !isAllowedAdminEmail(session.user.email, allowedEmails)) {
+    return { status: "error", message: "Your administrator session expired. Sign in and try again." };
+  }
+
+  const result = reopenSchema.safeParse({
+    eventSlug: formData.get("eventSlug"),
+    assignmentId: formData.get("assignmentId"),
+  });
+  if (!result.success) {
+    return { status: "error", message: result.error.issues[0]?.message ?? "Check the assignment fields." };
+  }
+
+  const client = getDatabaseClient();
+  const event = await client.event.findUnique({
+    where: { slug: result.data.eventSlug },
+    select: { id: true, slug: true },
+  });
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  const repository = new EvaluationAssignmentRepository(client);
+  try {
+    await repository.reopenEvaluation(event.id, result.data.assignmentId);
+    revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
+    return { status: "success", message: "Evaluation reopened for the reviewer." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
