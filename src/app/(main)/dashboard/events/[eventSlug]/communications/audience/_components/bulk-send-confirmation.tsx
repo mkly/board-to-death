@@ -56,6 +56,9 @@ function SelectionInputs({ selection }: { readonly selection: RecipientAudienceS
       {selection.onboardingStatuses?.map((value) => (
         <input key={`onboarding-${value}`} type="hidden" name="onboarding" value={value} />
       ))}
+      {selection.tierIds?.map((value) => (
+        <input key={`tier-${value}`} type="hidden" name="tier" value={value} />
+      ))}
     </>
   );
 }
