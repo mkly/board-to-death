@@ -14,6 +14,7 @@ import {
   Presentation,
   Rows3,
   Settings,
+  Sheet,
   Sparkles,
   UserRoundCheck,
   UserSearch,
@@ -61,6 +62,7 @@ export interface NavGroup {
 const workspaces = [
   { id: "overview", title: "Overview", icon: CircleGauge },
   { id: "dashboards", title: "Custom dashboards", icon: LayoutDashboard },
+  { id: "reports", title: "Reports", icon: Sheet },
   { id: "cfp", title: "Call for proposals", icon: FormInput },
   { id: "submissions", title: "Submissions", icon: FileText },
   { id: "sessions", title: "Sessions", icon: Presentation },
