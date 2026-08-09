@@ -41,6 +41,8 @@ export interface CfpPolicyMessages {
 export interface CfpPolicyAdminAssignmentInput {
   readonly administratorId: string;
   readonly role: CfpAdminRole;
+  readonly notifyOnNewSubmission: boolean;
+  readonly notifyOnSubmissionUpdate: boolean;
 }
 
 export interface CfpPolicyDefinition {
@@ -154,6 +156,8 @@ function validateDefinition(input: CfpPolicyDefinition): CfpPolicyDefinition {
   const adminAssignments = input.adminAssignments.map((assignment, index) => ({
     administratorId: requireText(assignment.administratorId, `adminAssignments.${index}.administratorId`),
     role: assignment.role,
+    notifyOnNewSubmission: assignment.notifyOnNewSubmission,
+    notifyOnSubmissionUpdate: assignment.notifyOnSubmissionUpdate,
   }));
   const conditionalVisibility = input.conditionalVisibility.map((rule, index) => ({
     target: requireText(rule.target, `conditionalVisibility.${index}.target`),
@@ -276,10 +280,14 @@ function versionData(eventId: string, policyId: string, versionNumber: number, d
       })),
     },
     adminAssignments: {
-      create: definition.adminAssignments.map(({ administratorId, role }) => ({
-        role,
-        administrator: { connect: { eventId_id: { eventId, id: administratorId } } },
-      })),
+      create: definition.adminAssignments.map(
+        ({ administratorId, notifyOnNewSubmission, notifyOnSubmissionUpdate, role }) => ({
+          role,
+          notifyOnNewSubmission,
+          notifyOnSubmissionUpdate,
+          administrator: { connect: { eventId_id: { eventId, id: administratorId } } },
+        }),
+      ),
     },
   } satisfies Prisma.CfpPolicyVersionCreateInput;
 }
@@ -304,7 +312,14 @@ function fromStored(version: StoredVersion): PersistedCfpPolicyDefinition {
         categoryId,
         condition: condition as CfpRuleCondition,
       })),
-      adminAssignments: version.adminAssignments.map(({ administratorId, role }) => ({ administratorId, role })),
+      adminAssignments: version.adminAssignments.map(
+        ({ administratorId, notifyOnNewSubmission, notifyOnSubmissionUpdate, role }) => ({
+          administratorId,
+          role,
+          notifyOnNewSubmission,
+          notifyOnSubmissionUpdate,
+        }),
+      ),
     },
   };
 }
@@ -350,6 +365,13 @@ export class CfpAdministratorRepository {
     } catch (error) {
       return mapDatabaseError(error);
     }
+  }
+
+  async list(eventId: string): Promise<CfpAdministrator[]> {
+    return this.client.cfpAdministrator.findMany({
+      where: { eventId },
+      orderBy: [{ displayName: "asc" }, { externalId: "asc" }],
+    });
   }
 }
 
@@ -428,6 +450,31 @@ export class CfpPolicyRepository {
       include: versionInclude,
     });
     return version ? fromStored(version) : null;
+  }
+
+  async updateAdministratorAssignments(
+    eventId: string,
+    policyId: string,
+    actorExternalId: string,
+    assignments: readonly CfpPolicyAdminAssignmentInput[],
+  ): Promise<PersistedCfpPolicyDefinition> {
+    const current = await this.get(eventId, policyId);
+    if (!current) throw new RepositoryError("not-found", "The event-owned CFP policy was not found.");
+
+    const actor = await this.client.cfpAdministrator.findUnique({
+      where: {
+        eventId_externalId: { eventId, externalId: requireText(actorExternalId, "actorExternalId").toLowerCase() },
+      },
+      select: { id: true },
+    });
+    const actorAssignment = current.definition.adminAssignments.find(
+      ({ administratorId }) => administratorId === actor?.id,
+    );
+    if (actorAssignment?.role !== "OWNER") {
+      throw new RepositoryError("not-found", "Administrator assignment access is required.");
+    }
+
+    return this.createVersion(eventId, policyId, { ...current.definition, adminAssignments: assignments });
   }
 
   async transition(

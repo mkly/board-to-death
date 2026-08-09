@@ -58,8 +58,18 @@ function definition(categoryId: string, ownerId: string, editorId: string): CfpP
       },
     ],
     adminAssignments: [
-      { administratorId: ownerId, role: CfpAdminRole.OWNER },
-      { administratorId: editorId, role: CfpAdminRole.EDITOR },
+      {
+        administratorId: ownerId,
+        role: CfpAdminRole.OWNER,
+        notifyOnNewSubmission: true,
+        notifyOnSubmissionUpdate: false,
+      },
+      {
+        administratorId: editorId,
+        role: CfpAdminRole.EDITOR,
+        notifyOnNewSubmission: false,
+        notifyOnSubmissionUpdate: true,
+      },
     ],
   };
 }
@@ -210,5 +220,54 @@ describe("CFP policy persistence", () => {
       }),
     );
     assert.equal(await client.cfpPolicy.count(), 0);
+  });
+
+  test("restricts administrator changes to owners and preserves alert preferences", async () => {
+    const { event, category, owner, editor } = await fixtures();
+    const policy = await policies.create({
+      eventId: event.id,
+      key: "main-cfp",
+      definition: definition(category.id, owner.id, editor.id),
+    });
+
+    await assert.rejects(
+      policies.updateAdministratorAssignments(
+        event.id,
+        policy.id,
+        editor.externalId,
+        policy.definition.adminAssignments,
+      ),
+      (error: unknown) => error instanceof RepositoryError && error.code === "not-found",
+    );
+    await expectInvalid(policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId, []));
+    await expectInvalid(
+      policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId, [
+        {
+          administratorId: editor.id,
+          role: CfpAdminRole.EDITOR,
+          notifyOnNewSubmission: true,
+          notifyOnSubmissionUpdate: false,
+        },
+      ]),
+    );
+
+    const updated = await policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId.toUpperCase(), [
+      {
+        administratorId: owner.id,
+        role: CfpAdminRole.OWNER,
+        notifyOnNewSubmission: false,
+        notifyOnSubmissionUpdate: true,
+      },
+    ]);
+    assert.equal(updated.versionNumber, 2);
+    assert.deepEqual(updated.definition.adminAssignments, [
+      {
+        administratorId: owner.id,
+        role: CfpAdminRole.OWNER,
+        notifyOnNewSubmission: false,
+        notifyOnSubmissionUpdate: true,
+      },
+    ]);
+    assert.equal(updated.definition.messages.submissionConfirmation, "Your proposal is safely on the table.");
   });
 });

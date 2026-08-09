@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
-import { CfpPolicyStatus } from "@/generated/prisma/client";
-import { CfpPolicyRepository } from "@/server/cfp/policies";
+import { CfpAdminRole, CfpDraftPolicy, CfpPolicyStatus } from "@/generated/prisma/client";
+import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
@@ -16,7 +16,9 @@ import { randomUUID } from "node:crypto";
 interface AuthorizedCfpEvent {
   readonly id: string;
   readonly slug: string;
+  readonly startsAt: Date;
   readonly administratorEmail: string;
+  readonly administratorName: string;
 }
 
 async function requireAuthorizedEvent(eventSlug: string): Promise<AuthorizedCfpEvent> {
@@ -24,7 +26,13 @@ async function requireAuthorizedEvent(eventSlug: string): Promise<AuthorizedCfpE
   const event = findAuthorizedEvent(shell.events, eventSlug);
 
   if (!event || shell.activeEvent?.id !== event.id) notFound();
-  return { id: event.id, slug: event.slug, administratorEmail: shell.user.email };
+  return {
+    id: event.id,
+    slug: event.slug,
+    startsAt: event.startsAt,
+    administratorEmail: shell.user.email,
+    administratorName: shell.user.name.trim() || shell.user.email,
+  };
 }
 
 function destination(eventSlug: string, result: { readonly notice?: string; readonly error?: string }): string {
@@ -49,7 +57,8 @@ function refreshAndRedirect(eventSlug: string, notice: string): never {
 export async function createCfpFormDraft(eventSlug: string): Promise<never> {
   const event = await requireAuthorizedEvent(eventSlug);
 
-  const created = await new CfpFormRepository(getDatabaseClient()).create({
+  const client = getDatabaseClient();
+  const created = await new CfpFormRepository(client).create({
     eventId: event.id,
     key: `draft-${randomUUID()}`,
     definition: {
@@ -73,6 +82,42 @@ export async function createCfpFormDraft(eventSlug: string): Promise<never> {
       ],
     },
   });
+
+  try {
+    const administrator = await new CfpAdministratorRepository(client).ensure({
+      eventId: event.id,
+      externalId: event.administratorEmail,
+      displayName: event.administratorName,
+    });
+    await new CfpPolicyRepository(client).create({
+      eventId: event.id,
+      key: created.key,
+      definition: {
+        submissionOpensAt: new Date(event.startsAt.getTime() - 180 * 24 * 60 * 60 * 1_000),
+        submissionClosesAt: new Date(event.startsAt.getTime() - 24 * 60 * 60 * 1_000),
+        confirmationClosesAt: event.startsAt,
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+        messages: {
+          introduction: created.definition.welcomeContent ?? "Share your proposal with our program team.",
+          submissionConfirmation: "Your submission has been received.",
+          closed: "This call for proposals is closed.",
+        },
+        conditionalVisibility: [],
+        categoryRouting: [],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    redirect(destination(eventSlug, { error: errorMessage(error) }));
+  }
 
   redirect(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${created.formId}/setup`);
 }

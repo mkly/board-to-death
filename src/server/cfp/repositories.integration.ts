@@ -177,7 +177,14 @@ describe("CFP form persistence", () => {
         },
         conditionalVisibility: [],
         categoryRouting: [],
-        adminAssignments: [{ administratorId: administrator.id, role: CfpAdminRole.OWNER }],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
       },
     });
     await submissions.createDraft({
@@ -233,7 +240,14 @@ describe("CFP form persistence", () => {
         messages: { introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" },
         conditionalVisibility: [],
         categoryRouting: [],
-        adminAssignments: [{ administratorId: administrator.id, role: CfpAdminRole.OWNER }],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
       },
     });
     await policies.transition(event.id, sourcePolicy.id, CfpPolicyStatus.PUBLISHED, administrator.id);
