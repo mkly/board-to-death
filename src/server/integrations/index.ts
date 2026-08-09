@@ -20,6 +20,26 @@ export type {
 } from "./configuration.ts";
 export { AcceleventsConfigurationRepository, acceleventsAuditDetails } from "./configuration.ts";
 export type {
+  SessionMappingDefinition,
+  SessionMappingView,
+  SessionPreviewAction,
+  SessionPreviewInput,
+  SessionPreviewRecord,
+  SessionPreviewResult,
+  SessionRemoteRecord,
+} from "./session-preview.ts";
+export {
+  AcceleventsSessionMappingRepository,
+  buildSessionOutboundRecords,
+  DEFAULT_SESSION_MAPPING,
+  parseSessionMappingDefinition,
+  previewAcceleventsSessions,
+  toAcceleventsSessionInput,
+} from "./session-preview.ts";
+export { sessionPreviewCsv } from "./session-preview-csv.ts";
+export type { LoadedSessionPreview, LoadedSessionPreviewCsv } from "./session-preview-loader.ts";
+export { loadSessionPreview, loadSessionPreviewCsv } from "./session-preview-loader.ts";
+export type {
   SpeakerFieldMapping,
   SpeakerMappingSource,
   SpeakerPreview,
