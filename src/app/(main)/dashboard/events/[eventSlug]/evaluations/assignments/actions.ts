@@ -114,6 +114,7 @@ export async function manageEvaluationAssignments(
 const reopenSchema = z.object({
   eventSlug: z.string().min(1),
   assignmentId: z.string().uuid(),
+  expectedEvaluationVersion: z.coerce.number().int().positive(),
 });
 
 export async function reopenEvaluationAssignment(
@@ -129,6 +130,7 @@ export async function reopenEvaluationAssignment(
   const result = reopenSchema.safeParse({
     eventSlug: formData.get("eventSlug"),
     assignmentId: formData.get("assignmentId"),
+    expectedEvaluationVersion: formData.get("expectedEvaluationVersion"),
   });
   if (!result.success) {
     return { status: "error", message: result.error.issues[0]?.message ?? "Check the assignment fields." };
@@ -143,9 +145,13 @@ export async function reopenEvaluationAssignment(
 
   const repository = new EvaluationAssignmentRepository(client);
   try {
-    await repository.reopenEvaluation(event.id, result.data.assignmentId);
+    await repository.reopenEvaluation(event.id, result.data.assignmentId, {
+      actorId: session.user.id,
+      expectedEvaluationVersion: result.data.expectedEvaluationVersion,
+    });
     revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
-    return { status: "success", message: "Evaluation reopened for the reviewer." };
+    revalidatePath(`/dashboard/events/${event.slug}/evaluations/results`);
+    return { status: "success", message: "Evaluation returned to the reviewer for correction." };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;

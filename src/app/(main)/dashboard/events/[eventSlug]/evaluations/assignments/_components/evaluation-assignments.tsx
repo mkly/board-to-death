@@ -25,9 +25,11 @@ const reopenInitialState: ManageAssignmentsState = { status: "idle" };
 function ReopenAssignmentButton({
   eventSlug,
   assignmentId,
+  evaluationVersion,
 }: {
   readonly eventSlug: string;
   readonly assignmentId: string;
+  readonly evaluationVersion: number;
 }) {
   const [state, setState] = useState<ManageAssignmentsState>(reopenInitialState);
   const [pending, startTransition] = useTransition();
@@ -37,6 +39,7 @@ function ReopenAssignmentButton({
       const formData = new FormData();
       formData.set("eventSlug", eventSlug);
       formData.set("assignmentId", assignmentId);
+      formData.set("expectedEvaluationVersion", String(evaluationVersion));
       setState(await reopenEvaluationAssignment(state, formData));
     });
   }
@@ -47,12 +50,12 @@ function ReopenAssignmentButton({
       variant="ghost"
       size="sm"
       disabled={pending}
-      aria-label="Reopen evaluation for this reviewer"
-      title={state.status === "error" ? state.message : "Reopen evaluation"}
+      aria-label="Reopen evaluation for this reviewer and return it for correction"
+      title={state.status === "error" ? state.message : "Return evaluation for correction"}
       onClick={handleReopen}
     >
       {pending ? <Spinner data-icon="inline-start" /> : <LockOpenIcon data-icon="inline-start" />}
-      Reopen
+      Return for correction
     </Button>
   );
 }
@@ -391,8 +394,12 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                                   {assignment.committeeName ? ` · ${assignment.committeeName}` : ""}
                                   {assignment.status === "COMPLETED" ? " · completed" : ""}
                                 </Badge>
-                                {assignment.status === "COMPLETED" ? (
-                                  <ReopenAssignmentButton eventSlug={event.slug} assignmentId={assignment.id} />
+                                {assignment.status === "COMPLETED" && assignment.evaluationVersion !== null ? (
+                                  <ReopenAssignmentButton
+                                    eventSlug={event.slug}
+                                    assignmentId={assignment.id}
+                                    evaluationVersion={assignment.evaluationVersion}
+                                  />
                                 ) : null}
                               </span>
                             ))

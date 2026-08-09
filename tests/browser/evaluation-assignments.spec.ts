@@ -25,7 +25,8 @@ type FixtureAction =
   | "deactivate-reviewers"
   | "remove-committee-member"
   | "start-evaluation"
-  | "complete-submission";
+  | "complete-submission"
+  | "open-next-round";
 
 async function runFixture(action: FixtureAction, ...args: readonly string[]): Promise<BrowserFixture | null> {
   const { stdout } = await execFileAsync(process.execPath, [fixtureScript, action, ...args], { env: process.env });
@@ -140,6 +141,23 @@ test.describe("evaluation reviewer assignments", () => {
     await expect(page.getByText("2/2 complete", { exact: true })).toBeVisible();
     await expect(page.getByText("4.75", { exact: true })).toBeVisible();
     await expect(page.getByText("1 incomplete", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Advance" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Close round" })).toBeDisabled();
+    await page.getByRole("button", { name: "Advance" }).click();
+    await expect(page.getByText("Submission advanced to the next evaluation round.")).toBeVisible();
+    await expect(page.getByText("Advanced", { exact: true })).toBeVisible();
+
+    await runFixture("complete-submission", fixture.secondSubmissionId);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Close round" })).toBeEnabled();
+    await page.getByRole("button", { name: "Close round" }).click();
+    await expect(page.getByText("Evaluation round closed.")).toBeVisible();
+
+    await runFixture("open-next-round", fixture.eventId);
+    await page.goto(`/dashboard/events/${fixture.eventSlug}/evaluations/assignments`);
+    await expect(page.getByText("1 eligible submissions", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(`Select submission ${fixture.firstSubmissionId}`)).toBeVisible();
+    await expect(page.getByLabel(`Select submission ${fixture.secondSubmissionId}`)).toHaveCount(0);
   });
 
   test("shows a safe disabled state when the event has no active reviewers", async ({ page }) => {

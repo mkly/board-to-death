@@ -239,10 +239,12 @@ export class EvaluationPlanRepository {
     eventId: string,
     roundId: string,
     toStatus: Exclude<EvaluationRoundStatus, "PLANNED">,
+    input: { readonly actorId?: string | null; readonly note?: string | null } = {},
   ): Promise<EvaluationRound> {
     try {
       return await this.client.$transaction(async (transaction) => {
         const round = await requireRound(transaction, eventId, roundId);
+        if (round.status === toStatus) return round;
         const now = new Date();
         let data: Prisma.EvaluationRoundUpdateInput;
 
@@ -274,6 +276,20 @@ export class EvaluationPlanRepository {
           }
           data = { status: "OPEN", visibilitySnapshot: round.reviewerVisibility, opensAt: now };
         } else if (round.status === "OPEN" && toStatus === "CLOSED") {
+          const incompleteAssignments = await transaction.evaluationAssignment.count({
+            where: {
+              roundId: round.id,
+              status: { not: "REVOKED" },
+              OR: [
+                { status: { not: "COMPLETED" } },
+                { evaluation: { is: null } },
+                { evaluation: { is: { status: { not: "FINAL" } } } },
+              ],
+            },
+          });
+          if (incompleteAssignments > 0) {
+            throw new RepositoryError("invalid-input", "Complete or withdraw every reviewer assignment first.");
+          }
           data = { status: "CLOSED", closesAt: now };
         } else if (round.status === "CLOSED" && toStatus === "ARCHIVED") {
           data = { status: "ARCHIVED", archivedAt: now };
@@ -286,7 +302,13 @@ export class EvaluationPlanRepository {
 
         const updated = await transaction.evaluationRound.update({ where: { id: round.id }, data });
         await transaction.evaluationRoundTransition.create({
-          data: { roundId: round.id, fromStatus: round.status, toStatus },
+          data: {
+            roundId: round.id,
+            fromStatus: round.status,
+            toStatus,
+            actorId: optionalText(input.actorId),
+            note: optionalText(input.note),
+          },
         });
 
         if (toStatus === "ARCHIVED") {

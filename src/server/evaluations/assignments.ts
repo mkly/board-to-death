@@ -56,6 +56,7 @@ export interface EvaluationAssignmentSubmission {
     readonly reviewerName: string;
     readonly committeeName: string | null;
     readonly status: string;
+    readonly evaluationVersion: number | null;
   }[];
 }
 
@@ -152,10 +153,25 @@ async function requireReviewer(
 async function requireEligibleSubmissions(
   client: DatabaseClient,
   eventId: string,
+  roundId: string,
   submissionIds: readonly string[],
 ): Promise<void> {
+  const round = await client.evaluationRound.findFirst({
+    where: { id: roundId, planVersion: { plan: { eventId } } },
+    select: { planVersionId: true, sortOrder: true },
+  });
+  if (!round) invalid("Select an evaluation round from this event.");
+  const earlierRound = await client.evaluationRound.findFirst({
+    where: { planVersionId: round.planVersionId, sortOrder: { lt: round.sortOrder } },
+    select: { id: true },
+  });
   const submissions = await client.cfpSubmission.findMany({
-    where: { eventId, id: { in: [...submissionIds] }, status: { in: [...eligibleSubmissionStatuses] } },
+    where: {
+      eventId,
+      id: { in: [...submissionIds] },
+      status: { in: [...eligibleSubmissionStatuses] },
+      ...(earlierRound ? { evaluationAdvancements: { some: { targetRoundId: roundId } } } : {}),
+    },
     select: { id: true },
   });
   if (submissions.length !== submissionIds.length) {
@@ -226,7 +242,13 @@ export class EvaluationAssignmentRepository {
           planVersion: { status: EvaluationPlanVersionStatus.ACTIVE, plan: { eventId } },
         },
         orderBy: [{ planVersion: { versionNumber: "desc" } }, { sortOrder: "asc" }],
-        select: { id: true, title: true, planVersion: { select: { title: true } } },
+        select: {
+          id: true,
+          title: true,
+          sortOrder: true,
+          planVersionId: true,
+          planVersion: { select: { title: true } },
+        },
       }),
       this.client.evaluationReviewer.findMany({
         where: { eventId, status: EvaluationReviewerStatus.ACTIVE },
@@ -263,7 +285,16 @@ export class EvaluationAssignmentRepository {
     }
 
     const submissions = await this.client.cfpSubmission.findMany({
-      where: { eventId, status: { in: [...eligibleSubmissionStatuses] } },
+      where: {
+        eventId,
+        status: { in: [...eligibleSubmissionStatuses] },
+        ...((await this.client.evaluationRound.findFirst({
+          where: { planVersionId: selectedRound.planVersionId, sortOrder: { lt: selectedRound.sortOrder } },
+          select: { id: true },
+        }))
+          ? { evaluationAdvancements: { some: { targetRoundId: selectedRound.id } } }
+          : {}),
+      },
       orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -295,7 +326,7 @@ export class EvaluationAssignmentRepository {
             status: true,
             reviewer: { select: { displayName: true } },
             committee: { select: { name: true } },
-            evaluation: { select: { status: true } },
+            evaluation: { select: { status: true, version: true } },
           },
         },
       },
@@ -318,6 +349,7 @@ export class EvaluationAssignmentRepository {
         reviewerName: assignment.reviewer.displayName,
         committeeName: assignment.committee?.name ?? null,
         status: assignment.status,
+        evaluationVersion: assignment.evaluation?.version ?? null,
       })),
     }));
 
@@ -337,7 +369,7 @@ export class EvaluationAssignmentRepository {
       return await this.client.$transaction(async (transaction) => {
         await Promise.all([
           requireOpenRound(transaction, input.eventId, input.roundId),
-          requireEligibleSubmissions(transaction, input.eventId, submissionIds),
+          requireEligibleSubmissions(transaction, input.eventId, input.roundId, submissionIds),
         ]);
         const committee = await transaction.evaluationCommittee.findFirst({
           where: { id: input.committeeId, eventId: input.eventId },
@@ -397,7 +429,7 @@ export class EvaluationAssignmentRepository {
         await Promise.all([
           requireOpenRound(transaction, input.eventId, input.roundId),
           requireReviewer(transaction, input.eventId, input.reviewerId),
-          requireEligibleSubmissions(transaction, input.eventId, submissionIds),
+          requireEligibleSubmissions(transaction, input.eventId, input.roundId, submissionIds),
         ]);
         const existing = await transaction.evaluationAssignment.findMany({
           where: { roundId: input.roundId, reviewerId: input.reviewerId, submissionId: { in: submissionIds } },
@@ -446,7 +478,7 @@ export class EvaluationAssignmentRepository {
           requireOpenRound(transaction, input.eventId, input.roundId),
           requireReviewer(transaction, input.eventId, input.fromReviewerId, false),
           requireReviewer(transaction, input.eventId, input.reviewerId),
-          requireEligibleSubmissions(transaction, input.eventId, submissionIds),
+          requireEligibleSubmissions(transaction, input.eventId, input.roundId, submissionIds),
         ]);
         const [sources, targets] = await Promise.all([
           transaction.evaluationAssignment.findMany({
@@ -511,7 +543,7 @@ export class EvaluationAssignmentRepository {
         await Promise.all([
           requireOpenRound(transaction, input.eventId, input.roundId),
           requireReviewer(transaction, input.eventId, input.reviewerId, false),
-          requireEligibleSubmissions(transaction, input.eventId, submissionIds),
+          requireEligibleSubmissions(transaction, input.eventId, input.roundId, submissionIds),
         ]);
         const assignments = await transaction.evaluationAssignment.findMany({
           where: {
@@ -536,27 +568,101 @@ export class EvaluationAssignmentRepository {
     }
   }
 
-  async reopenEvaluation(eventId: string, assignmentId: string): Promise<void> {
+  async reopenEvaluation(
+    eventId: string,
+    assignmentId: string,
+    input: {
+      readonly actorId: string;
+      readonly expectedEvaluationVersion: number;
+      readonly note?: string | null;
+    },
+  ): Promise<void> {
     try {
       await this.client.$transaction(async (transaction) => {
+        const actorId = input.actorId.trim();
+        if (actorId === "") invalid("Actor is required.");
         const assignment = await transaction.evaluationAssignment.findFirst({
           where: { id: assignmentId, round: { planVersion: { plan: { eventId } } } },
-          select: { id: true, status: true, evaluation: { select: { id: true, status: true } } },
+          select: {
+            id: true,
+            status: true,
+            submissionId: true,
+            round: { select: { id: true, status: true } },
+            evaluation: { select: { id: true, status: true, version: true } },
+          },
         });
         if (!assignment) throw new RepositoryError("not-found", "The event-owned reviewer assignment was not found.");
+        const existingReturn = await transaction.evaluationCorrectionReturn.findUnique({
+          where: {
+            assignmentId_evaluationVersion: {
+              assignmentId: assignment.id,
+              evaluationVersion: input.expectedEvaluationVersion,
+            },
+          },
+        });
+        if (existingReturn) {
+          if (
+            assignment.evaluation?.status === EvaluationStatus.DRAFT &&
+            assignment.evaluation.version === input.expectedEvaluationVersion + 1
+          ) {
+            return;
+          }
+          invalid("The evaluation changed after this correction return was applied.");
+        }
+        if (assignment.round.status !== EvaluationRoundStatus.OPEN) {
+          invalid("Evaluations can only be returned while their round is open.");
+        }
+        const advancement = await transaction.evaluationRoundAdvancement.findUnique({
+          where: {
+            sourceRoundId_submissionId: {
+              sourceRoundId: assignment.round.id,
+              submissionId: assignment.submissionId,
+            },
+          },
+          select: { id: true },
+        });
+        if (advancement) invalid("An advanced submission cannot be returned for correction in its earlier round.");
+        if (assignment.evaluation?.version !== input.expectedEvaluationVersion) {
+          invalid("The evaluation changed while the correction return was being applied.");
+        }
         if (!assignment.evaluation || assignment.evaluation.status !== EvaluationStatus.FINAL) {
           invalid("Only a finalized evaluation can be reopened.");
         }
-        await transaction.evaluation.update({
-          where: { id: assignment.evaluation.id },
+        if (assignment.status !== EvaluationAssignmentStatus.COMPLETED) {
+          invalid("Only a completed reviewer assignment can be returned for correction.");
+        }
+        const evaluation = await transaction.evaluation.updateMany({
+          where: {
+            id: assignment.evaluation.id,
+            status: EvaluationStatus.FINAL,
+            version: input.expectedEvaluationVersion,
+          },
           data: { status: EvaluationStatus.DRAFT, submittedAt: null, version: { increment: 1 } },
         });
-        if (assignment.status === EvaluationAssignmentStatus.COMPLETED) {
-          await transaction.evaluationAssignment.update({
-            where: { id: assignment.id },
-            data: { status: EvaluationAssignmentStatus.ASSIGNED, completedAt: null },
+        if (evaluation.count !== 1) {
+          const concurrentReturn = await transaction.evaluationCorrectionReturn.findUnique({
+            where: {
+              assignmentId_evaluationVersion: {
+                assignmentId: assignment.id,
+                evaluationVersion: input.expectedEvaluationVersion,
+              },
+            },
           });
+          if (concurrentReturn) return;
+          invalid("The evaluation changed while the correction return was being applied.");
         }
+        await transaction.evaluationAssignment.update({
+          where: { id: assignment.id },
+          data: { status: EvaluationAssignmentStatus.ASSIGNED, completedAt: null },
+        });
+        await transaction.evaluationCorrectionReturn.create({
+          data: {
+            assignmentId: assignment.id,
+            evaluationVersion: input.expectedEvaluationVersion,
+            actorId,
+            note: input.note?.trim() || null,
+          },
+        });
       });
     } catch (error) {
       mapDatabaseError(error);

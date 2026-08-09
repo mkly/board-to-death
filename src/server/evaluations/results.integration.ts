@@ -338,7 +338,10 @@ describe("evaluation result aggregation", () => {
     );
     assert.ok(!workspace.submissions.some(({ id }) => id === fixture.otherSubmissionId));
 
-    await assignmentRepository.reopenEvaluation(fixture.eventId, fixture.reopenedAssignmentId);
+    await assignmentRepository.reopenEvaluation(fixture.eventId, fixture.reopenedAssignmentId, {
+      actorId: "results-admin",
+      expectedEvaluationVersion: 1,
+    });
     const reopened = await repository.getWorkspace(fixture.eventId, fixture.roundId);
     const reopenedSecond = reopened.submissions.find(({ id }) => id === fixture.secondSubmissionId);
     assert.ok(reopenedSecond);

@@ -424,7 +424,10 @@ describe("reviewer workspace evaluation drafts and submission", () => {
       /finalized and cannot be edited/,
     );
 
-    await assignmentRepository.reopenEvaluation(fixture.eventId, fixture.identifiedAssignmentId);
+    await assignmentRepository.reopenEvaluation(fixture.eventId, fixture.identifiedAssignmentId, {
+      actorId: "review-admin",
+      expectedEvaluationVersion: 1,
+    });
 
     const reopened = await repository.get(fixture.identityId, fixture.identifiedAssignmentId);
     assert.equal(reopened?.evaluation.status, EvaluationStatus.DRAFT);
