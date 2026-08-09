@@ -88,6 +88,11 @@ enum DeliveryFailureClass {
   PERMANENT
 }
 
+enum PublishedProgramState {
+  PUBLISHED
+  UNPUBLISHED
+}
+
 enum EventType {
   CONFERENCE
   MEETUP
@@ -251,6 +256,7 @@ model Event {
   programSessionVersions ProgramSessionVersion[]
   integrationConfigurations IntegrationConfiguration[]
   agendaPlacements    AgendaPlacement[]
+  publishedProgram    PublishedProgram?
 
   @@map("events")
 }
@@ -720,6 +726,33 @@ model AgendaPlacementSpeaker {
   @@unique([placementId, sortOrder])
   @@index([eventId, speakerId])
   @@map("agenda_placement_speakers")
+}
+
+model PublishedProgram {
+  id        String                    @id @default(uuid()) @db.Uuid
+  eventId   String                    @unique @db.Uuid
+  createdAt DateTime                  @default(now()) @db.Timestamptz(3)
+  event     Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions  PublishedProgramVersion[]
+
+  @@unique([eventId, id])
+  @@map("published_programs")
+}
+
+model PublishedProgramVersion {
+  id               String                @id @default(uuid()) @db.Uuid
+  eventId          String                @db.Uuid
+  publishedProgramId String              @db.Uuid
+  versionNumber    Int
+  state            PublishedProgramState
+  actorPrincipalId String
+  snapshot         Json?
+  createdAt        DateTime              @default(now()) @db.Timestamptz(3)
+  publishedProgram PublishedProgram      @relation(fields: [eventId, publishedProgramId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([publishedProgramId, versionNumber])
+  @@index([eventId, state, createdAt])
+  @@map("published_program_versions")
 }
 
 model CfpSubmissionRevision {
@@ -1316,4 +1349,3 @@ model IntegrationSyncRecord {
   @@index([remoteRecordId])
   @@map("integration_sync_records")
 }
-
