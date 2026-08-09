@@ -46,6 +46,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import {
+  archiveEvent,
+  cloneEvent,
   createEvent,
   createRoom,
   createTrack,
@@ -53,11 +55,13 @@ import {
   deleteTrack,
   moveRoom,
   moveTrack,
+  restoreEvent,
   updateEvent,
   updateRoom,
   updateTrack,
 } from "../actions";
 import type { EventOption, EventSettingsEvent, EventSettingsSnapshot, MutationResult } from "../types";
+import { EventLifecycleActions } from "./event-lifecycle-actions";
 
 const EVENT_TYPES = ["CONFERENCE", "MEETUP", "WORKSHOP", "OTHER"] as const;
 const TRACK_COLORS = ["slate", "rose", "orange", "amber", "emerald", "sky", "indigo", "violet"] as const;
@@ -371,7 +375,14 @@ export function EventSettingsWorkspace({
         setSnapshot(updatedSnapshot);
         setEventOptions((current) => {
           const next = current.filter(({ id }) => id !== updatedSnapshot.event.id);
-          return [...next, { id: updatedSnapshot.event.id, name: updatedSnapshot.event.name }];
+          return [
+            ...next,
+            {
+              id: updatedSnapshot.event.id,
+              name: updatedSnapshot.event.name,
+              archived: updatedSnapshot.event.archivedAt !== null,
+            },
+          ];
         });
       }
       toast.success(result.message);
@@ -387,6 +398,11 @@ export function EventSettingsWorkspace({
       setCreateOpen(false);
       router.push(settingsHref(result.snapshot.event.id));
     }
+  }
+
+  async function handleClone(formData: FormData): Promise<void> {
+    const result = await mutate("clone-event", () => cloneEvent(eventId, formData));
+    if (result.ok && result.snapshot) router.push(settingsHref(result.snapshot.event.id));
   }
 
   if (!snapshot) {
@@ -436,6 +452,7 @@ export function EventSettingsWorkspace({
                 {eventOptions.map((event) => (
                   <SelectItem key={event.id} value={event.id}>
                     {event.name}
+                    {event.archived ? " (archived)" : ""}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -461,137 +478,216 @@ export function EventSettingsWorkspace({
               />
             </DialogContent>
           </Dialog>
+          <EventLifecycleActions
+            event={snapshot.event}
+            pending={pending !== null}
+            onClone={handleClone}
+            onArchive={() => run("archive-event", () => archiveEvent(eventId))}
+            onRestore={() => run("restore-event", () => restoreEvent(eventId))}
+          />
         </div>
       </div>
 
-      <Tabs defaultValue="general">
-        <TabsList variant="line">
-          <TabsTrigger value="general">
-            <CalendarCog data-icon="inline-start" />
-            General
-          </TabsTrigger>
-          <TabsTrigger value="locations">
-            <MapPinned data-icon="inline-start" />
-            Rooms & tracks
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="general">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event details</CardTitle>
-              <CardDescription>Dates are entered in the event time zone and saved as precise instants.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <EventForm
-                event={snapshot.event}
-                errors={fieldErrors}
-                pending={pending === "event"}
-                onSubmit={async (data) => {
-                  await mutate("event", () => updateEvent(eventId, data));
-                }}
-                submitLabel="Save changes"
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="locations" className="grid gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DoorOpen />
-                Rooms
-              </CardTitle>
-              <CardDescription>
-                Names are unique within this event. Use the arrows to control agenda order.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {snapshot.rooms.map((room, index) => (
+      {snapshot.event.archivedAt ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Archived event</CardTitle>
+            <CardDescription>
+              This event is preserved as read-only and is hidden from active navigation. Restore it to edit its settings
+              or program data.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        <Tabs defaultValue="general">
+          <TabsList variant="line">
+            <TabsTrigger value="general">
+              <CalendarCog data-icon="inline-start" />
+              General
+            </TabsTrigger>
+            <TabsTrigger value="locations">
+              <MapPinned data-icon="inline-start" />
+              Rooms & tracks
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="general">
+            <Card>
+              <CardHeader>
+                <CardTitle>Event details</CardTitle>
+                <CardDescription>
+                  Dates are entered in the event time zone and saved as precise instants.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EventForm
+                  event={snapshot.event}
+                  errors={fieldErrors}
+                  pending={pending === "event"}
+                  onSubmit={async (data) => {
+                    await mutate("event", () => updateEvent(eventId, data));
+                  }}
+                  submitLabel="Save changes"
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="locations" className="grid gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DoorOpen />
+                  Rooms
+                </CardTitle>
+                <CardDescription>
+                  Names are unique within this event. Use the arrows to control agenda order.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {snapshot.rooms.map((room, index) => (
+                  <form
+                    key={room.id}
+                    className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center"
+                    onSubmit={(formEvent) => {
+                      formEvent.preventDefault();
+                      const data = new FormData(formEvent.currentTarget);
+                      run(`room-${room.id}`, () => updateRoom(eventId, room.id, data));
+                    }}
+                  >
+                    <Input name="name" defaultValue={room.name} aria-label="Room name" required className="flex-1" />
+                    <div className="flex items-center justify-end gap-1">
+                      <OrderButtons
+                        index={index}
+                        count={snapshot.rooms.length}
+                        pending={pending !== null}
+                        onMove={(offset) => run(`room-${room.id}`, () => moveRoom(eventId, room.id, offset))}
+                      />
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Save ${room.name}`}
+                        disabled={pending !== null}
+                      >
+                        {pending === `room-${room.id}` ? <Spinner /> : <Save />}
+                      </Button>
+                      <DeleteButton
+                        label={room.name}
+                        pending={pending !== null}
+                        onDelete={() => run(`room-${room.id}`, () => deleteRoom(eventId, room.id))}
+                      />
+                    </div>
+                  </form>
+                ))}
+              </CardContent>
+              <CardFooter>
                 <form
-                  key={room.id}
-                  className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center"
+                  className="flex w-full gap-2"
                   onSubmit={(formEvent) => {
                     formEvent.preventDefault();
-                    const data = new FormData(formEvent.currentTarget);
-                    run(`room-${room.id}`, () => updateRoom(eventId, room.id, data));
+                    const form = formEvent.currentTarget;
+                    const data = new FormData(form);
+                    void mutate("new-room", () => createRoom(eventId, data)).then((result) => {
+                      if (result.ok) form.reset();
+                    });
                   }}
                 >
-                  <Input name="name" defaultValue={room.name} aria-label="Room name" required className="flex-1" />
-                  <div className="flex items-center justify-end gap-1">
-                    <OrderButtons
-                      index={index}
-                      count={snapshot.rooms.length}
-                      pending={pending !== null}
-                      onMove={(offset) => run(`room-${room.id}`, () => moveRoom(eventId, room.id, offset))}
-                    />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Save ${room.name}`}
-                      disabled={pending !== null}
-                    >
-                      {pending === `room-${room.id}` ? <Spinner /> : <Save />}
-                    </Button>
-                    <DeleteButton
-                      label={room.name}
-                      pending={pending !== null}
-                      onDelete={() => run(`room-${room.id}`, () => deleteRoom(eventId, room.id))}
-                    />
-                  </div>
+                  <Input name="name" aria-label="New room name" placeholder="Add a room" required />
+                  <Button type="submit" variant="outline" disabled={pending !== null}>
+                    <Plus data-icon="inline-start" />
+                    Add
+                  </Button>
                 </form>
-              ))}
-            </CardContent>
-            <CardFooter>
-              <form
-                className="flex w-full gap-2"
-                onSubmit={(formEvent) => {
-                  formEvent.preventDefault();
-                  const form = formEvent.currentTarget;
-                  const data = new FormData(form);
-                  void mutate("new-room", () => createRoom(eventId, data)).then((result) => {
-                    if (result.ok) form.reset();
-                  });
-                }}
-              >
-                <Input name="name" aria-label="New room name" placeholder="Add a room" required />
-                <Button type="submit" variant="outline" disabled={pending !== null}>
-                  <Plus data-icon="inline-start" />
-                  Add
-                </Button>
-              </form>
-            </CardFooter>
-          </Card>
+              </CardFooter>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <SwatchBook />
-                Tracks
-              </CardTitle>
-              <CardDescription>Track colors use the shared Tailwind palette and remain event scoped.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {snapshot.tracks.map((track, index) => (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <SwatchBook />
+                  Tracks
+                </CardTitle>
+                <CardDescription>Track colors use the shared Tailwind palette and remain event scoped.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {snapshot.tracks.map((track, index) => (
+                  <form
+                    key={track.id}
+                    className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center"
+                    onSubmit={(formEvent) => {
+                      formEvent.preventDefault();
+                      const data = new FormData(formEvent.currentTarget);
+                      run(`track-${track.id}`, () => updateTrack(eventId, track.id, data));
+                    }}
+                  >
+                    <span
+                      className={cn(
+                        "size-3 shrink-0 rounded-full",
+                        TRACK_COLOR_CLASSES[track.color as keyof typeof TRACK_COLOR_CLASSES] ??
+                          TRACK_COLOR_CLASSES.slate,
+                      )}
+                      aria-hidden="true"
+                    />
+                    <Input name="name" defaultValue={track.name} aria-label="Track name" required className="flex-1" />
+                    <Select name="color" defaultValue={track.color}>
+                      <SelectTrigger aria-label={`${track.name} color`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {TRACK_COLORS.map((color) => (
+                            <SelectItem key={color} value={color}>
+                              {color.charAt(0).toUpperCase() + color.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center justify-end gap-1">
+                      <OrderButtons
+                        index={index}
+                        count={snapshot.tracks.length}
+                        pending={pending !== null}
+                        onMove={(offset) => run(`track-${track.id}`, () => moveTrack(eventId, track.id, offset))}
+                      />
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Save ${track.name}`}
+                        disabled={pending !== null}
+                      >
+                        {pending === `track-${track.id}` ? <Spinner /> : <Save />}
+                      </Button>
+                      <DeleteButton
+                        label={track.name}
+                        pending={pending !== null}
+                        onDelete={() => run(`track-${track.id}`, () => deleteTrack(eventId, track.id))}
+                      />
+                    </div>
+                  </form>
+                ))}
+              </CardContent>
+              <CardFooter>
                 <form
-                  key={track.id}
-                  className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center"
+                  className="flex w-full flex-col gap-2 sm:flex-row"
                   onSubmit={(formEvent) => {
                     formEvent.preventDefault();
-                    const data = new FormData(formEvent.currentTarget);
-                    run(`track-${track.id}`, () => updateTrack(eventId, track.id, data));
+                    const form = formEvent.currentTarget;
+                    const data = new FormData(form);
+                    void mutate("new-track", () => createTrack(eventId, data)).then((result) => {
+                      if (result.ok) form.reset();
+                    });
                   }}
                 >
-                  <span
-                    className={cn(
-                      "size-3 shrink-0 rounded-full",
-                      TRACK_COLOR_CLASSES[track.color as keyof typeof TRACK_COLOR_CLASSES] ?? TRACK_COLOR_CLASSES.slate,
-                    )}
-                    aria-hidden="true"
+                  <Input
+                    name="name"
+                    aria-label="New track name"
+                    placeholder="Add a track"
+                    required
+                    className="flex-1"
                   />
-                  <Input name="name" defaultValue={track.name} aria-label="Track name" required className="flex-1" />
-                  <Select name="color" defaultValue={track.color}>
-                    <SelectTrigger aria-label={`${track.name} color`}>
+                  <Select name="color" defaultValue="slate">
+                    <SelectTrigger aria-label="New track color">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -604,67 +700,16 @@ export function EventSettingsWorkspace({
                       </SelectGroup>
                     </SelectContent>
                   </Select>
-                  <div className="flex items-center justify-end gap-1">
-                    <OrderButtons
-                      index={index}
-                      count={snapshot.tracks.length}
-                      pending={pending !== null}
-                      onMove={(offset) => run(`track-${track.id}`, () => moveTrack(eventId, track.id, offset))}
-                    />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Save ${track.name}`}
-                      disabled={pending !== null}
-                    >
-                      {pending === `track-${track.id}` ? <Spinner /> : <Save />}
-                    </Button>
-                    <DeleteButton
-                      label={track.name}
-                      pending={pending !== null}
-                      onDelete={() => run(`track-${track.id}`, () => deleteTrack(eventId, track.id))}
-                    />
-                  </div>
+                  <Button type="submit" variant="outline" disabled={pending !== null}>
+                    <Plus data-icon="inline-start" />
+                    Add
+                  </Button>
                 </form>
-              ))}
-            </CardContent>
-            <CardFooter>
-              <form
-                className="flex w-full flex-col gap-2 sm:flex-row"
-                onSubmit={(formEvent) => {
-                  formEvent.preventDefault();
-                  const form = formEvent.currentTarget;
-                  const data = new FormData(form);
-                  void mutate("new-track", () => createTrack(eventId, data)).then((result) => {
-                    if (result.ok) form.reset();
-                  });
-                }}
-              >
-                <Input name="name" aria-label="New track name" placeholder="Add a track" required className="flex-1" />
-                <Select name="color" defaultValue="slate">
-                  <SelectTrigger aria-label="New track color">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {TRACK_COLORS.map((color) => (
-                        <SelectItem key={color} value={color}>
-                          {color.charAt(0).toUpperCase() + color.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <Button type="submit" variant="outline" disabled={pending !== null}>
-                  <Plus data-icon="inline-start" />
-                  Add
-                </Button>
-              </form>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </CardFooter>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }

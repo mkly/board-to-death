@@ -74,7 +74,10 @@ function participantValues(formData: FormData) {
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || !isAllowedAdminEmail(session.user.email)) return null;
-  return getDatabaseClient().event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });
+  return getDatabaseClient().event.findFirst({
+    where: { slug: eventSlug, archivedAt: null },
+    select: { id: true, slug: true },
+  });
 }
 
 function repositoryMessage(error: RepositoryError): string {
@@ -143,6 +146,23 @@ export async function archiveProgramSession(eventSlug: string, sessionId: string
     await new ProgramSessionRepository(getDatabaseClient()).archive(event.id, sessionId);
     revalidatePath(`/dashboard/events/${event.slug}/sessions`);
     return { status: "success", message: "Session archived.", sessionId };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
+    throw error;
+  }
+}
+
+export async function cloneProgramSession(eventSlug: string, sessionId: string): Promise<SessionMutationState> {
+  if (!z.uuid().safeParse(sessionId).success) {
+    return { status: "error", message: "The selected session is invalid." };
+  }
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  try {
+    const cloned = await new ProgramSessionRepository(getDatabaseClient()).clone(event.id, sessionId);
+    revalidatePath(`/dashboard/events/${event.slug}/sessions`);
+    return { status: "success", message: "Session cloned as an unscheduled manual session.", sessionId: cloned.id };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
     throw error;

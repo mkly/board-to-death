@@ -4,7 +4,7 @@ import { useActionState, useMemo, useState, useTransition } from "react";
 
 import Link from "next/link";
 
-import { Archive, CalendarClock, ClipboardPlus, FilePlus2, Save } from "lucide-react";
+import { Archive, CalendarClock, ClipboardPlus, Copy, FilePlus2, Save } from "lucide-react";
 
 import {
   AlertDialog,
@@ -47,7 +47,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ProgramSessionParticipantRole } from "@/generated/prisma/client";
 
-import { archiveProgramSession, type SessionMutationState, saveProgramSession } from "../actions";
+import { archiveProgramSession, cloneProgramSession, type SessionMutationState, saveProgramSession } from "../actions";
 
 export interface SessionWorkspaceSession {
   readonly id: string;
@@ -294,6 +294,7 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
   const [creating, setCreating] = useState(false);
   const [archiveMessage, setArchiveMessage] = useState("");
   const [archivePending, startArchiveTransition] = useTransition();
+  const [clonePending, startCloneTransition] = useTransition();
   const filteredSessions = useMemo(
     () => sessions.filter((session) => matchesFilter(session, filter, participantRole)),
     [filter, participantRole, sessions],
@@ -318,6 +319,18 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
       const result = await archiveProgramSession(event.slug, selectedSession.id);
       setArchiveMessage(result.message ?? "");
       if (result.status === "success") setSelectedSessionId(null);
+    });
+  };
+
+  const cloneSelected = () => {
+    if (!selectedSession) return;
+    startCloneTransition(async () => {
+      const result = await cloneProgramSession(event.slug, selectedSession.id);
+      setArchiveMessage(result.message ?? "");
+      if (result.status === "success" && result.sessionId) {
+        setSelectedSessionId(result.sessionId);
+        setCreating(false);
+      }
     });
   };
 
@@ -489,28 +502,34 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
               <p aria-live="polite" className="text-muted-foreground text-sm">
                 {archiveMessage || "Archiving preserves every saved version."}
               </p>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button type="button" variant="destructive" size="sm" disabled={archivePending}>
-                    {archivePending ? <Spinner data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
-                    Archive
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Archive {selectedSession.title}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      The session leaves active views but its versions remain available in the archived filter.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction variant="destructive" onClick={archiveSelected}>
-                      Archive session
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={clonePending} onClick={cloneSelected}>
+                  {clonePending ? <Spinner data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
+                  Clone
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="destructive" size="sm" disabled={archivePending}>
+                      {archivePending ? <Spinner data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
+                      Archive
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Archive {selectedSession.title}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        The session leaves active views but its versions remain available in the archived filter.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction variant="destructive" onClick={archiveSelected}>
+                        Archive session
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           ) : null}
         </div>
