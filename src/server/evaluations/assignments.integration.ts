@@ -371,6 +371,18 @@ describe("reviewer and committee assignments", () => {
       },
     });
     assert.equal(withdrawn.status, EvaluationAssignmentStatus.REVOKED);
+    assert.equal(withdrawn.committeeId, fixture.committeeId);
+
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.secondSubmissionId],
+    });
+    const reinstated = await client.evaluationAssignment.findUniqueOrThrow({ where: { id: withdrawn.id } });
+    assert.equal(reinstated.status, EvaluationAssignmentStatus.ASSIGNED);
+    assert.equal(reinstated.committeeId, null);
+
     await assert.rejects(
       repository.assignCommittee({
         eventId: fixture.eventId,

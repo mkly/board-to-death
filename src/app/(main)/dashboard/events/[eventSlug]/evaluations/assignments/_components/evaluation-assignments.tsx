@@ -195,7 +195,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     <NativeSelectOption value="withdraw">Withdraw reviewer</NativeSelectOption>
                   </NativeSelect>
                 </Field>
-                {operation !== "assign" ? (
+                {operation === "reassign" || operation === "withdraw" ? (
                   <Field>
                     <FieldLabel htmlFor="source-reviewer">Current reviewer</FieldLabel>
                     <NativeSelect id="source-reviewer" name="fromReviewerId" className="w-full" defaultValue="">

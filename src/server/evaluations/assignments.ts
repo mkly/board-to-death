@@ -417,6 +417,7 @@ export class EvaluationAssignmentRepository {
             await transaction.evaluationAssignment.update({
               where: { id: assignment.id },
               data: {
+                committeeId: null,
                 status: EvaluationAssignmentStatus.ASSIGNED,
                 assignedAt: new Date(),
                 completedAt: null,
@@ -483,6 +484,7 @@ export class EvaluationAssignmentRepository {
             await transaction.evaluationAssignment.update({
               where: { id: target.id },
               data: {
+                committeeId: null,
                 status: EvaluationAssignmentStatus.ASSIGNED,
                 assignedAt: now,
                 completedAt: null,
