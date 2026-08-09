@@ -43,6 +43,10 @@ export interface DiscardCfpDraftInput extends DraftScope {
   readonly token: string;
 }
 
+export interface SetCfpDraftReminderOptOutInput extends DiscardCfpDraftInput {
+  readonly optedOut: boolean;
+}
+
 interface CfpDraftRepositoryOptions {
   readonly clock?: ClockService;
   readonly database: PrismaClient;
@@ -180,5 +184,21 @@ export class CfpDraftRepository {
     await this.#database.cfpSubmissionDraft.deleteMany({
       where: { eventId: input.eventId, policyId: input.policyId, tokenHash: hashToken(token) },
     });
+  }
+
+  async setReminderOptOut(input: SetCfpDraftReminderOptOutInput): Promise<void> {
+    const token = requireToken(input.token);
+    const updated = await this.#database.cfpSubmissionDraft.updateMany({
+      where: {
+        eventId: input.eventId,
+        policyId: input.policyId,
+        tokenHash: hashToken(token),
+        expiresAt: { gt: this.#clock.now() },
+      },
+      data: { remindersOptedOut: input.optedOut },
+    });
+    if (updated.count !== 1) {
+      throw new RepositoryError("not-found", "The draft link is invalid or has expired.");
+    }
   }
 }
