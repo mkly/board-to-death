@@ -16,7 +16,7 @@ export default async function Page({ searchParams }: PageProps) {
   const events = new EventRepository(database);
   const eventOptions = (
     await database.event.findMany({
-      orderBy: [{ archivedAt: "asc" }, { startsAt: "asc" }],
+      orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { startsAt: "asc" }],
       select: { id: true, name: true, archivedAt: true },
     })
   ).map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt !== null }));

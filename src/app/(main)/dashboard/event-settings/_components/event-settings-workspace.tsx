@@ -400,9 +400,10 @@ export function EventSettingsWorkspace({
     }
   }
 
-  async function handleClone(formData: FormData): Promise<void> {
+  async function handleClone(formData: FormData): Promise<boolean> {
     const result = await mutate("clone-event", () => cloneEvent(eventId, formData));
     if (result.ok && result.snapshot) router.push(settingsHref(result.snapshot.event.id));
+    return result.ok;
   }
 
   if (!snapshot) {

@@ -33,7 +33,7 @@ import { Spinner } from "@/components/ui/spinner";
 interface EventLifecycleActionsProps {
   readonly event: { readonly name: string; readonly slug: string; readonly archivedAt: string | null };
   readonly pending: boolean;
-  readonly onClone: (formData: FormData) => Promise<void>;
+  readonly onClone: (formData: FormData) => Promise<boolean>;
   readonly onArchive: () => void;
   readonly onRestore: () => void;
 }
@@ -75,7 +75,9 @@ export function EventLifecycleActions({ event, pending, onClone, onArchive, onRe
             className="flex flex-col gap-5"
             onSubmit={(formEvent) => {
               formEvent.preventDefault();
-              void onClone(new FormData(formEvent.currentTarget)).then(() => setCloneOpen(false));
+              void onClone(new FormData(formEvent.currentTarget)).then((cloned) => {
+                if (cloned) setCloneOpen(false);
+              });
             }}
           >
             <FieldGroup>
