@@ -15,6 +15,9 @@ export const CFP_MESSAGE_VARIABLE_KEYS = CFP_MESSAGE_VARIABLES.map(
   ({ key }) => key,
 ) as readonly EmailTemplateVariable[];
 
+export const DEFAULT_REMINDER_DAYS = 3;
+export const DEFAULT_REMINDER_SEND_AT_MINUTE = 540;
+
 export interface CfpMessageSettings {
   readonly remindersEnabled: boolean;
   readonly reminderDaysBeforeClose: number;
@@ -96,11 +99,14 @@ export function validateCfpMessageSettings(input: CfpMessageSettingsInput): CfpM
   }
 
   if (!confirmation.ok || !thankYou.ok || Object.keys(errors).length > 0) return { fields: null, errors };
+  // Disabled reminders still round-trip whatever timing the form carried, so turning reminders back
+  // on restores the administrator's last choice instead of silently reverting to the defaults.
+  const retainedDays = Number.isSafeInteger(days) && days >= 1 && days <= 90 ? days : DEFAULT_REMINDER_DAYS;
   return {
     fields: {
       remindersEnabled: input.remindersEnabled,
-      reminderDaysBeforeClose: input.remindersEnabled ? days : 3,
-      reminderSendAtMinute: input.remindersEnabled ? (sendAtMinute ?? 540) : 540,
+      reminderDaysBeforeClose: retainedDays,
+      reminderSendAtMinute: sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE,
       submissionConfirmation: confirmation.definition.bodyTemplate,
       thankYou: thankYou.definition.bodyTemplate,
     },

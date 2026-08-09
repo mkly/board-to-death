@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { reminderTimeFromMinute } from "@/lib/cfp/messages";
+import { DEFAULT_REMINDER_DAYS, DEFAULT_REMINDER_SEND_AT_MINUTE, reminderTimeFromMinute } from "@/lib/cfp/messages";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
@@ -66,8 +66,8 @@ export default async function CfpFormSetupPage({
         formId={form.formId}
         initialMessageSettings={{
           remindersEnabled: reminder?.enabled ?? false,
-          reminderDaysBeforeClose: reminder?.daysBeforeClose ?? 3,
-          reminderSendAt: reminderTimeFromMinute(reminder?.sendAtMinute ?? 540),
+          reminderDaysBeforeClose: reminder?.daysBeforeClose ?? DEFAULT_REMINDER_DAYS,
+          reminderSendAt: reminderTimeFromMinute(reminder?.sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE),
           submissionConfirmation:
             policy?.definition.messages.submissionConfirmation ??
             "We received your proposal for **{{event.name}}**. A confirmation was sent to {{recipient.email}}.",

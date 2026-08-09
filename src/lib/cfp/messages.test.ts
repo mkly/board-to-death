@@ -37,6 +37,21 @@ describe("CFP message settings", () => {
     });
   });
 
+  it("retains the submitted timing when reminders are disabled", () => {
+    const result = validateCfpMessageSettings({
+      ...validInput,
+      remindersEnabled: false,
+      reminderDaysBeforeClose: "14",
+      reminderSendAt: "07:45",
+    });
+
+    expect(result.fields).toMatchObject({
+      remindersEnabled: false,
+      reminderDaysBeforeClose: 14,
+      reminderSendAtMinute: 465,
+    });
+  });
+
   it("rejects invalid timing, raw HTML, and variables unavailable to CFP messages", () => {
     const result = validateCfpMessageSettings({
       ...validInput,
