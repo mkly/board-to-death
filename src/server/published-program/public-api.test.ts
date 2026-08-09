@@ -1,8 +1,9 @@
+import { describe, test } from "vitest";
+
 import { PublishedProgramState } from "../../generated/prisma/client.ts";
 import { handlePublicProgramOptions, handlePublicProgramRequest, type PublicProgramReader } from "./public-api.ts";
 import type { PersistedPublishedProgramVersion, PublishedProgramSnapshot } from "./repositories.ts";
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
 
 const snapshot: PublishedProgramSnapshot = {
   schemaVersion: 1,

@@ -1,17 +1,24 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
+import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import type { CfpFormDefinition } from "@/lib/cfp";
-import { CfpFormRepository } from "@/server/cfp/repositories";
+import { validateCfpMessageSettings } from "@/lib/cfp/messages";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
+import { auth } from "@/server/auth/auth";
+import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
+import { CfpFormRepository, type PersistedCfpFormDefinition } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 
 import { getDashboardShellData } from "../../../../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../../../../_lib/dashboard-shell";
+import { validateCfpPolicySettings } from "./schema";
 
 const setupSchema = z.object({
   step: z.literal("setup"),
@@ -183,6 +190,224 @@ export async function saveCfpSetupStep(
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
     return { status: "success", message: "Changes saved as a new draft version." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+export interface SaveCfpMessageSettingsState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly errors?: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface SaveCfpPolicySettingsState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly errors?: Readonly<Record<string, readonly string[]>>;
+}
+
+export async function saveCfpPolicySettings(
+  _previousState: SaveCfpPolicySettingsState,
+  formData: FormData,
+): Promise<SaveCfpPolicySettingsState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!isAuthorizedAdminSession(session)) {
+    return { status: "error", message: "Your session expired. Sign in and try again." };
+  }
+
+  const eventSlug = value(formData, "eventSlug");
+  const formId = value(formData, "formId");
+  const client = getDatabaseClient();
+  const event = await client.event.findUnique({
+    where: { slug: eventSlug },
+    select: { id: true, slug: true, timezone: true },
+  });
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  const form = await new CfpFormRepository(client).get(event.id, formId);
+  if (!form) return { status: "error", message: "This CFP form is not available for the selected event." };
+
+  const validation = validateCfpPolicySettings(
+    {
+      submissionOpensAt: value(formData, "submissionOpensAt"),
+      submissionClosesAt: value(formData, "submissionClosesAt"),
+      draftPolicy: value(formData, "draftPolicy"),
+      maxSubmissionsPerSpeaker: value(formData, "maxSubmissionsPerSpeaker"),
+      maxParticipantsPerSubmission: value(formData, "maxParticipantsPerSubmission"),
+    },
+    event.timezone,
+  );
+  if (!validation.fields) {
+    return { status: "error", message: "Fix the highlighted submission settings.", errors: validation.errors };
+  }
+
+  const policies = new CfpPolicyRepository(client);
+  try {
+    const existing = await policies.getByKey(event.id, form.key);
+    const settings = validation.fields;
+    if (existing) {
+      await policies.createVersion(event.id, existing.id, {
+        ...existing.definition,
+        submissionOpensAt: settings.submissionOpensAtInstant,
+        submissionClosesAt: settings.submissionClosesAtInstant,
+        draftPolicy: settings.draftPolicy,
+        submissionLimits: {
+          maxSubmissionsPerSpeaker: settings.maxSubmissionsPerSpeaker,
+          maxParticipantsPerSubmission: settings.maxParticipantsPerSubmission,
+        },
+      });
+    } else {
+      const administrator = await new CfpAdministratorRepository(client).ensure({
+        eventId: event.id,
+        externalId: session.user.email,
+        displayName: session.user.name.trim() || session.user.email,
+      });
+      await policies.create({
+        eventId: event.id,
+        key: form.key,
+        definition: {
+          submissionOpensAt: settings.submissionOpensAtInstant,
+          submissionClosesAt: settings.submissionClosesAtInstant,
+          confirmationClosesAt: null,
+          draftPolicy: settings.draftPolicy,
+          submissionLimits: {
+            maxSubmissionsPerSpeaker: settings.maxSubmissionsPerSpeaker,
+            maxParticipantsPerSubmission: settings.maxParticipantsPerSubmission,
+          },
+          messages: {
+            introduction: form.definition.description ?? `Submit a proposal for ${form.definition.title}.`,
+            submissionConfirmation: "Your proposal has been submitted.",
+            closed: "This call for proposals is closed.",
+          },
+          conditionalVisibility: [],
+          categoryRouting: [],
+          adminAssignments: [{ administratorId: administrator.id, role: "OWNER" }],
+        },
+      });
+    }
+    revalidatePath(
+      `/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(form.formId)}/setup`,
+    );
+    return {
+      status: "success",
+      message: existing ? "Submission settings saved as a new version." : "Submission settings saved.",
+    };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+function defaultPolicyDates(startsAt: Date, timezone: string): { opensAt: Date; closesAt: Date } {
+  const eventStart = Temporal.Instant.fromEpochMilliseconds(startsAt.getTime()).toZonedDateTimeISO(timezone);
+  return {
+    opensAt: new Date(eventStart.subtract({ days: 120 }).toInstant().epochMilliseconds),
+    closesAt: new Date(eventStart.subtract({ days: 60 }).toInstant().epochMilliseconds),
+  };
+}
+
+async function createPolicyForForm(
+  event: { readonly id: string; readonly startsAt: Date; readonly timezone: string },
+  form: PersistedCfpFormDefinition,
+  administratorId: string,
+  messages: {
+    readonly remindersEnabled: boolean;
+    readonly reminderDaysBeforeClose: number;
+    readonly reminderSendAtMinute: number;
+    readonly submissionConfirmation: string;
+    readonly thankYou: string;
+  },
+): Promise<void> {
+  const dates = defaultPolicyDates(event.startsAt, event.timezone);
+  await new CfpPolicyRepository(getDatabaseClient()).create({
+    eventId: event.id,
+    key: form.key,
+    definition: {
+      submissionOpensAt: dates.opensAt,
+      submissionClosesAt: dates.closesAt,
+      confirmationClosesAt: null,
+      draftPolicy: "ALLOWED",
+      submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+      messages: {
+        introduction: form.definition.description ?? `Submit a proposal for ${form.definition.title}.`,
+        submissionConfirmation: messages.submissionConfirmation,
+        closed: "This call for proposals is closed.",
+        thankYou: messages.thankYou,
+        reminder: {
+          enabled: messages.remindersEnabled,
+          daysBeforeClose: messages.reminderDaysBeforeClose,
+          sendAtMinute: messages.reminderSendAtMinute,
+        },
+      },
+      conditionalVisibility: [],
+      categoryRouting: [],
+      adminAssignments: [{ administratorId, role: "OWNER" }],
+    },
+  });
+}
+
+export async function saveCfpMessageSettings(
+  eventSlug: string,
+  formId: string,
+  _previousState: SaveCfpMessageSettingsState,
+  formData: FormData,
+): Promise<SaveCfpMessageSettingsState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!isAuthorizedAdminSession(session)) {
+    return { status: "error", message: "Your session expired. Sign in and try again." };
+  }
+
+  const validation = validateCfpMessageSettings({
+    remindersEnabled: value(formData, "remindersEnabled") === "true",
+    reminderDaysBeforeClose: value(formData, "reminderDaysBeforeClose"),
+    reminderSendAt: value(formData, "reminderSendAt"),
+    submissionConfirmation: value(formData, "submissionConfirmation"),
+    thankYou: value(formData, "thankYou"),
+  });
+  if (!validation.fields) {
+    return { status: "error", message: "Fix the highlighted message settings.", errors: validation.errors };
+  }
+
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, formId);
+  if (!form) notFound();
+
+  const policies = new CfpPolicyRepository(client);
+  try {
+    const existing = await policies.getByKey(event.id, form.key);
+    if (existing) {
+      await policies.createVersion(event.id, existing.id, {
+        ...existing.definition,
+        messages: {
+          ...existing.definition.messages,
+          submissionConfirmation: validation.fields.submissionConfirmation,
+          thankYou: validation.fields.thankYou,
+          reminder: {
+            enabled: validation.fields.remindersEnabled,
+            daysBeforeClose: validation.fields.reminderDaysBeforeClose,
+            sendAtMinute: validation.fields.reminderSendAtMinute,
+          },
+        },
+      });
+    } else {
+      const administrator = await new CfpAdministratorRepository(client).ensure({
+        eventId: event.id,
+        externalId: session.user.email,
+        displayName: session.user.name.trim() || session.user.email,
+      });
+      await createPolicyForForm(event, form, administrator.id, validation.fields);
+    }
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
+    return {
+      status: "success",
+      message: existing ? "Message settings saved as a new version." : "Message settings saved.",
+    };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;

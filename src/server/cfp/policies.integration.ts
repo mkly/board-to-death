@@ -42,6 +42,8 @@ function definition(categoryId: string, ownerId: string, editorId: string): CfpP
       introduction: "Bring us your most memorable tabletop design lessons.",
       submissionConfirmation: "Your proposal is safely on the table.",
       closed: "The call for proposals is closed.",
+      thankYou: "Thank you for sharing your proposal.",
+      reminder: { enabled: true, daysBeforeClose: 3, sendAtMinute: 570 },
     },
     conditionalVisibility: [
       {
@@ -111,9 +113,28 @@ describe("CFP policy persistence", () => {
     assert.match(created.publicId, /^[0-9a-f-]{36}$/);
     assert.deepEqual((await policies.get(event.id, created.id, 1))?.definition, firstDefinition);
     assert.deepEqual((await policies.get(event.id, created.id))?.definition, secondDefinition);
+    assert.deepEqual((await policies.getByKey(event.id, "main-cfp"))?.definition, secondDefinition);
   });
 
-  test("allows only the explicit publication lifecycle and keeps public identifiers immutable", async () => {
+  test("reuses an event administrator identity while refreshing its display name", async () => {
+    const event = await events.create(eventInput);
+    const first = await administrators.ensure({
+      eventId: event.id,
+      externalId: "OWNER@EXAMPLE.COM",
+      displayName: "Original owner",
+    });
+    const second = await administrators.ensure({
+      eventId: event.id,
+      externalId: "owner@example.com",
+      displayName: "Current owner",
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(second.externalId, "owner@example.com");
+    assert.equal(second.displayName, "Current owner");
+  });
+
+  test("allows close, reopen, and archive only through the explicit publication lifecycle", async () => {
     const { event, category, owner, editor } = await fixtures();
     const created = await policies.create({
       eventId: event.id,
@@ -127,6 +148,12 @@ describe("CFP policy persistence", () => {
       "PUBLISHED",
     );
     await expectInvalid(policies.createVersion(event.id, created.id, definition(category.id, owner.id, editor.id)));
+    await expectInvalid(policies.transition(event.id, created.id, CfpPolicyStatus.ARCHIVED, owner.id));
+    assert.equal((await policies.transition(event.id, created.id, CfpPolicyStatus.CLOSED, editor.id)).status, "CLOSED");
+    assert.equal(
+      (await policies.transition(event.id, created.id, CfpPolicyStatus.PUBLISHED, owner.id)).status,
+      "PUBLISHED",
+    );
     assert.equal((await policies.transition(event.id, created.id, CfpPolicyStatus.CLOSED, editor.id)).status, "CLOSED");
     assert.equal(
       (await policies.transition(event.id, created.id, CfpPolicyStatus.ARCHIVED, owner.id)).status,
@@ -142,6 +169,8 @@ describe("CFP policy persistence", () => {
       [
         [null, "DRAFT"],
         ["DRAFT", "PUBLISHED"],
+        ["PUBLISHED", "CLOSED"],
+        ["CLOSED", "PUBLISHED"],
         ["PUBLISHED", "CLOSED"],
         ["CLOSED", "ARCHIVED"],
       ],

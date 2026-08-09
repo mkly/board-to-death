@@ -2,15 +2,34 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ArrowLeft } from "lucide-react";
+import { Temporal } from "temporal-polyfill";
 
 import { Button } from "@/components/ui/button";
+import { DEFAULT_REMINDER_DAYS, DEFAULT_REMINDER_SEND_AT_MINUTE, reminderTimeFromMinute } from "@/lib/cfp/messages";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
+import { CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { getDashboardShellData } from "../../../../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../../../../_lib/dashboard-shell";
+import { CfpPolicySettings } from "./_components/cfp-policy-settings";
 import { CfpSetupWorkspace } from "./_components/cfp-setup-workspace";
+
+function localDateTime(value: Date, timezone: string): string {
+  return Temporal.Instant.fromEpochMilliseconds(value.getTime())
+    .toZonedDateTimeISO(timezone)
+    .toPlainDateTime()
+    .toString({ smallestUnit: "minute" });
+}
+
+function defaultLocalDateTime(value: Date, timezone: string, daysBefore: number): string {
+  return Temporal.Instant.fromEpochMilliseconds(value.getTime())
+    .toZonedDateTimeISO(timezone)
+    .subtract({ days: daysBefore })
+    .toPlainDateTime()
+    .toString({ smallestUnit: "minute" });
+}
 
 export default async function CfpFormSetupPage({
   params,
@@ -25,8 +44,29 @@ export default async function CfpFormSetupPage({
     redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "cfp") : "/dashboard");
   }
 
-  const form = await new CfpFormRepository(getDatabaseClient()).get(event.id, formId);
+  const client = getDatabaseClient();
+  const [form, eventDetails] = await Promise.all([
+    new CfpFormRepository(client).get(event.id, formId),
+    client.event.findUnique({ where: { id: event.id }, select: { location: true } }),
+  ]);
   if (!form) notFound();
+  const policy = await new CfpPolicyRepository(client).getByKey(event.id, form.key);
+  const reminder = policy?.definition.messages.reminder;
+  const initialSettings = policy
+    ? {
+        submissionOpensAt: localDateTime(policy.definition.submissionOpensAt, event.timezone),
+        submissionClosesAt: localDateTime(policy.definition.submissionClosesAt, event.timezone),
+        draftPolicy: policy.definition.draftPolicy,
+        maxSubmissionsPerSpeaker: policy.definition.submissionLimits.maxSubmissionsPerSpeaker,
+        maxParticipantsPerSubmission: policy.definition.submissionLimits.maxParticipantsPerSubmission,
+      }
+    : {
+        submissionOpensAt: defaultLocalDateTime(event.startsAt, event.timezone, 120),
+        submissionClosesAt: defaultLocalDateTime(event.startsAt, event.timezone, 60),
+        draftPolicy: "ALLOWED" as const,
+        maxSubmissionsPerSpeaker: 3,
+        maxParticipantsPerSubmission: 4,
+      };
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
@@ -46,7 +86,34 @@ export default async function CfpFormSetupPage({
           draft version.
         </p>
       </header>
-      <CfpSetupWorkspace definition={form.definition} eventSlug={event.slug} formId={form.formId} />
+      <CfpSetupWorkspace
+        definition={form.definition}
+        event={{
+          name: event.name,
+          slug: event.slug,
+          startsAt: event.startsAt.toLocaleDateString("en-US", { dateStyle: "long", timeZone: event.timezone }),
+          location: eventDetails?.location ?? null,
+        }}
+        eventSlug={event.slug}
+        formId={form.formId}
+        initialMessageSettings={{
+          remindersEnabled: reminder?.enabled ?? false,
+          reminderDaysBeforeClose: reminder?.daysBeforeClose ?? DEFAULT_REMINDER_DAYS,
+          reminderSendAt: reminderTimeFromMinute(reminder?.sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE),
+          submissionConfirmation:
+            policy?.definition.messages.submissionConfirmation ??
+            "We received your proposal for **{{event.name}}**. A confirmation was sent to {{recipient.email}}.",
+          thankYou:
+            policy?.definition.messages.thankYou ??
+            "Thank you, {{recipient.name}}, for sharing your proposal with **{{event.name}}**.",
+        }}
+      />
+      <CfpPolicySettings
+        eventSlug={event.slug}
+        formId={form.formId}
+        timezone={event.timezone}
+        initialSettings={initialSettings}
+      />
     </div>
   );
 }

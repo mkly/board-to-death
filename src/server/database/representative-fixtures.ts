@@ -13,6 +13,7 @@ import {
   IntegrationSyncRunStatus,
   type PrismaClient,
   ProgramSessionKind,
+  ReviewerVisibility,
   SpeakerTaskAssignmentStatus,
 } from "../../generated/prisma/client.ts";
 
@@ -190,9 +191,32 @@ export async function createRepresentativeFixtures(client: PrismaClient): Promis
                     key: "program-fit",
                     title: "Program fit",
                     sortOrder: 0,
-                    status: EvaluationRoundStatus.OPEN,
+                    status: EvaluationRoundStatus.CLOSED,
+                    reviewerVisibility: ReviewerVisibility.BLIND,
+                    visibilitySnapshot: ReviewerVisibility.BLIND,
                     opensAt: new Date("2027-01-15T18:00:00.000Z"),
                     closesAt: new Date("2027-02-15T18:00:00.000Z"),
+                    transitions: {
+                      create: [
+                        {
+                          id: id(39),
+                          toStatus: EvaluationRoundStatus.PLANNED,
+                          occurredAt: new Date("2027-01-10T18:00:00.000Z"),
+                        },
+                        {
+                          id: id(40),
+                          fromStatus: EvaluationRoundStatus.PLANNED,
+                          toStatus: EvaluationRoundStatus.OPEN,
+                          occurredAt: new Date("2027-01-15T18:00:00.000Z"),
+                        },
+                        {
+                          id: id(41),
+                          fromStatus: EvaluationRoundStatus.OPEN,
+                          toStatus: EvaluationRoundStatus.CLOSED,
+                          occurredAt: new Date("2027-02-15T18:00:00.000Z"),
+                        },
+                      ],
+                    },
                     criteria: {
                       create: {
                         id: id(20),

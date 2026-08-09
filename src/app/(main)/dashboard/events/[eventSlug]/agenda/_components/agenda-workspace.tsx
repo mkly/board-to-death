@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 
-import { CalendarClock, CalendarPlus, Clock3, Save, Trash2, TriangleAlert } from "lucide-react";
+import { CalendarPlus, Save, Trash2, TriangleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -48,6 +48,7 @@ import {
   removeAgendaPlacement,
   saveAgendaPlacement,
 } from "../actions";
+import { type AgendaFilter, AgendaViews } from "./agenda-views";
 
 export interface AgendaWorkspaceSession {
   readonly id: string;
@@ -84,7 +85,6 @@ interface AgendaWorkspaceProps {
   readonly tracks: readonly { readonly id: string; readonly name: string }[];
 }
 
-type AgendaFilter = "all" | "scheduled" | "unscheduled";
 type ConflictPolicy = "prevent" | "explicit-confirm";
 
 const INITIAL_MUTATION_STATE: AgendaMutationState = { status: "idle" };
@@ -99,12 +99,6 @@ function formatInstant(value: string, timezone: string): string {
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(value));
-}
-
-function matchesFilter(session: AgendaWorkspaceSession, filter: AgendaFilter): boolean {
-  if (filter === "scheduled") return session.placement !== null;
-  if (filter === "unscheduled") return session.placement === null;
-  return true;
 }
 
 function saveButtonLabel(pending: boolean, scheduled: boolean): string {
@@ -371,10 +365,6 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [removeMessage, setRemoveMessage] = useState("");
   const [removePending, startRemoveTransition] = useTransition();
-  const filteredSessions = useMemo(
-    () => sessions.filter((session) => matchesFilter(session, filter)),
-    [filter, sessions],
-  );
   const selectedSession = sessions.find(({ id }) => id === selectedSessionId) ?? null;
 
   const removeSelected = () => {
@@ -398,27 +388,6 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
         </p>
       </header>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <ToggleGroup
-          type="single"
-          value={filter}
-          onValueChange={(value) => {
-            if (value) setFilter(value as AgendaFilter);
-          }}
-          variant="outline"
-          size="sm"
-          className="flex-wrap"
-          aria-label="Filter agenda sessions"
-        >
-          <ToggleGroupItem value="all">All sessions</ToggleGroupItem>
-          <ToggleGroupItem value="unscheduled">Unscheduled</ToggleGroupItem>
-          <ToggleGroupItem value="scheduled">Scheduled</ToggleGroupItem>
-        </ToggleGroup>
-        <p aria-live="polite" className="text-muted-foreground text-sm">
-          {filteredSessions.length} {filteredSessions.length === 1 ? "session" : "sessions"}
-        </p>
-      </div>
-
       {rooms.length === 0 ? (
         <Alert variant="destructive">
           <TriangleAlert />
@@ -428,63 +397,15 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
       ) : null}
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]">
-        <Card className="min-w-0 self-start">
-          <CardHeader>
-            <CardTitle>Session list</CardTitle>
-            <CardDescription>Choose any row to add, edit, move, or remove its placement.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {filteredSessions.length === 0 ? (
-              <Empty className="min-h-56">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CalendarClock />
-                  </EmptyMedia>
-                  <EmptyTitle>No sessions in this view</EmptyTitle>
-                  <EmptyDescription>Choose another agenda filter.</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              filteredSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{session.title}</span>
-                      <Badge variant={session.placement ? "secondary" : "outline"}>
-                        {session.placement ? "Scheduled" : "Unscheduled"}
-                      </Badge>
-                    </div>
-                    <span className="text-muted-foreground text-sm">
-                      {session.placement
-                        ? `${formatInstant(session.placement.startsAt, event.timezone)} · ${session.placement.roomName} · ${session.placement.durationMinutes} min`
-                        : `${session.durationMinutes} min · ${session.trackName ?? "No track"}`}
-                    </span>
-                    <span className="text-muted-foreground text-xs">
-                      {session.speakerNames.length > 0 ? session.speakerNames.join(", ") : "No speakers assigned"}
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`${session.placement ? "Edit placement for" : "Schedule"} ${session.title}`}
-                    onClick={() => setSelectedSessionId(session.id)}
-                  >
-                    {session.placement ? (
-                      <Clock3 data-icon="inline-start" />
-                    ) : (
-                      <CalendarPlus data-icon="inline-start" />
-                    )}
-                    {session.placement ? "Edit placement" : "Schedule"}
-                  </Button>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+        <AgendaViews
+          event={event}
+          sessions={sessions}
+          rooms={rooms}
+          tracks={tracks}
+          filter={filter}
+          onFilterChange={setFilter}
+          onSelectSession={setSelectedSessionId}
+        />
 
         <div className="flex min-w-0 flex-col gap-3">
           {selectedSession ? (
@@ -510,8 +431,8 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
 
           {selectedSession?.placement ? (
             <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-              <p aria-live="polite" className="text-muted-foreground text-sm">
-                {removeMessage || "Removing a placement returns the session to the unscheduled list."}
+              <p className="text-muted-foreground text-sm">
+                Removing a placement returns the session to the unscheduled list.
               </p>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -537,6 +458,9 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
               </AlertDialog>
             </div>
           ) : null}
+          <p aria-live="polite" className="text-muted-foreground text-sm">
+            {removeMessage}
+          </p>
         </div>
       </div>
     </div>
