@@ -165,6 +165,7 @@ describe("Accelevents speaker push", () => {
     assert.deepEqual(
       adapter.requests.map(({ operation, remoteId }) => [operation, remoteId ?? null]),
       [
+        ["check-credentials", null],
         ["update-speaker", "remote-update"],
         ["create-speaker", null],
         ["create-speaker", null],
@@ -222,18 +223,23 @@ describe("Accelevents speaker push", () => {
         data: { createdAt: new Date(Date.UTC(2027, 0, 1, 0, 0, index)) },
       });
     }
-    const retry = await service.push({ ...firstInput, idempotencyKey: "later-confirmed-retry" });
-    assert.equal(retry.status, IntegrationSyncRunStatus.PARTIALLY_FAILED);
+    const retry = await service.push({
+      ...firstInput,
+      idempotencyKey: "later-confirmed-retry",
+      retryOfRunId: first.runId,
+    });
+    assert.equal(retry.status, IntegrationSyncRunStatus.SUCCEEDED);
+    assert.equal(retry.records.length, 1);
     assert.equal(
       byLocalId(retry).get(speakers.get("create-fails")?.id ?? "")?.status,
       IntegrationSyncRecordStatus.SUCCEEDED,
     );
-    assert.equal(adapter.requests.length, requestsAfterFirst + 1);
+    assert.equal(adapter.requests.length, requestsAfterFirst + 2);
     assert.equal(adapter.requests.at(-1)?.operation, "create-speaker");
 
     const final = await service.push({ ...firstInput, idempotencyKey: "all-unchanged" });
     assert.equal(final.status, IntegrationSyncRunStatus.PARTIALLY_FAILED);
-    assert.equal(adapter.requests.length, requestsAfterFirst + 1);
+    assert.equal(adapter.requests.length, requestsAfterFirst + 3);
     const createdLinks = await client.integrationRemoteRecord.count({
       where: {
         configurationId: configuration.id,
