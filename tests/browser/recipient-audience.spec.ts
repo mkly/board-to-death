@@ -55,7 +55,11 @@ test("previews a deduplicated live audience with exact recipients and explained 
   await page.getByRole("button", { name: "Confirm 2 recipients" }).click();
   await expect(page.getByRole("alertdialog", { name: "Queue this bulk send?" })).toBeVisible();
   await page.getByRole("button", { name: "Queue recipient deliveries" }).click();
-  await expect(page.getByRole("alert")).toContainText("2 recipient deliveries queued from immutable snapshots.");
+  // Scope to the app's own alert: Next.js always renders an empty route announcer with role="alert",
+  // so an unscoped role query is a strict-mode violation.
+  await expect(page.locator('[data-slot="alert"]')).toContainText(
+    "2 recipient deliveries queued from immutable snapshots.",
+  );
 
   await page.getByRole("link", { name: "View delivery details" }).click();
   await expect(page.getByRole("heading", { name: "Bulk delivery" })).toBeVisible();

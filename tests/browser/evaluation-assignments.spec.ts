@@ -100,7 +100,8 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel("Reviewer committee").selectOption(fixture.committeeId);
     await applyAction();
     await expect(page.getByText("4 reviewer assignments updated.")).toBeVisible();
-    await expect(page.getByText(/Program committee/).first()).toBeVisible();
+    // Scope to the table: an unscoped text match resolves first to the hidden committee <option>.
+    await expect(page.getByRole("cell", { name: /Program committee/ }).first()).toBeVisible();
     await expect(page.getByLabel("Assigned: 2")).toBeVisible();
 
     await runFixture("remove-committee-member", fixture.committeeId, fixture.sourceReviewerId);
