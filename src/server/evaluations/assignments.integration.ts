@@ -7,8 +7,10 @@ import {
   EvaluationPlanVersionStatus,
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
+  EvaluationStatus,
   EventType,
   PrismaClient,
+  ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
 import { EvaluationAssignmentRepository } from "./assignments.ts";
 import assert from "node:assert/strict";
@@ -29,6 +31,8 @@ interface Fixture {
   readonly targetReviewerId: string;
   readonly inactiveReviewerId: string;
   readonly otherReviewerId: string;
+  readonly committeeId: string;
+  readonly otherCommitteeId: string;
   readonly firstSubmissionId: string;
   readonly secondSubmissionId: string;
   readonly draftSubmissionId: string;
@@ -133,6 +137,8 @@ async function createFixture(): Promise<Fixture> {
         title: "Screening",
         sortOrder: 0,
         status: EvaluationRoundStatus.OPEN,
+        visibilitySnapshot: ReviewerVisibility.BLIND,
+        opensAt: new Date("2027-01-15T18:00:00.000Z"),
       },
     }),
     client.evaluationRound.create({
@@ -180,6 +186,26 @@ async function createFixture(): Promise<Fixture> {
       },
     }),
   ]);
+  const [committee, otherCommittee] = await Promise.all([
+    client.evaluationCommittee.create({
+      data: {
+        eventId: event.id,
+        key: "program-committee",
+        name: "Program committee",
+        members: {
+          create: [{ reviewerId: sourceReviewer.id, role: "chair" }, { reviewerId: targetReviewer.id }],
+        },
+      },
+    }),
+    client.evaluationCommittee.create({
+      data: {
+        eventId: otherEvent.id,
+        key: "other-committee",
+        name: "Other committee",
+        members: { create: { reviewerId: otherReviewer.id } },
+      },
+    }),
+  ]);
 
   return {
     eventId: event.id,
@@ -190,6 +216,8 @@ async function createFixture(): Promise<Fixture> {
     targetReviewerId: targetReviewer.id,
     inactiveReviewerId: inactiveReviewer.id,
     otherReviewerId: otherReviewer.id,
+    committeeId: committee.id,
+    otherCommitteeId: otherCommittee.id,
     firstSubmissionId: firstSubmission.id,
     secondSubmissionId: secondSubmission.id,
     draftSubmissionId: draftSubmission.id,
@@ -197,7 +225,7 @@ async function createFixture(): Promise<Fixture> {
   };
 }
 
-describe("individual reviewer assignments", () => {
+describe("reviewer and committee assignments", () => {
   before(async () => {
     await client.$connect();
   });
@@ -282,6 +310,90 @@ describe("individual reviewer assignments", () => {
     assert.equal(active, 0);
   });
 
+  test("bulk assigns current committee members and deduplicates overlapping individual and committee coverage", async () => {
+    const fixture = await createFixture();
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+
+    assert.equal(
+      await repository.assignCommittee({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        committeeId: fixture.committeeId,
+        submissionIds: [fixture.firstSubmissionId, fixture.secondSubmissionId],
+      }),
+      3,
+    );
+    const assignments = await client.evaluationAssignment.findMany({
+      where: { roundId: fixture.openRoundId, status: EvaluationAssignmentStatus.ASSIGNED },
+    });
+    assert.equal(assignments.length, 4);
+    assert.equal(new Set(assignments.map(({ submissionId, reviewerId }) => `${submissionId}:${reviewerId}`)).size, 4);
+    assert.equal(
+      assignments.find(
+        ({ submissionId, reviewerId }) =>
+          submissionId === fixture.firstSubmissionId && reviewerId === fixture.sourceReviewerId,
+      )?.committeeId,
+      null,
+    );
+
+    await client.evaluationCommitteeMember.delete({
+      where: {
+        committeeId_reviewerId: { committeeId: fixture.committeeId, reviewerId: fixture.sourceReviewerId },
+      },
+    });
+    await repository.withdraw({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.secondSubmissionId],
+    });
+    assert.equal(
+      await repository.assignCommittee({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        committeeId: fixture.committeeId,
+        submissionIds: [fixture.secondSubmissionId],
+      }),
+      0,
+    );
+    const withdrawn = await client.evaluationAssignment.findUniqueOrThrow({
+      where: {
+        roundId_submissionId_reviewerId: {
+          roundId: fixture.openRoundId,
+          submissionId: fixture.secondSubmissionId,
+          reviewerId: fixture.sourceReviewerId,
+        },
+      },
+    });
+    assert.equal(withdrawn.status, EvaluationAssignmentStatus.REVOKED);
+    assert.equal(withdrawn.committeeId, fixture.committeeId);
+
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.secondSubmissionId],
+    });
+    const reinstated = await client.evaluationAssignment.findUniqueOrThrow({ where: { id: withdrawn.id } });
+    assert.equal(reinstated.status, EvaluationAssignmentStatus.ASSIGNED);
+    assert.equal(reinstated.committeeId, null);
+
+    await assert.rejects(
+      repository.assignCommittee({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        committeeId: fixture.otherCommitteeId,
+        submissionIds: [fixture.firstSubmissionId],
+      }),
+      /committee from this event/,
+    );
+  });
+
   test("rejects ineligible submissions, reviewers outside the event, inactive reviewers, and non-open rounds", async () => {
     const fixture = await createFixture();
     const common = {
@@ -314,7 +426,7 @@ describe("individual reviewer assignments", () => {
     );
   });
 
-  test("lists the selected event round, eligible submissions, assignments, and the no-reviewer state", async () => {
+  test("reports under-assigned, assigned, in-progress, and complete coverage for the selected event round", async () => {
     const fixture = await createFixture();
     await repository.assign({
       eventId: fixture.eventId,
@@ -327,6 +439,29 @@ describe("individual reviewer assignments", () => {
     assert.equal(populated.submissions.length, 2);
     assert.equal(populated.submissions.find(({ id }) => id === fixture.firstSubmissionId)?.assignments.length, 1);
     assert.equal(populated.reviewers.length, 2);
+    assert.equal(populated.committees.length, 1);
+    assert.deepEqual(populated.coverage, { underAssigned: 1, assigned: 1, inProgress: 0, complete: 0 });
+
+    const assignment = await client.evaluationAssignment.findFirstOrThrow({
+      where: { roundId: fixture.openRoundId, submissionId: fixture.firstSubmissionId },
+    });
+    const evaluation = await client.evaluation.create({ data: { assignmentId: assignment.id } });
+    const inProgress = await repository.getWorkspace(fixture.eventId, fixture.openRoundId);
+    assert.deepEqual(inProgress.coverage, { underAssigned: 1, assigned: 0, inProgress: 1, complete: 0 });
+
+    const completedAt = new Date("2027-01-20T18:00:00.000Z");
+    await client.$transaction([
+      client.evaluation.update({
+        where: { id: evaluation.id },
+        data: { status: EvaluationStatus.FINAL, submittedAt: completedAt },
+      }),
+      client.evaluationAssignment.update({
+        where: { id: assignment.id },
+        data: { status: EvaluationAssignmentStatus.COMPLETED, completedAt },
+      }),
+    ]);
+    const complete = await repository.getWorkspace(fixture.eventId, fixture.openRoundId);
+    assert.deepEqual(complete.coverage, { underAssigned: 1, assigned: 0, inProgress: 0, complete: 1 });
 
     await client.evaluationReviewer.updateMany({
       where: { eventId: fixture.eventId },
