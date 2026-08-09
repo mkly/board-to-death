@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
-import { CfpSubmissionStatus, SpeakerTaskAssignmentStatus } from "@/generated/prisma/client";
+import {
+  CfpSubmissionStatus,
+  ProgramSessionParticipantRole,
+  SpeakerTaskAssignmentStatus,
+} from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { BulkCommunicationRepository, type RecipientAudienceSelection } from "@/server/communications";
@@ -18,6 +22,7 @@ export interface ConfirmBulkCommunicationState {
 
 const ACCEPTANCE_STATUSES = new Set<string>(Object.values(CfpSubmissionStatus));
 const ONBOARDING_STATUSES = new Set<string>(Object.values(SpeakerTaskAssignmentStatus));
+const PARTICIPANT_ROLES = new Set<string>(Object.values(ProgramSessionParticipantRole));
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function fieldValue(formData: FormData, name: string): string {
@@ -37,6 +42,9 @@ function audienceFrom(formData: FormData): RecipientAudienceSelection {
   return {
     speakerIds: fieldValues(formData, "speaker"),
     sessionIds: fieldValues(formData, "session"),
+    participantRoles: fieldValues(formData, "participantRole").filter((value) =>
+      PARTICIPANT_ROLES.has(value),
+    ) as ProgramSessionParticipantRole[],
     categoryIds: fieldValues(formData, "category"),
     acceptanceStatuses: fieldValues(formData, "acceptance").filter((value) =>
       ACCEPTANCE_STATUSES.has(value),

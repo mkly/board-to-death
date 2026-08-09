@@ -4,6 +4,7 @@ import {
   CfpSubmissionStatus,
   PrismaClient,
   ProgramSessionKind,
+  ProgramSessionParticipantRole,
   SpeakerTaskAssignmentStatus,
 } from "../../generated/prisma/client.ts";
 import { RecipientAudienceRepository } from "./audiences.ts";
@@ -97,7 +98,11 @@ async function createSubmission(
   });
 }
 
-async function createSession(eventId: string, speakerIds: readonly string[]) {
+async function createSession(
+  eventId: string,
+  speakerIds: readonly string[],
+  roles: readonly ProgramSessionParticipantRole[] = [],
+) {
   return client.programSession.create({
     data: {
       eventId,
@@ -108,7 +113,11 @@ async function createSession(eventId: string, speakerIds: readonly string[]) {
           title: "Opening keynote",
           durationMinutes: 45,
           participants: {
-            create: speakerIds.map((speakerId, sortOrder) => ({ speakerId, sortOrder })),
+            create: speakerIds.map((speakerId, sortOrder) => ({
+              speakerId,
+              sortOrder,
+              role: roles[sortOrder] ?? ProgramSessionParticipantRole.SPEAKER,
+            })),
           },
         },
       },
@@ -176,13 +185,18 @@ describe("recipient audience previews", () => {
       createSubmission(event.id, form.id, grace.id, CfpSubmissionStatus.ACCEPTED, category.id),
       createSubmission(event.id, form.id, lin.id, CfpSubmissionStatus.ACCEPTED, category.id),
     ]);
-    const session = await createSession(event.id, [ada.id, grace.id]);
+    const session = await createSession(
+      event.id,
+      [ada.id, grace.id],
+      [ProgramSessionParticipantRole.MODERATOR, ProgramSessionParticipantRole.CHAIRPERSON],
+    );
     await createOnboardingAssignment(event.id, grace.id, SpeakerTaskAssignmentStatus.APPROVED);
 
     const preview = await audiences.preview(event.id, {
       speakerIds: [ada.id, ada.id],
       acceptanceStatuses: [CfpSubmissionStatus.ACCEPTED],
       sessionIds: [session.id],
+      participantRoles: [ProgramSessionParticipantRole.MODERATOR],
       categoryIds: [category.id],
       onboardingStatuses: [SpeakerTaskAssignmentStatus.APPROVED],
     });
@@ -190,7 +204,7 @@ describe("recipient audience previews", () => {
     assert.deepEqual(preview.recipients.map(({ displayName }) => displayName).sort(), ["Ada Speaker", "Grace Speaker"]);
     assert.deepEqual(
       preview.recipients.find(({ speakerId }) => speakerId === ada.id)?.matches.map(({ kind }) => kind),
-      ["explicit", "acceptance", "session", "category"],
+      ["explicit", "acceptance", "session", "role", "category"],
     );
     assert.deepEqual(
       preview.recipients.find(({ speakerId }) => speakerId === grace.id)?.matches.map(({ kind }) => kind),
@@ -251,6 +265,7 @@ describe("recipient audience previews", () => {
         speakerIds: [speaker.id],
         acceptanceStatuses: [CfpSubmissionStatus.ACCEPTED],
         sessionIds: [session.id],
+        participantRoles: [ProgramSessionParticipantRole.SPEAKER],
         categoryIds: [category.id],
         onboardingStatuses: [SpeakerTaskAssignmentStatus.PENDING],
       }),

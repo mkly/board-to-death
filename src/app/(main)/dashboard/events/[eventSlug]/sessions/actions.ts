@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 
 import { z } from "zod";
 
+import { ProgramSessionParticipantRole } from "@/generated/prisma/client";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
@@ -30,17 +31,22 @@ const sessionFormSchema = z
       .min(1, "Duration must be at least one minute.")
       .max(1_440, "Duration cannot exceed 1,440 minutes."),
     trackId: z.string().trim(),
-    speakerIds: z.array(z.string().uuid("A selected speaker is invalid.")),
+    participants: z.array(
+      z.object({
+        speakerId: z.string().uuid("A selected participant is invalid."),
+        role: z.enum(ProgramSessionParticipantRole),
+      }),
+    ),
   })
-  .superRefine(({ sessionId, speakerIds, trackId }, context) => {
+  .superRefine(({ sessionId, participants, trackId }, context) => {
     if (sessionId !== "" && !z.uuid().safeParse(sessionId).success) {
       context.addIssue({ code: "custom", path: ["sessionId"], message: "The selected session is invalid." });
     }
     if (trackId !== "" && trackId !== "unassigned" && !z.uuid().safeParse(trackId).success) {
       context.addIssue({ code: "custom", path: ["trackId"], message: "The selected track is invalid." });
     }
-    if (new Set(speakerIds).size !== speakerIds.length) {
-      context.addIssue({ code: "custom", path: ["speakerIds"], message: "Select each participant once." });
+    if (new Set(participants.map(({ speakerId }) => speakerId)).size !== participants.length) {
+      context.addIssue({ code: "custom", path: ["participants"], message: "Select each participant once." });
     }
   });
 
@@ -56,6 +62,13 @@ function validationErrors(error: z.ZodError): Readonly<Record<string, readonly s
     errors[field] = [...(errors[field] ?? []), issue.message];
   }
   return errors;
+}
+
+function participantValues(formData: FormData) {
+  return [...formData.entries()].flatMap(([name, value]) => {
+    if (!name.startsWith("participantRole:") || typeof value !== "string" || value === "NONE") return [];
+    return [{ speakerId: name.slice("participantRole:".length), role: value }];
+  });
 }
 
 async function authorizedEvent(eventSlug: string) {
@@ -80,7 +93,7 @@ export async function saveProgramSession(
     description: stringValue(formData, "description"),
     durationMinutes: stringValue(formData, "durationMinutes"),
     trackId: stringValue(formData, "trackId"),
-    speakerIds: formData.getAll("speakerIds").filter((value): value is string => typeof value === "string"),
+    participants: participantValues(formData),
   });
   if (!parsed.success) {
     return {
@@ -99,7 +112,7 @@ export async function saveProgramSession(
     description: parsed.data.description === "" ? null : parsed.data.description,
     durationMinutes: parsed.data.durationMinutes,
     trackId: parsed.data.trackId === "unassigned" || parsed.data.trackId === "" ? null : parsed.data.trackId,
-    speakerIds: parsed.data.speakerIds,
+    participants: parsed.data.participants,
   };
 
   try {

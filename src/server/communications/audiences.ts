@@ -1,15 +1,21 @@
-import type { CfpSubmissionStatus, PrismaClient, SpeakerTaskAssignmentStatus } from "../../generated/prisma/client.ts";
+import type {
+  CfpSubmissionStatus,
+  PrismaClient,
+  ProgramSessionParticipantRole,
+  SpeakerTaskAssignmentStatus,
+} from "../../generated/prisma/client.ts";
 
 export interface RecipientAudienceSelection {
   readonly speakerIds?: readonly string[];
   readonly acceptanceStatuses?: readonly CfpSubmissionStatus[];
   readonly sessionIds?: readonly string[];
+  readonly participantRoles?: readonly ProgramSessionParticipantRole[];
   readonly categoryIds?: readonly string[];
   readonly onboardingStatuses?: readonly SpeakerTaskAssignmentStatus[];
 }
 
 export interface RecipientAudienceMatch {
-  readonly kind: "explicit" | "acceptance" | "session" | "category" | "onboarding";
+  readonly kind: "explicit" | "acceptance" | "session" | "role" | "category" | "onboarding";
   readonly id: string;
   readonly label: string;
 }
@@ -53,6 +59,12 @@ const ONBOARDING_LABELS: Record<SpeakerTaskAssignmentStatus, string> = {
   APPROVED: "Onboarding approved",
   REVISION_REQUESTED: "Onboarding revision requested",
   WITHDRAWN: "Onboarding withdrawn",
+};
+
+const PARTICIPANT_ROLE_LABELS: Record<ProgramSessionParticipantRole, string> = {
+  SPEAKER: "Speaker role",
+  MODERATOR: "Moderator role",
+  CHAIRPERSON: "Chairperson role",
 };
 
 function unique(values: readonly string[] | undefined): string[] {
@@ -117,10 +129,11 @@ export class RecipientAudienceRepository {
     const speakerIds = unique(selection.speakerIds);
     const acceptanceStatuses = [...new Set(selection.acceptanceStatuses ?? [])];
     const sessionIds = unique(selection.sessionIds);
+    const participantRoles = [...new Set(selection.participantRoles ?? [])];
     const categoryIds = unique(selection.categoryIds);
     const onboardingStatuses = [...new Set(selection.onboardingStatuses ?? [])];
 
-    const [explicitSpeakers, acceptanceRows, sessions, categoryRows, onboardingRows] = await Promise.all([
+    const [explicitSpeakers, acceptanceRows, sessions, roleSessions, categoryRows, onboardingRows] = await Promise.all([
       speakerIds.length === 0
         ? []
         : this.#client.speaker.findMany({ where: { eventId, id: { in: speakerIds } }, select: { id: true } }),
@@ -140,6 +153,23 @@ export class RecipientAudienceRepository {
                 orderBy: { versionNumber: "desc" },
                 take: 1,
                 select: { title: true, participants: { select: { speakerId: true } } },
+              },
+            },
+          }),
+      participantRoles.length === 0
+        ? []
+        : this.#client.programSession.findMany({
+            where: { eventId, archivedAt: null },
+            select: {
+              versions: {
+                orderBy: { versionNumber: "desc" },
+                take: 1,
+                select: {
+                  participants: {
+                    where: { role: { in: participantRoles } },
+                    select: { speakerId: true, role: true },
+                  },
+                },
               },
             },
           }),
@@ -192,6 +222,15 @@ export class RecipientAudienceRepository {
       if (!version) continue;
       for (const participant of version.participants) {
         addMatch(participant.speakerId, { kind: "session", id: session.id, label: version.title });
+      }
+    }
+    for (const session of roleSessions) {
+      for (const participant of session.versions[0]?.participants ?? []) {
+        addMatch(participant.speakerId, {
+          kind: "role",
+          id: participant.role,
+          label: PARTICIPANT_ROLE_LABELS[participant.role],
+        });
       }
     }
     for (const row of categoryRows) {

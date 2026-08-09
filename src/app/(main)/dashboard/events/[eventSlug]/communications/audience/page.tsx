@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 
-import { CfpSubmissionStatus, SpeakerTaskAssignmentStatus } from "@/generated/prisma/client";
+import {
+  CfpSubmissionStatus,
+  ProgramSessionParticipantRole,
+  SpeakerTaskAssignmentStatus,
+} from "@/generated/prisma/client";
 import { RecipientAudienceRepository, type RecipientAudienceSelection } from "@/server/communications/audiences";
 import { EmailTemplateRepository } from "@/server/communications/templates";
 import { getDatabaseClient } from "@/server/database/client";
@@ -17,6 +21,7 @@ interface RecipientAudiencePageProps {
 
 const ACCEPTANCE_STATUSES = new Set<string>(Object.values(CfpSubmissionStatus));
 const ONBOARDING_STATUSES = new Set<string>(Object.values(SpeakerTaskAssignmentStatus));
+const PARTICIPANT_ROLES = new Set<string>(Object.values(ProgramSessionParticipantRole));
 
 function values(value: string | string[] | undefined): string[] {
   if (value === undefined) return [];
@@ -27,6 +32,9 @@ function selectionFrom(searchParams: Record<string, string | string[] | undefine
   return {
     speakerIds: values(searchParams.speaker),
     sessionIds: values(searchParams.session),
+    participantRoles: values(searchParams.participantRole).filter((value) => PARTICIPANT_ROLES.has(value)) as
+      | ProgramSessionParticipantRole[]
+      | undefined,
     categoryIds: values(searchParams.category),
     acceptanceStatuses: values(searchParams.acceptance).filter((value) => ACCEPTANCE_STATUSES.has(value)) as
       | CfpSubmissionStatus[]
@@ -41,6 +49,7 @@ function hasSelection(selection: RecipientAudienceSelection): boolean {
   return [
     selection.speakerIds,
     selection.sessionIds,
+    selection.participantRoles,
     selection.categoryIds,
     selection.acceptanceStatuses,
     selection.onboardingStatuses,

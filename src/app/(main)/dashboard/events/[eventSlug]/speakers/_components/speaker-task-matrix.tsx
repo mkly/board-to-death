@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { ProgramSessionParticipantRole } from "@/generated/prisma/client";
 import type { SpeakerTaskMatrixFilters, SpeakerTaskMatrixResult, SpeakerTaskMatrixState } from "@/server/speakers";
 
 interface SpeakerTaskMatrixProps {
@@ -37,12 +38,19 @@ const stateVariants: Readonly<Record<SpeakerTaskMatrixState, BadgeVariant>> = {
   "not-applicable": "outline",
 };
 
+const participantRoleLabels: Readonly<Record<ProgramSessionParticipantRole, string>> = {
+  SPEAKER: "Speaker",
+  MODERATOR: "Moderator",
+  CHAIRPERSON: "Chairperson",
+};
+
 function filtersParams(filters: SpeakerTaskMatrixFilters): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.search) params.set("q", filters.search);
   if (filters.state) params.set("state", filters.state);
   if (filters.taskId) params.set("task", filters.taskId);
   if (filters.speakerId) params.set("speaker", filters.speakerId);
+  if (filters.participantRole) params.set("participantRole", filters.participantRole);
   if (filters.dueFrom) params.set("dueFrom", filters.dueFrom);
   if (filters.dueTo) params.set("dueTo", filters.dueTo);
   return params;
@@ -95,7 +103,7 @@ export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixP
       </div>
 
       <form action={eventHref(event.slug)} className="rounded-xl border bg-card p-4">
-        <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(14rem,1fr)_repeat(5,minmax(9rem,0.55fr))_auto]">
+        <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(14rem,1fr)_repeat(6,minmax(9rem,0.55fr))_auto]">
           <Field>
             <FieldLabel htmlFor="matrix-search" className="sr-only">
               Search speakers and tasks
@@ -152,6 +160,23 @@ export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixP
             </NativeSelect>
           </Field>
           <Field>
+            <FieldLabel htmlFor="matrix-participant-role" className="sr-only">
+              Program role
+            </FieldLabel>
+            <NativeSelect
+              id="matrix-participant-role"
+              name="participantRole"
+              defaultValue={filters.participantRole ?? ""}
+            >
+              <NativeSelectOption value="">All program roles</NativeSelectOption>
+              {Object.entries(participantRoleLabels).map(([role, label]) => (
+                <NativeSelectOption key={role} value={role}>
+                  {label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field>
             <FieldLabel htmlFor="matrix-due-from" className="sr-only">
               Due on or after
             </FieldLabel>
@@ -195,6 +220,7 @@ export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixP
               <TableHeader>
                 <TableRow>
                   <TableHead>Speaker</TableHead>
+                  <TableHead>Program role</TableHead>
                   <TableHead>Task</TableHead>
                   <TableHead>State</TableHead>
                   <TableHead>Due date</TableHead>
@@ -212,6 +238,19 @@ export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixP
                         {row.speakerName}
                       </Link>
                       <p className="text-muted-foreground text-xs">{row.speakerEmail}</p>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {row.participantRoles.length === 0 ? (
+                          <span className="text-muted-foreground text-sm">No current session</span>
+                        ) : (
+                          row.participantRoles.map((role) => (
+                            <Badge key={role} variant="outline">
+                              {participantRoleLabels[role]}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Link

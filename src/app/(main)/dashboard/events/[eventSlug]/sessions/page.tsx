@@ -66,8 +66,11 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
           durationMinutes: session.version.durationMinutes,
           trackId: session.version.trackId,
           trackName: session.version.trackId ? (trackNames.get(session.version.trackId) ?? "Unknown track") : null,
-          speakerIds: session.version.speakerIds,
-          speakerNames: session.version.speakerIds.map((speakerId) => speakerNames.get(speakerId) ?? "Unknown speaker"),
+          participants: session.version.participants.map(({ speakerId, role }) => ({
+            speakerId,
+            speakerName: speakerNames.get(speakerId) ?? "Unknown speaker",
+            role,
+          })),
           versionNumber: session.version.versionNumber,
         }))}
       />

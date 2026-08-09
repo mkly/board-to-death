@@ -3,6 +3,7 @@ import {
   type Prisma,
   type PrismaClient,
   ProgramSessionKind,
+  ProgramSessionParticipantRole,
 } from "../../generated/prisma/client.ts";
 import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
@@ -19,6 +20,12 @@ export interface ProgramSessionVersionInput {
   readonly durationMinutes: number;
   readonly trackId?: string | null;
   readonly speakerIds?: readonly string[];
+  readonly participants?: readonly ProgramSessionParticipantInput[];
+}
+
+export interface ProgramSessionParticipantInput {
+  readonly speakerId: string;
+  readonly role: ProgramSessionParticipantRole;
 }
 
 export interface PromoteProgramSessionInput extends ProgramSessionVersionInput {
@@ -36,6 +43,7 @@ export interface UpdateProgramSessionInput {
   readonly durationMinutes?: number;
   readonly trackId?: string | null;
   readonly speakerIds?: readonly string[];
+  readonly participants?: readonly ProgramSessionParticipantInput[];
 }
 
 export interface PersistedProgramSessionVersion {
@@ -46,6 +54,7 @@ export interface PersistedProgramSessionVersion {
   readonly durationMinutes: number;
   readonly trackId: string | null;
   readonly speakerIds: readonly string[];
+  readonly participants: readonly ProgramSessionParticipantInput[];
   readonly createdAt: Date;
 }
 
@@ -75,7 +84,7 @@ interface ValidatedVersion {
   readonly description: string | null;
   readonly durationMinutes: number;
   readonly trackId: string | null;
-  readonly speakerIds: readonly string[];
+  readonly participants: readonly ProgramSessionParticipantInput[];
 }
 
 function invalid(message: string): never {
@@ -98,16 +107,25 @@ function validateVersion(input: ProgramSessionVersionInput): ValidatedVersion {
   if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
     invalid("durationMinutes must be a positive integer.");
   }
-  const speakerIds = [...(input.speakerIds ?? [])];
+  if (input.speakerIds !== undefined && input.participants !== undefined) {
+    invalid("Provide participants or speakerIds, not both.");
+  }
+  const participants = input.participants
+    ? input.participants.map((participant) => ({ ...participant }))
+    : (input.speakerIds ?? []).map((speakerId) => ({ speakerId, role: ProgramSessionParticipantRole.SPEAKER }));
+  if (participants.some(({ role }) => !Object.values(ProgramSessionParticipantRole).includes(role))) {
+    invalid("Every participant role must be supported.");
+  }
+  const speakerIds = participants.map(({ speakerId }) => speakerId);
   if (new Set(speakerIds).size !== speakerIds.length) {
-    invalid("speakerIds must contain each speaker at most once.");
+    invalid("participants must contain each speaker at most once.");
   }
   return {
     title: requiredText(input.title, "title"),
     description: optionalText(input.description),
     durationMinutes: input.durationMinutes,
     trackId: input.trackId ?? null,
-    speakerIds,
+    participants,
   };
 }
 
@@ -118,13 +136,15 @@ async function requireVersionReferences(
 ): Promise<void> {
   const [event, speakerCount, trackCount] = await Promise.all([
     transaction.event.findUnique({ where: { id: eventId }, select: { id: true } }),
-    transaction.speaker.count({ where: { eventId, id: { in: [...version.speakerIds] } } }),
+    transaction.speaker.count({
+      where: { eventId, id: { in: version.participants.map(({ speakerId }) => speakerId) } },
+    }),
     version.trackId === null
       ? Promise.resolve(1)
       : transaction.track.count({ where: { eventId, id: version.trackId } }),
   ]);
   if (!event) throw new RepositoryError("not-found", "The event was not found.");
-  if (speakerCount !== version.speakerIds.length) {
+  if (speakerCount !== version.participants.length) {
     throw new RepositoryError("not-found", "Every participant must be a speaker in the session event.");
   }
   if (trackCount !== 1) throw new RepositoryError("not-found", "The event-owned track was not found.");
@@ -153,6 +173,7 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
     durationMinutes: version.durationMinutes,
     trackId: version.trackId,
     speakerIds: version.participants.map(({ speakerId }) => speakerId),
+    participants: version.participants.map(({ speakerId, role }) => ({ speakerId, role })),
     createdAt: version.createdAt,
   }));
   const version = versions.at(-1);
@@ -229,12 +250,17 @@ export class ProgramSessionRepository {
         const previous = current?.versions[0];
         if (!current || !previous) throw new RepositoryError("not-found", "The event-owned session was not found.");
         if (current.archivedAt !== null) invalid("An archived session cannot be edited.");
+        let participantInput: Pick<ProgramSessionVersionInput, "participants" | "speakerIds"> = {
+          participants: previous.participants.map(({ speakerId, role }) => ({ speakerId, role })),
+        };
+        if (input.participants !== undefined) participantInput = { participants: input.participants };
+        else if (input.speakerIds !== undefined) participantInput = { speakerIds: input.speakerIds };
         const version = validateVersion({
           title: input.title ?? previous.title,
           description: input.description === undefined ? previous.description : input.description,
           durationMinutes: input.durationMinutes ?? previous.durationMinutes,
           trackId: input.trackId === undefined ? previous.trackId : input.trackId,
-          speakerIds: input.speakerIds ?? previous.participants.map(({ speakerId }) => speakerId),
+          ...participantInput,
         });
         await requireVersionReferences(transaction, eventId, version);
         await this.createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
@@ -332,12 +358,13 @@ export class ProgramSessionRepository {
       },
       select: { id: true },
     });
-    if (version.speakerIds.length > 0) {
+    if (version.participants.length > 0) {
       await transaction.programSessionParticipant.createMany({
-        data: version.speakerIds.map((speakerId, sortOrder) => ({
+        data: version.participants.map(({ speakerId, role }, sortOrder) => ({
           eventId,
           sessionVersionId: created.id,
           speakerId,
+          role,
           sortOrder,
         })),
       });
