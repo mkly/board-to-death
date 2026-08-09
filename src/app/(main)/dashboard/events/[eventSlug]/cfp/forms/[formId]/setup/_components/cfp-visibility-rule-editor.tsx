@@ -71,10 +71,6 @@ function comparisonInputType(type: string): "date" | "number" | "text" {
   return "text";
 }
 
-function conditionKey(condition: CfpCondition): string {
-  return `${condition.questionId}-${condition.operator}`;
-}
-
 function withConditionValue(
   condition: CfpCondition,
   source: VisibilitySourceQuestion,
@@ -219,7 +215,7 @@ export function CfpVisibilityRuleEditor({
 
   return (
     <FieldGroup className="sm:col-span-2">
-      <Field orientation="horizontal" data-disabled={sources.length === 0 || undefined}>
+      <Field orientation="horizontal" data-disabled={(sources.length === 0 && !rule) || undefined}>
         <div className="flex flex-col gap-1">
           <FieldTitle id={`${idPrefix}-visibility-label`}>Conditional visibility</FieldTitle>
           <FieldDescription>Show this question only when applicant answers match the rule.</FieldDescription>
@@ -227,7 +223,7 @@ export function CfpVisibilityRuleEditor({
         <Switch
           aria-labelledby={`${idPrefix}-visibility-label`}
           checked={Boolean(rule)}
-          disabled={sources.length === 0}
+          disabled={sources.length === 0 && !rule}
           onCheckedChange={enableRule}
         />
       </Field>
@@ -254,7 +250,7 @@ export function CfpVisibilityRuleEditor({
             const source = findSource(sources, condition.questionId);
             const conditionPrefix = `${idPrefix}-condition-${conditionIndex}`;
             return (
-              <Card key={conditionKey(condition)} size="sm">
+              <Card key={conditionPrefix} size="sm">
                 <CardHeader>
                   <CardTitle>Condition {conditionIndex + 1}</CardTitle>
                   <CardDescription>Compare an answer from another question.</CardDescription>
@@ -351,7 +347,11 @@ export function CfpVisibilityRuleEditor({
             variant="outline"
             size="sm"
             className="w-fit"
-            onClick={() => onChange({ ...rule, conditions: [...rule.conditions, initialCondition(sources[0])] })}
+            disabled={sources.length === 0}
+            onClick={() => {
+              const source = sources[0];
+              if (source) onChange({ ...rule, conditions: [...rule.conditions, initialCondition(source)] });
+            }}
           >
             <Plus data-icon="inline-start" />
             Add condition
