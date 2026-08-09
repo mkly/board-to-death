@@ -245,6 +245,13 @@ enum IntegrationSyncRecordStatus {
   TERMINAL_FAILED
 }
 
+enum WebhookDeliveryStatus {
+  PENDING
+  RETRY_SCHEDULED
+  DELIVERED
+  FAILED
+}
+
 enum CustomDashboardTemplate {
   EVENT_OVERVIEW
   SUBMISSIONS_PIPELINE
@@ -341,8 +348,68 @@ model Event {
   contactGroups             ContactGroup[]
   fileRequests              FileRequest[]
   fileRequestAssignments    FileRequestAssignment[]
+  apiTokens                 ApiToken[]
+  webhookEndpoints          WebhookEndpoint[]
+  webhookDeliveries         WebhookDelivery[]
 
   @@map("events")
+}
+
+model ApiToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  eventId    String    @db.Uuid
+  name       String
+  prefix     String
+  secretHash String    @unique
+  scopes     Json
+  lastUsedAt DateTime? @db.Timestamptz(3)
+  revokedAt  DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, id])
+  @@index([eventId, revokedAt, createdAt])
+  @@map("api_tokens")
+}
+
+model WebhookEndpoint {
+  id            String            @id @default(uuid()) @db.Uuid
+  eventId       String            @db.Uuid
+  name          String
+  url           String
+  signingSecret String
+  events        Json
+  disabledAt    DateTime?         @db.Timestamptz(3)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  deliveries    WebhookDelivery[]
+
+  @@unique([eventId, id])
+  @@index([eventId, disabledAt, createdAt])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id             String                @id @default(uuid()) @db.Uuid
+  eventId        String                @db.Uuid
+  endpointId     String                @db.Uuid
+  eventType      String
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attemptCount   Int                   @default(0)
+  nextAttemptAt  DateTime?             @db.Timestamptz(3)
+  responseStatus Int?
+  error          String?
+  deliveredAt    DateTime?             @db.Timestamptz(3)
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
+  event          Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  endpoint       WebhookEndpoint       @relation(fields: [eventId, endpointId], references: [eventId, id], onDelete: Cascade)
+
+  @@index([eventId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
 }
 
 model CustomDashboard {
