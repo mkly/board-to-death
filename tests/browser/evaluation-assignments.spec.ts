@@ -13,13 +13,21 @@ interface BrowserFixture {
   readonly eventSlug: string;
   readonly sourceReviewerId: string;
   readonly targetReviewerId: string;
+  readonly committeeId: string;
+  readonly firstSubmissionId: string;
+  readonly secondSubmissionId: string;
   readonly sessionToken: string;
 }
 
-async function runFixture(action: "setup" | "deactivate-reviewers", eventId?: string): Promise<BrowserFixture | null> {
-  const { stdout } = await execFileAsync(process.execPath, [fixtureScript, action, ...(eventId ? [eventId] : [])], {
-    env: process.env,
-  });
+type FixtureAction =
+  | "setup"
+  | "deactivate-reviewers"
+  | "remove-committee-member"
+  | "start-evaluation"
+  | "complete-submission";
+
+async function runFixture(action: FixtureAction, ...args: readonly string[]): Promise<BrowserFixture | null> {
+  const { stdout } = await execFileAsync(process.execPath, [fixtureScript, action, ...args], { env: process.env });
   return action === "setup" ? (JSON.parse(stdout) as BrowserFixture) : null;
 }
 
@@ -52,7 +60,7 @@ test.describe("evaluation reviewer assignments", () => {
       .click();
     await page.getByLabel("Reviewer", { exact: true }).selectOption(fixture.sourceReviewerId);
     await page.getByRole("button", { name: "Apply action" }).click();
-    await expect(page.getByText("1 submission updated.")).toBeVisible();
+    await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Alex Source", { exact: true })).toBeVisible();
 
     await page
@@ -63,7 +71,7 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel("Current reviewer").selectOption(fixture.sourceReviewerId);
     await page.getByLabel("Replacement reviewer").selectOption(fixture.targetReviewerId);
     await page.getByRole("button", { name: "Apply action" }).click();
-    await expect(page.getByText("1 submission updated.")).toBeVisible();
+    await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Bailey Target", { exact: true })).toBeVisible();
 
     await page
@@ -73,8 +81,40 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel("Action").selectOption("withdraw");
     await page.getByLabel("Current reviewer").selectOption(fixture.targetReviewerId);
     await page.getByRole("button", { name: "Apply action" }).click();
-    await expect(page.getByText("1 submission updated.")).toBeVisible();
+    await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Unassigned").first()).toBeVisible();
+
+    await page.getByLabel("Select all eligible submissions").click();
+    await page.getByLabel("Action").selectOption("assign-committee");
+    await page.getByLabel("Reviewer committee").selectOption(fixture.committeeId);
+    await page.getByRole("button", { name: "Apply action" }).click();
+    await expect(page.getByText("4 reviewer assignments updated.")).toBeVisible();
+    await expect(page.getByText(/Program committee/).first()).toBeVisible();
+    await expect(page.getByLabel("Assigned: 2")).toBeVisible();
+
+    await runFixture("remove-committee-member", fixture.committeeId, fixture.sourceReviewerId);
+    await page.reload();
+    await page.getByLabel("Action").selectOption("assign-committee");
+    await expect(page.getByLabel("Reviewer committee").getByText("Program committee · 1 active")).toBeAttached();
+    await page.getByLabel(`Select submission ${fixture.secondSubmissionId}`).click();
+    await page.getByLabel("Action").selectOption("withdraw");
+    await page.getByLabel("Current reviewer").selectOption(fixture.sourceReviewerId);
+    await page.getByRole("button", { name: "Apply action" }).click();
+    await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
+    await page.getByLabel(`Select submission ${fixture.secondSubmissionId}`).click();
+    await page.getByLabel("Action").selectOption("assign-committee");
+    await page.getByLabel("Reviewer committee").selectOption(fixture.committeeId);
+    await page.getByRole("button", { name: "Apply action" }).click();
+    await expect(page.getByText("0 reviewer assignments updated.")).toBeVisible();
+
+    await runFixture("start-evaluation", fixture.firstSubmissionId);
+    await page.reload();
+    await expect(page.getByLabel("Assigned: 1")).toBeVisible();
+    await expect(page.getByLabel("In progress: 1")).toBeVisible();
+    await runFixture("complete-submission", fixture.firstSubmissionId);
+    await page.reload();
+    await expect(page.getByLabel("Assigned: 1")).toBeVisible();
+    await expect(page.getByLabel("Complete: 1")).toBeVisible();
   });
 
   test("shows a safe disabled state when the event has no active reviewers", async ({ page }) => {

@@ -3,11 +3,14 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import {
   CfpSubmissionKind,
   CfpSubmissionStatus,
+  EvaluationAssignmentStatus,
   EvaluationPlanVersionStatus,
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
+  EvaluationStatus,
   EventType,
   PrismaClient,
+  ReviewerVisibility,
 } from "../../../src/generated/prisma/client.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
 
@@ -79,7 +82,7 @@ async function setup() {
   const formVersion = event.cfpForms[0]?.versions[0];
   const category = event.cfpCategories[0];
   if (!formVersion || !category) throw new Error("Expected the browser CFP fixture to be created.");
-  await Promise.all([
+  const [firstSubmission, secondSubmission] = await Promise.all([
     database.cfpSubmission.create({
       data: {
         eventId: event.id,
@@ -126,6 +129,8 @@ async function setup() {
       title: "Screening",
       sortOrder: 0,
       status: EvaluationRoundStatus.OPEN,
+      visibilitySnapshot: ReviewerVisibility.BLIND,
+      opensAt: new Date("2027-01-15T18:00:00.000Z"),
     },
   });
   const [sourceReviewer, targetReviewer] = await Promise.all([
@@ -146,14 +151,57 @@ async function setup() {
       },
     }),
   ]);
+  const committee = await database.evaluationCommittee.create({
+    data: {
+      eventId: event.id,
+      key: "program-committee",
+      name: "Program committee",
+      members: { create: [{ reviewerId: sourceReviewer.id, role: "chair" }, { reviewerId: targetReviewer.id }] },
+    },
+  });
 
   return {
     eventId: event.id,
     eventSlug: event.slug,
     sourceReviewerId: sourceReviewer.id,
     targetReviewerId: targetReviewer.id,
+    committeeId: committee.id,
+    firstSubmissionId: firstSubmission.id,
+    secondSubmissionId: secondSubmission.id,
     sessionToken: await createAdministratorSession(),
   };
+}
+
+async function startEvaluation(submissionId: string) {
+  const assignment = await database.evaluationAssignment.findFirstOrThrow({
+    where: { submissionId, status: EvaluationAssignmentStatus.ASSIGNED },
+    orderBy: { assignedAt: "asc" },
+  });
+  await database.evaluation.upsert({
+    where: { assignmentId: assignment.id },
+    create: { assignmentId: assignment.id },
+    update: { status: EvaluationStatus.DRAFT, submittedAt: null },
+  });
+}
+
+async function completeSubmission(submissionId: string) {
+  const assignments = await database.evaluationAssignment.findMany({
+    where: { submissionId, status: EvaluationAssignmentStatus.ASSIGNED },
+  });
+  const completedAt = new Date("2027-01-20T18:00:00.000Z");
+  await database.$transaction(
+    assignments.flatMap((assignment) => [
+      database.evaluation.upsert({
+        where: { assignmentId: assignment.id },
+        create: { assignmentId: assignment.id, status: EvaluationStatus.FINAL, submittedAt: completedAt },
+        update: { status: EvaluationStatus.FINAL, submittedAt: completedAt },
+      }),
+      database.evaluationAssignment.update({
+        where: { id: assignment.id },
+        data: { status: EvaluationAssignmentStatus.COMPLETED, completedAt },
+      }),
+    ]),
+  );
 }
 
 const action = process.argv[2];
@@ -168,6 +216,20 @@ try {
       where: { eventId },
       data: { status: EvaluationReviewerStatus.INACTIVE },
     });
+  } else if (action === "remove-committee-member") {
+    const [committeeId, reviewerId] = process.argv.slice(3);
+    if (!committeeId || !reviewerId) throw new Error("committeeId and reviewerId are required.");
+    await database.evaluationCommitteeMember.delete({
+      where: { committeeId_reviewerId: { committeeId, reviewerId } },
+    });
+  } else if (action === "start-evaluation") {
+    const submissionId = process.argv[3];
+    if (!submissionId) throw new Error("submissionId is required to start an evaluation.");
+    await startEvaluation(submissionId);
+  } else if (action === "complete-submission") {
+    const submissionId = process.argv[3];
+    if (!submissionId) throw new Error("submissionId is required to complete evaluations.");
+    await completeSubmission(submissionId);
   } else {
     throw new Error(`Unknown fixture action: ${action ?? "missing"}`);
   }

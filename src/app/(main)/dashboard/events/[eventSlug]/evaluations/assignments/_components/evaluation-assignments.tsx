@@ -25,7 +25,7 @@ interface EvaluationAssignmentsProps {
   readonly workspace: EvaluationAssignmentWorkspace;
 }
 
-type Operation = "assign" | "reassign" | "withdraw";
+type Operation = "assign" | "assign-committee" | "reassign" | "withdraw";
 
 const initialState: ManageAssignmentsState = { status: "idle" };
 
@@ -36,6 +36,13 @@ function labelForEnum(value: string): string {
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
 }
+
+const coverageCards = [
+  { key: "underAssigned", title: "Under-assigned", description: "No active reviewer coverage" },
+  { key: "assigned", title: "Assigned", description: "Ready for reviewer work" },
+  { key: "inProgress", title: "In progress", description: "Draft or partial evaluations" },
+  { key: "complete", title: "Complete", description: "Every assignment submitted" },
+] as const;
 
 export function EvaluationAssignments({ event, workspace }: EvaluationAssignmentsProps) {
   const router = useRouter();
@@ -84,7 +91,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
           <p className="text-muted-foreground text-sm">{event.name}</p>
           <h1 className="font-heading font-semibold text-2xl tracking-tight">Reviewer assignments</h1>
           <p className="max-w-2xl text-muted-foreground text-sm">
-            Assign individual reviewers to eligible proposals in the selected open evaluation round.
+            Assign individual reviewers or committees and monitor evaluation coverage for the selected open round.
           </p>
         </div>
         {workspace.rounds.length > 0 ? (
@@ -154,6 +161,18 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
             </Alert>
           ) : null}
 
+          <section aria-label="Evaluation coverage" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {coverageCards.map((card) => (
+              <Card key={card.key} size="sm" aria-label={`${card.title}: ${workspace.coverage[card.key]}`}>
+                <CardHeader>
+                  <CardDescription>{card.title}</CardDescription>
+                  <CardTitle className="text-2xl tabular-nums">{workspace.coverage[card.key]}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-muted-foreground text-xs">{card.description}</CardContent>
+              </Card>
+            ))}
+          </section>
+
           <Card>
             <CardHeader>
               <CardTitle>Bulk action</CardTitle>
@@ -171,6 +190,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     onChange={(event) => setOperation(event.currentTarget.value as Operation)}
                   >
                     <NativeSelectOption value="assign">Assign reviewer</NativeSelectOption>
+                    <NativeSelectOption value="assign-committee">Assign committee</NativeSelectOption>
                     <NativeSelectOption value="reassign">Reassign reviewer</NativeSelectOption>
                     <NativeSelectOption value="withdraw">Withdraw reviewer</NativeSelectOption>
                   </NativeSelect>
@@ -197,7 +217,25 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     ) : null}
                   </Field>
                 ) : null}
-                {operation !== "withdraw" ? (
+                {operation === "assign-committee" ? (
+                  <Field>
+                    <FieldLabel htmlFor="target-committee">Reviewer committee</FieldLabel>
+                    <NativeSelect id="target-committee" name="committeeId" className="w-full" defaultValue="">
+                      <NativeSelectOption value="" disabled>
+                        Select committee
+                      </NativeSelectOption>
+                      {workspace.committees.map((committee) => (
+                        <NativeSelectOption key={committee.id} value={committee.id}>
+                          {committee.name} · {committee.activeMemberCount} active
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    {workspace.committees.length === 0 ? (
+                      <FieldDescription>No committee has active reviewers.</FieldDescription>
+                    ) : null}
+                  </Field>
+                ) : null}
+                {operation !== "withdraw" && operation !== "assign-committee" ? (
                   <Field>
                     <FieldLabel htmlFor="target-reviewer">
                       {operation === "reassign" ? "Replacement reviewer" : "Reviewer"}
@@ -222,7 +260,8 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     pending ||
                     selectedIds.length === 0 ||
                     workspace.reviewers.length === 0 ||
-                    (operation !== "assign" && commonAssignedReviewerIds.size === 0)
+                    (operation === "assign-committee" && workspace.committees.length === 0) ||
+                    ((operation === "reassign" || operation === "withdraw") && commonAssignedReviewerIds.size === 0)
                   }
                 >
                   {pending ? <Spinner data-icon="inline-start" /> : null}
@@ -253,6 +292,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     </TableHead>
                     <TableHead>Submission</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Coverage</TableHead>
                     <TableHead>Categories</TableHead>
                     <TableHead>Assigned reviewers</TableHead>
                   </TableRow>
@@ -282,6 +322,16 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                         <Badge variant="outline">{labelForEnum(submission.status)}</Badge>
                       </TableCell>
                       <TableCell>
+                        <div className="flex min-w-28 flex-col gap-1">
+                          <Badge variant={submission.coverageStatus === "IN_PROGRESS" ? "default" : "secondary"}>
+                            {labelForEnum(submission.coverageStatus)}
+                          </Badge>
+                          <span className="text-muted-foreground text-xs">
+                            {submission.completedAssignmentCount}/{submission.assignments.length} complete
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex max-w-56 flex-wrap gap-1">
                           {submission.categories.length > 0 ? (
                             submission.categories.map((category) => (
@@ -300,6 +350,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                             submission.assignments.map((assignment) => (
                               <Badge key={assignment.id} variant="secondary">
                                 {assignment.reviewerName}
+                                {assignment.committeeName ? ` · ${assignment.committeeName}` : ""}
                                 {assignment.status === "COMPLETED" ? " · completed" : ""}
                               </Badge>
                             ))

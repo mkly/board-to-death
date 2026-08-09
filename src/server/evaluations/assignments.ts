@@ -4,6 +4,7 @@ import {
   EvaluationPlanVersionStatus,
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
+  EvaluationStatus,
   type Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
@@ -25,6 +26,21 @@ export interface EvaluationReviewerOption {
   readonly email: string;
 }
 
+export interface EvaluationCommitteeOption {
+  readonly id: string;
+  readonly name: string;
+  readonly activeMemberCount: number;
+}
+
+export type EvaluationCoverageStatus = "UNDER_ASSIGNED" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETE";
+
+export interface EvaluationCoverageCounts {
+  readonly underAssigned: number;
+  readonly assigned: number;
+  readonly inProgress: number;
+  readonly complete: number;
+}
+
 export interface EvaluationAssignmentSubmission {
   readonly id: string;
   readonly kind: string;
@@ -32,10 +48,13 @@ export interface EvaluationAssignmentSubmission {
   readonly formTitle: string;
   readonly primarySpeaker: string | null;
   readonly categories: readonly string[];
+  readonly coverageStatus: EvaluationCoverageStatus;
+  readonly completedAssignmentCount: number;
   readonly assignments: readonly {
     readonly id: string;
     readonly reviewerId: string;
     readonly reviewerName: string;
+    readonly committeeName: string | null;
     readonly status: string;
   }[];
 }
@@ -44,6 +63,8 @@ export interface EvaluationAssignmentWorkspace {
   readonly rounds: readonly EvaluationRoundOption[];
   readonly selectedRoundId: string | null;
   readonly reviewers: readonly EvaluationReviewerOption[];
+  readonly committees: readonly EvaluationCommitteeOption[];
+  readonly coverage: EvaluationCoverageCounts;
   readonly submissions: readonly EvaluationAssignmentSubmission[];
 }
 
@@ -55,6 +76,10 @@ export interface BulkAssignmentInput {
 
 export interface AssignReviewersInput extends BulkAssignmentInput {
   readonly reviewerId: string;
+}
+
+export interface AssignCommitteeInput extends BulkAssignmentInput {
+  readonly committeeId: string;
 }
 
 export interface ReassignReviewersInput extends AssignReviewersInput {
@@ -156,6 +181,36 @@ function speakerName(
   return profile.preferredName ?? `${profile.givenName} ${profile.familyName}`;
 }
 
+function coverageStatus(
+  assignments: readonly {
+    readonly status: EvaluationAssignmentStatus;
+    readonly evaluation: { status: EvaluationStatus } | null;
+  }[],
+): EvaluationCoverageStatus {
+  if (assignments.length === 0) return "UNDER_ASSIGNED";
+  if (assignments.every(({ status }) => status === EvaluationAssignmentStatus.COMPLETED)) return "COMPLETE";
+  if (
+    assignments.some(
+      ({ evaluation, status }) =>
+        evaluation?.status === EvaluationStatus.DRAFT || status === EvaluationAssignmentStatus.COMPLETED,
+    )
+  ) {
+    return "IN_PROGRESS";
+  }
+  return "ASSIGNED";
+}
+
+function countCoverage(submissions: readonly EvaluationAssignmentSubmission[]): EvaluationCoverageCounts {
+  const counts = { underAssigned: 0, assigned: 0, inProgress: 0, complete: 0 };
+  for (const submission of submissions) {
+    if (submission.coverageStatus === "UNDER_ASSIGNED") counts.underAssigned += 1;
+    else if (submission.coverageStatus === "ASSIGNED") counts.assigned += 1;
+    else if (submission.coverageStatus === "IN_PROGRESS") counts.inProgress += 1;
+    else counts.complete += 1;
+  }
+  return counts;
+}
+
 export class EvaluationAssignmentRepository {
   private readonly client: PrismaClient;
 
@@ -164,7 +219,7 @@ export class EvaluationAssignmentRepository {
   }
 
   async getWorkspace(eventId: string, selectedRoundId?: string): Promise<EvaluationAssignmentWorkspace> {
-    const [rounds, reviewers] = await Promise.all([
+    const [rounds, reviewers, committees] = await Promise.all([
       this.client.evaluationRound.findMany({
         where: {
           status: EvaluationRoundStatus.OPEN,
@@ -178,6 +233,18 @@ export class EvaluationAssignmentRepository {
         orderBy: [{ displayName: "asc" }, { email: "asc" }],
         select: { id: true, displayName: true, email: true },
       }),
+      this.client.evaluationCommittee.findMany({
+        where: { eventId, members: { some: { reviewer: { status: EvaluationReviewerStatus.ACTIVE } } } },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          members: {
+            where: { reviewer: { status: EvaluationReviewerStatus.ACTIVE } },
+            select: { reviewerId: true },
+          },
+        },
+      }),
     ]);
 
     const selectedRound = selectedRoundId ? rounds.find(({ id }) => id === selectedRoundId) : rounds[0];
@@ -189,6 +256,8 @@ export class EvaluationAssignmentRepository {
         rounds: rounds.map(({ id, title, planVersion }) => ({ id, title, planTitle: planVersion.title })),
         selectedRoundId: null,
         reviewers,
+        committees: committees.map(({ id, name, members }) => ({ id, name, activeMemberCount: members.length })),
+        coverage: { underAssigned: 0, assigned: 0, inProgress: 0, complete: 0 },
         submissions: [],
       };
     }
@@ -225,30 +294,100 @@ export class EvaluationAssignmentRepository {
             reviewerId: true,
             status: true,
             reviewer: { select: { displayName: true } },
+            committee: { select: { name: true } },
+            evaluation: { select: { status: true } },
           },
         },
       },
     });
 
+    const mappedSubmissions = submissions.map((submission) => ({
+      id: submission.id,
+      kind: submission.kind,
+      status: submission.status,
+      formTitle: submission.formVersion.title,
+      primarySpeaker: speakerName(submission.participants[0]),
+      categories: submission.categories.map(({ category }) => category.label),
+      coverageStatus: coverageStatus(submission.evaluationAssignments),
+      completedAssignmentCount: submission.evaluationAssignments.filter(
+        ({ status }) => status === EvaluationAssignmentStatus.COMPLETED,
+      ).length,
+      assignments: submission.evaluationAssignments.map((assignment) => ({
+        id: assignment.id,
+        reviewerId: assignment.reviewerId,
+        reviewerName: assignment.reviewer.displayName,
+        committeeName: assignment.committee?.name ?? null,
+        status: assignment.status,
+      })),
+    }));
+
     return {
       rounds: rounds.map(({ id, title, planVersion }) => ({ id, title, planTitle: planVersion.title })),
       selectedRoundId: selectedRound.id,
       reviewers,
-      submissions: submissions.map((submission) => ({
-        id: submission.id,
-        kind: submission.kind,
-        status: submission.status,
-        formTitle: submission.formVersion.title,
-        primarySpeaker: speakerName(submission.participants[0]),
-        categories: submission.categories.map(({ category }) => category.label),
-        assignments: submission.evaluationAssignments.map((assignment) => ({
-          id: assignment.id,
-          reviewerId: assignment.reviewerId,
-          reviewerName: assignment.reviewer.displayName,
-          status: assignment.status,
-        })),
-      })),
+      committees: committees.map(({ id, name, members }) => ({ id, name, activeMemberCount: members.length })),
+      coverage: countCoverage(mappedSubmissions),
+      submissions: mappedSubmissions,
     };
+  }
+
+  async assignCommittee(input: AssignCommitteeInput): Promise<number> {
+    const submissionIds = uniqueSubmissionIds(input.submissionIds);
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        await Promise.all([
+          requireOpenRound(transaction, input.eventId, input.roundId),
+          requireEligibleSubmissions(transaction, input.eventId, submissionIds),
+        ]);
+        const committee = await transaction.evaluationCommittee.findFirst({
+          where: { id: input.committeeId, eventId: input.eventId },
+          select: {
+            id: true,
+            members: {
+              where: { reviewer: { status: EvaluationReviewerStatus.ACTIVE } },
+              select: { reviewerId: true },
+            },
+          },
+        });
+        if (!committee) invalid("Select a reviewer committee from this event.");
+        if (committee.members.length === 0) invalid("The selected committee has no active reviewers.");
+
+        const reviewerIds = committee.members.map(({ reviewerId }) => reviewerId);
+        const existing = await transaction.evaluationAssignment.findMany({
+          where: { roundId: input.roundId, submissionId: { in: submissionIds }, reviewerId: { in: reviewerIds } },
+        });
+        const existingByPair = new Map(
+          existing.map((assignment) => [`${assignment.submissionId}:${assignment.reviewerId}`, assignment]),
+        );
+        let changed = 0;
+        for (const submissionId of submissionIds) {
+          for (const reviewerId of reviewerIds) {
+            const assignment = existingByPair.get(`${submissionId}:${reviewerId}`);
+            if (!assignment) {
+              await transaction.evaluationAssignment.create({
+                data: { roundId: input.roundId, submissionId, reviewerId, committeeId: committee.id },
+              });
+              changed += 1;
+            } else if (assignment.status === EvaluationAssignmentStatus.REVOKED) {
+              await transaction.evaluationAssignment.update({
+                where: { id: assignment.id },
+                data: {
+                  committeeId: committee.id,
+                  status: EvaluationAssignmentStatus.ASSIGNED,
+                  assignedAt: new Date(),
+                  completedAt: null,
+                  revokedAt: null,
+                },
+              });
+              changed += 1;
+            }
+          }
+        }
+        return changed;
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
   }
 
   async assign(input: AssignReviewersInput): Promise<number> {

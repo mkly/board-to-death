@@ -18,10 +18,11 @@ export interface ManageAssignmentsState {
 }
 
 const inputSchema = z.object({
-  operation: z.enum(["assign", "reassign", "withdraw"]),
+  operation: z.enum(["assign", "assign-committee", "reassign", "withdraw"]),
   eventSlug: z.string().min(1),
   roundId: z.string().uuid(),
   reviewerId: z.string().uuid().optional(),
+  committeeId: z.string().uuid().optional(),
   fromReviewerId: z.string().uuid().optional(),
   submissionIds: z.array(z.string().uuid()).min(1, "Select at least one submission."),
 });
@@ -46,6 +47,7 @@ export async function manageEvaluationAssignments(
     eventSlug: formData.get("eventSlug"),
     roundId: formData.get("roundId"),
     reviewerId: optionalField(formData, "reviewerId"),
+    committeeId: optionalField(formData, "committeeId"),
     fromReviewerId: optionalField(formData, "fromReviewerId"),
     submissionIds: formData.getAll("submissionIds"),
   });
@@ -71,6 +73,14 @@ export async function manageEvaluationAssignments(
         reviewerId: result.data.reviewerId,
         submissionIds: result.data.submissionIds,
       });
+    } else if (result.data.operation === "assign-committee") {
+      if (!result.data.committeeId) return { status: "error", message: "Select a reviewer committee to assign." };
+      count = await repository.assignCommittee({
+        eventId: event.id,
+        roundId: result.data.roundId,
+        committeeId: result.data.committeeId,
+        submissionIds: result.data.submissionIds,
+      });
     } else if (result.data.operation === "reassign") {
       if (!result.data.fromReviewerId || !result.data.reviewerId) {
         return { status: "error", message: "Select both the current and replacement reviewers." };
@@ -93,7 +103,7 @@ export async function manageEvaluationAssignments(
     }
 
     revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
-    const label = count === 1 ? "submission" : "submissions";
+    const label = count === 1 ? "reviewer assignment" : "reviewer assignments";
     return { status: "success", message: `${count} ${label} updated.` };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
