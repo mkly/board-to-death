@@ -670,6 +670,7 @@ model SpeakerProfileVersion {
   websiteUrl              String?
   accessibilityNeeds      String?
   photoObjectKey          String?
+  agreementObjectKey      String?
   consentToPublishProfile Boolean   @default(false)
   consentToReceiveEmail   Boolean   @default(false)
   consentedAt             DateTime? @db.Timestamptz(3)
@@ -682,12 +683,14 @@ model SpeakerProfileVersion {
 }
 
 model CfpSubmissionParticipant {
-  eventId      String        @db.Uuid
-  submissionId String        @db.Uuid
-  speakerId    String        @db.Uuid
-  sortOrder    Int
-  submission   CfpSubmission @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Cascade)
-  speaker      Speaker       @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
+  eventId                     String        @db.Uuid
+  submissionId                String        @db.Uuid
+  speakerId                   String        @db.Uuid
+  sortOrder                   Int
+  slidesObjectKey             String?
+  supportingDocumentObjectKey String?
+  submission                  CfpSubmission @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Cascade)
+  speaker                     Speaker       @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
 
   @@id([submissionId, speakerId])
   @@unique([submissionId, sortOrder])

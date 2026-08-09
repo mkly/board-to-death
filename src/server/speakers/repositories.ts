@@ -14,6 +14,7 @@ export interface SpeakerProfileInput {
   readonly websiteUrl?: string | null;
   readonly accessibilityNeeds?: string | null;
   readonly photoObjectKey?: string | null;
+  readonly agreementObjectKey?: string | null;
   readonly consentToPublishProfile?: boolean;
   readonly consentToReceiveEmail?: boolean;
   readonly consentedAt?: Date | null;
@@ -44,6 +45,13 @@ export interface PersistedSpeaker {
 export interface PersistedSubmissionParticipant {
   readonly sortOrder: number;
   readonly speaker: PersistedSpeaker;
+  readonly slidesObjectKey: string | null;
+  readonly supportingDocumentObjectKey: string | null;
+}
+
+export interface UpdateSubmissionParticipantFilesInput {
+  readonly slidesObjectKey?: string | null;
+  readonly supportingDocumentObjectKey?: string | null;
 }
 
 interface ValidatedProfile {
@@ -59,6 +67,7 @@ interface ValidatedProfile {
   readonly websiteUrl: string | null;
   readonly accessibilityNeeds: string | null;
   readonly photoObjectKey: string | null;
+  readonly agreementObjectKey: string | null;
   readonly consentToPublishProfile: boolean;
   readonly consentToReceiveEmail: boolean;
   readonly consentedAt: Date | null;
@@ -129,6 +138,7 @@ function validateProfile(input: SpeakerProfileInput): ValidatedProfile {
     websiteUrl: normalizeUrl(input.websiteUrl),
     accessibilityNeeds: optionalText(input.accessibilityNeeds),
     photoObjectKey: optionalText(input.photoObjectKey),
+    agreementObjectKey: optionalText(input.agreementObjectKey),
     consentToPublishProfile,
     consentToReceiveEmail,
     consentedAt,
@@ -171,6 +181,7 @@ function fromStored(stored: StoredSpeaker): PersistedSpeaker {
     websiteUrl: version.websiteUrl,
     accessibilityNeeds: version.accessibilityNeeds,
     photoObjectKey: version.photoObjectKey,
+    agreementObjectKey: version.agreementObjectKey,
     consentToPublishProfile: version.consentToPublishProfile,
     consentToReceiveEmail: version.consentToReceiveEmail,
     consentedAt: version.consentedAt,
@@ -202,6 +213,7 @@ function profileInput(profile: PersistedSpeakerProfile): SpeakerProfileInput {
     websiteUrl: profile.websiteUrl,
     accessibilityNeeds: profile.accessibilityNeeds,
     photoObjectKey: profile.photoObjectKey,
+    agreementObjectKey: profile.agreementObjectKey,
     consentToPublishProfile: profile.consentToPublishProfile,
     consentToReceiveEmail: profile.consentToReceiveEmail,
     consentedAt: profile.consentedAt,
@@ -327,7 +339,54 @@ export class SpeakerRepository {
       orderBy: { sortOrder: "asc" },
       include: { speaker: { include: speakerInclude } },
     });
-    return participants.map(({ sortOrder, speaker }) => ({ sortOrder, speaker: fromStored(speaker) }));
+    return participants.map(({ sortOrder, speaker, slidesObjectKey, supportingDocumentObjectKey }) => ({
+      sortOrder,
+      speaker: fromStored(speaker),
+      slidesObjectKey,
+      supportingDocumentObjectKey,
+    }));
+  }
+
+  async getSubmissionParticipant(
+    eventId: string,
+    submissionId: string,
+    speakerId: string,
+  ): Promise<PersistedSubmissionParticipant | null> {
+    const participant = await this.client.cfpSubmissionParticipant.findFirst({
+      where: { eventId, submissionId, speakerId },
+      include: { speaker: { include: speakerInclude } },
+    });
+    if (!participant) return null;
+    const { sortOrder, speaker, slidesObjectKey, supportingDocumentObjectKey } = participant;
+    return { sortOrder, speaker: fromStored(speaker), slidesObjectKey, supportingDocumentObjectKey };
+  }
+
+  // Targets a single row, unlike replaceSubmissionParticipants, so a reorder never discards file keys.
+  async updateSubmissionParticipantFiles(
+    eventId: string,
+    submissionId: string,
+    speakerId: string,
+    input: UpdateSubmissionParticipantFilesInput,
+  ): Promise<PersistedSubmissionParticipant> {
+    try {
+      const data: Prisma.CfpSubmissionParticipantUpdateManyMutationInput = {};
+      if ("slidesObjectKey" in input) data.slidesObjectKey = optionalText(input.slidesObjectKey);
+      if ("supportingDocumentObjectKey" in input) {
+        data.supportingDocumentObjectKey = optionalText(input.supportingDocumentObjectKey);
+      }
+      const updated = await this.client.cfpSubmissionParticipant.updateMany({
+        where: { eventId, submissionId, speakerId },
+        data,
+      });
+      if (updated.count === 0) {
+        throw new RepositoryError("not-found", "The event-owned submission participant was not found.");
+      }
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+    const participant = await this.getSubmissionParticipant(eventId, submissionId, speakerId);
+    if (!participant) throw new RepositoryError("not-found", "The event-owned submission participant was not found.");
+    return participant;
   }
 
   async delete(eventId: string, speakerId: string): Promise<void> {

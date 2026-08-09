@@ -23,6 +23,7 @@ const currentProfile = {
     websiteUrl: true,
     accessibilityNeeds: true,
     photoObjectKey: true,
+    agreementObjectKey: true,
     versionNumber: true,
   },
 };
@@ -201,6 +202,8 @@ export class SpeakerPortalRepository {
         participants: {
           orderBy: { sortOrder: "asc" },
           select: {
+            slidesObjectKey: true,
+            supportingDocumentObjectKey: true,
             speaker: {
               select: {
                 id: true,
@@ -232,10 +235,20 @@ export class SpeakerPortalRepository {
       updatedAt: submission.updatedAt,
       title: submission.formVersion.title,
       categories: submission.categories.map(({ category }) => category),
-      participants: submission.participants.flatMap(({ speaker }) => {
+      participants: submission.participants.flatMap(({ speaker, slidesObjectKey, supportingDocumentObjectKey }) => {
         const profile = speaker.profileVersions[0];
+        const isSelf = speaker.id === identity.speakerId;
         return profile
-          ? [{ id: speaker.id, displayName: displayName(profile), organization: profile.organization }]
+          ? [
+              {
+                id: speaker.id,
+                displayName: displayName(profile),
+                organization: profile.organization,
+                isSelf,
+                slidesObjectKey: isSelf ? slidesObjectKey : null,
+                supportingDocumentObjectKey: isSelf ? supportingDocumentObjectKey : null,
+              },
+            ]
           : [];
       }),
       answers: (revision?.answers ?? []).map((answer) => ({

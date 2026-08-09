@@ -7,7 +7,10 @@ import { z } from "zod";
 
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { validateFileUpload } from "@/server/speakers/file-policy";
+import type { UpdateSpeakerProfileInput } from "@/server/speakers/repositories";
 import { SpeakerRepository } from "@/server/speakers/repositories";
+import { createSpeakerFileService } from "@/server/speakers/speaker-file-storage";
 
 import { getPortalViewer, portalHref } from "../../_lib/portal-session";
 
@@ -98,4 +101,105 @@ export async function updateSpeakerProfile(
     }
     throw error;
   }
+}
+
+export type SpeakerProfileFilePurpose = "headshot" | "agreement";
+
+export interface SpeakerFileActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+function profileFileKey(
+  profile: { readonly photoObjectKey: string | null; readonly agreementObjectKey: string | null },
+  purpose: SpeakerProfileFilePurpose,
+): string | null {
+  return purpose === "headshot" ? profile.photoObjectKey : profile.agreementObjectKey;
+}
+
+function profileFileUpdate(purpose: SpeakerProfileFilePurpose, key: string | null): UpdateSpeakerProfileInput {
+  return purpose === "headshot" ? { photoObjectKey: key } : { agreementObjectKey: key };
+}
+
+export async function uploadSpeakerProfileFile(
+  eventSlug: string,
+  purpose: SpeakerProfileFilePurpose,
+  _previousState: SpeakerFileActionState,
+  formData: FormData,
+): Promise<SpeakerFileActionState> {
+  const viewer = await getPortalViewer(eventSlug);
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { status: "error", message: "Choose a file to upload." };
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const validation = validateFileUpload(purpose, file.type, bytes);
+  if (!validation.ok) {
+    return { status: "error", message: validation.message };
+  }
+
+  const repository = new SpeakerRepository(getDatabaseClient());
+  const speaker = await repository.get(viewer.eventId, viewer.speakerId);
+  if (!speaker) redirect(portalHref(eventSlug, "/sign-in"));
+  const currentKey = profileFileKey(speaker.profile, purpose);
+
+  const fileService = createSpeakerFileService();
+  const principal = { role: "speaker" as const, ...viewer };
+  const write = {
+    eventId: viewer.eventId,
+    speakerId: viewer.speakerId,
+    fileName: file.name,
+    contentType: file.type,
+    bytes,
+  };
+  const stored = currentKey ? await fileService.replace(currentKey, write, principal) : await fileService.write(write);
+  if (!stored.ok) {
+    return { status: "error", message: "The file could not be saved. Try again." };
+  }
+
+  try {
+    await repository.updateProfile(viewer.eventId, viewer.speakerId, profileFileUpdate(purpose, stored.value.key));
+  } catch (error) {
+    if (error instanceof RepositoryError) {
+      return { status: "error", message: error.message };
+    }
+    throw error;
+  }
+
+  revalidatePath(portalHref(eventSlug, "/profile"));
+  return { status: "success", message: purpose === "headshot" ? "Headshot updated." : "Agreement updated." };
+}
+
+export async function removeSpeakerProfileFile(
+  eventSlug: string,
+  purpose: SpeakerProfileFilePurpose,
+  _previousState: SpeakerFileActionState,
+  _formData: FormData,
+): Promise<SpeakerFileActionState> {
+  const viewer = await getPortalViewer(eventSlug);
+  const repository = new SpeakerRepository(getDatabaseClient());
+  const speaker = await repository.get(viewer.eventId, viewer.speakerId);
+  if (!speaker) redirect(portalHref(eventSlug, "/sign-in"));
+  const currentKey = profileFileKey(speaker.profile, purpose);
+  if (!currentKey) {
+    return { status: "error", message: "There is nothing to remove." };
+  }
+
+  const removed = await createSpeakerFileService().remove(currentKey, { role: "speaker", ...viewer });
+  if (!removed.ok) {
+    return { status: "error", message: "The file could not be removed. Try again." };
+  }
+
+  try {
+    await repository.updateProfile(viewer.eventId, viewer.speakerId, profileFileUpdate(purpose, null));
+  } catch (error) {
+    if (error instanceof RepositoryError) {
+      return { status: "error", message: error.message };
+    }
+    throw error;
+  }
+
+  revalidatePath(portalHref(eventSlug, "/profile"));
+  return { status: "success", message: purpose === "headshot" ? "Headshot removed." : "Agreement removed." };
 }
