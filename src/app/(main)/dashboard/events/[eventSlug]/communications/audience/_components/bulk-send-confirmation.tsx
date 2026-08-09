@@ -121,7 +121,12 @@ export function BulkSendConfirmation({
           )}
         </CardContent>
         <CardFooter>
-          {templates.length === 0 ? (
+          {state.status === "success" ? (
+            <Button type="button" variant="outline" disabled>
+              <MailCheck data-icon="inline-start" />
+              Recipients queued
+            </Button>
+          ) : templates.length === 0 ? (
             <Button asChild variant="outline">
               <Link href={`/dashboard/events/${encodeURIComponent(eventSlug)}/communications/templates`}>
                 Create an email template
