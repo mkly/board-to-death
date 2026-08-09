@@ -23,7 +23,7 @@ import type { EvaluationCriterionRecord, EvaluationRubricPlan } from "@/server/e
 import { addDefaultCriteria, createCriterion, moveCriterion, updateCriterion } from "../actions";
 
 interface EvaluationRubricWorkspaceProps {
-  readonly event: { readonly name: string; readonly slug: string };
+  readonly event: { readonly slug: string };
   readonly plans: readonly EvaluationRubricPlan[];
   readonly notice?: string;
   readonly error?: string;
@@ -208,9 +208,8 @@ export function EvaluationRubricWorkspace({ event, plans, notice, error }: Evalu
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <p className="text-muted-foreground text-sm">{event.name}</p>
         <div>
-          <h1 className="font-semibold text-2xl tracking-tight">Evaluation rubrics</h1>
+          <h2 className="font-semibold text-xl tracking-tight">Scoring rubrics</h2>
           <p className="text-muted-foreground text-sm">
             Configure version-safe scoring criteria, guidance, bounds, required state, and normalized weights.
           </p>
@@ -220,7 +219,7 @@ export function EvaluationRubricWorkspace({ event, plans, notice, error }: Evalu
       {notice ? (
         <Alert>
           <ClipboardCheck />
-          <AlertTitle>Rubric updated</AlertTitle>
+          <AlertTitle>Evaluation workspace updated</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}

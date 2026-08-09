@@ -136,6 +136,13 @@ enum EvaluationRoundStatus {
   PLANNED
   OPEN
   CLOSED
+  ARCHIVED
+}
+
+enum ReviewerVisibility {
+  IDENTIFIED
+  BLIND
+  ANONYMIZED
 }
 
 enum EvaluationReviewerStatus {
@@ -921,26 +928,42 @@ model EvaluationPlanVersion {
 }
 
 model EvaluationRound {
-  id            String                @id @default(uuid()) @db.Uuid
-  planVersionId String                @db.Uuid
-  key           String
-  title         String
-  description   String?
-  sortOrder     Int
-  status        EvaluationRoundStatus @default(PLANNED)
-  opensAt       DateTime?             @db.Timestamptz(3)
-  closesAt      DateTime?             @db.Timestamptz(3)
-  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime              @updatedAt @db.Timestamptz(3)
-  planVersion   EvaluationPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
-  criteria      EvaluationCriterion[]
-  assignments   EvaluationAssignment[]
-  decisions     EvaluationDecision[]
+  id                 String                      @id @default(uuid()) @db.Uuid
+  planVersionId      String                      @db.Uuid
+  key                String
+  title              String
+  description        String?
+  sortOrder          Int
+  status             EvaluationRoundStatus       @default(PLANNED)
+  reviewerVisibility ReviewerVisibility          @default(BLIND)
+  visibilitySnapshot ReviewerVisibility?
+  opensAt            DateTime?                   @db.Timestamptz(3)
+  closesAt           DateTime?                   @db.Timestamptz(3)
+  archivedAt         DateTime?                   @db.Timestamptz(3)
+  createdAt          DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime                    @updatedAt @db.Timestamptz(3)
+  planVersion        EvaluationPlanVersion       @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  criteria           EvaluationCriterion[]
+  assignments        EvaluationAssignment[]
+  decisions          EvaluationDecision[]
+  transitions        EvaluationRoundTransition[]
 
   @@unique([planVersionId, key])
   @@unique([planVersionId, sortOrder])
   @@index([planVersionId, status])
   @@map("evaluation_rounds")
+}
+
+model EvaluationRoundTransition {
+  id         String                @id @default(uuid()) @db.Uuid
+  roundId    String                @db.Uuid
+  fromStatus EvaluationRoundStatus?
+  toStatus   EvaluationRoundStatus
+  occurredAt DateTime              @default(now()) @db.Timestamptz(3)
+  round      EvaluationRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, occurredAt])
+  @@map("evaluation_round_transitions")
 }
 
 model EvaluationCriterion {
