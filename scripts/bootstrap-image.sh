@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 readonly REPO_ROOT="${SCRIPT_DIR}/.."
 readonly DEFINITION="${REPO_ROOT}/distrobuilder.yml"
+readonly APPLICATION_SMOKE="${SCRIPT_DIR}/smoke-incus-image.sh"
 
 BUILD_DIR=""
 SMOKE_INSTANCE=""
@@ -65,6 +66,10 @@ done
 
 if [[ ! -r "${DEFINITION}" ]]; then
   echo "Definition file not found: ${DEFINITION}" >&2
+  exit 1
+fi
+if [[ ! -x "${APPLICATION_SMOKE}" ]]; then
+  echo "Application smoke helper is not executable: ${APPLICATION_SMOKE}" >&2
   exit 1
 fi
 
@@ -220,6 +225,9 @@ fi
 
 incus delete --force "${SMOKE_INSTANCE}"
 SMOKE_INSTANCE=""
+
+echo "Smoke-testing application runtime, lifecycle, and persistent storage..."
+"${APPLICATION_SMOKE}" "${STAGING_ALIAS}"
 
 NEW_FINGERPRINT="$(
   incus image info "${STAGING_ALIAS}" |
