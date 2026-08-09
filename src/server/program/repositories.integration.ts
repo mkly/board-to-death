@@ -243,6 +243,37 @@ describe("speaker resource persistence", () => {
     await expectRepositoryError(resources.reorder(eventId, [first.id, second.id, otherPage.id]), "invalid-input");
   });
 
+  test("surfaces a revision saved on a published page as a pending version the admin list can publish", async () => {
+    const eventId = await createEvent("resource-pending-revision");
+    const page = await resources.create({
+      eventId,
+      key: "venue-map",
+      slug: "venue-map",
+      title: "Venue map",
+      bodyMarkdown: "Original directions",
+    });
+    await resources.publish(eventId, page.id, versionId(page), new Date("2027-04-01T08:00:00.000Z"));
+
+    const [published] = await resources.list(eventId);
+    assert.equal(published?.status, "published");
+    assert.equal(published?.pendingVersion, null);
+
+    const revised = await resources.revise(eventId, page.id, { title: "Venue map v2", bodyMarkdown: "New directions" });
+    const [withPending] = await resources.list(eventId);
+    assert.equal(withPending?.status, "published");
+    assert.equal(withPending?.version.bodyMarkdown, "Original directions");
+    assert.equal(withPending?.pendingVersion?.id, versionId(revised, 1));
+    assert.equal(withPending?.pendingVersion?.bodyMarkdown, "New directions");
+    assert.equal((await resources.findPublished(eventId, "venue-map"))?.version.bodyMarkdown, "Original directions");
+
+    await resources.publish(eventId, page.id, versionId(revised, 1), new Date("2027-04-01T09:00:00.000Z"));
+    const [republished] = await resources.list(eventId);
+    assert.equal(republished?.status, "published");
+    assert.equal(republished?.pendingVersion, null);
+    assert.equal(republished?.version.bodyMarkdown, "New directions");
+    assert.equal((await resources.findPublished(eventId, "venue-map"))?.version.bodyMarkdown, "New directions");
+  });
+
   test("finds a published resource by slug and excludes drafts, unpublished, archived, and other events", async () => {
     const eventId = await createEvent("resource-find-published");
     const otherEventId = await createEvent("resource-find-published-other");

@@ -32,7 +32,10 @@ export interface AdminSpeakerResourcePage {
   readonly id: string;
   readonly key: string;
   readonly status: SpeakerResourcePageStatus;
+  /** The version the public site serves: the active published one, or the latest when nothing is published. */
   readonly version: SpeakerResourcePageVersion;
+  /** A newer unpublished revision saved on top of the published version, when one exists. */
+  readonly pendingVersion: SpeakerResourcePageVersion | null;
 }
 
 function invalid(message: string): never {
@@ -291,7 +294,8 @@ export class SpeakerResourceRepository {
         let status: SpeakerResourcePageStatus = "draft";
         if (active) status = "published";
         else if (everPublished) status = "unpublished";
-        return [{ id: page.id, key: page.key, status, version: active ?? head }];
+        const pendingVersion = active && head.id !== active.id && head.publishedAt === null ? head : null;
+        return [{ id: page.id, key: page.key, status, version: active ?? head, pendingVersion }];
       })
       .sort((first, second) => first.version.sortOrder - second.version.sortOrder);
   }

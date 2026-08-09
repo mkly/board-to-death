@@ -52,6 +52,7 @@ interface ResourcePage {
   readonly id: string;
   readonly status: ResourceStatus;
   readonly version: ResourcePageVersion;
+  readonly pendingVersion: ResourcePageVersion | null;
 }
 
 interface ResourcePageWorkspaceProps {
@@ -69,13 +70,25 @@ interface EditableFields {
 const EMPTY_FIELDS: EditableFields = { slug: "", title: "", summary: "", bodyMarkdown: "" };
 const INITIAL_STATE: ResourcePageMutationState = { status: "idle" };
 
+function editableVersion(page: ResourcePage): ResourcePageVersion {
+  return page.pendingVersion ?? page.version;
+}
+
+/** The version a publish would activate: a pending revision, or the current one while it is still a draft. */
+function publishableVersion(page: ResourcePage | null): ResourcePageVersion | null {
+  if (!page) return null;
+  if (page.pendingVersion) return page.pendingVersion;
+  return page.version.publishedAt === null && page.version.unpublishedAt === null ? page.version : null;
+}
+
 function toFields(page: ResourcePage | null): EditableFields {
   if (!page) return EMPTY_FIELDS;
+  const version = editableVersion(page);
   return {
-    slug: page.version.slug,
-    title: page.version.title,
-    summary: page.version.summary ?? "",
-    bodyMarkdown: page.version.bodyMarkdown,
+    slug: version.slug,
+    title: version.title,
+    summary: version.summary ?? "",
+    bodyMarkdown: version.bodyMarkdown,
   };
 }
 
@@ -93,7 +106,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(() => pages[0]?.id ?? null);
   const selected = pages.find((page) => page.id === selectedId) ?? null;
-  const canPublish = selected ? selected.version.publishedAt === null && selected.version.unpublishedAt === null : false;
+  const publishable = publishableVersion(selected);
 
   const [fields, setFields] = useState<EditableFields>(() => toFields(selected));
   useEffect(() => {
@@ -123,9 +136,9 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
   };
 
   const publish = () => {
-    if (!selected) return;
+    if (!selected || !publishable) return;
     startMutation(async () => {
-      const result = await publishResourcePage(event.slug, selected.id, selected.version.id);
+      const result = await publishResourcePage(event.slug, selected.id, publishable.id);
       setFeedback(result.message ?? "");
       if (result.status === "success") router.refresh();
     });
@@ -236,11 +249,12 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
             <input type="hidden" name="pageId" value={selected?.id ?? ""} />
             <Card>
               <CardHeader>
-                <CardTitle>{selected ? `Edit ${selected.version.title}` : "Create resource"}</CardTitle>
+                <CardTitle>{selected ? `Edit ${editableVersion(selected).title}` : "Create resource"}</CardTitle>
                 <CardDescription>Content is stored as Markdown and sanitized wherever it renders.</CardDescription>
                 {selected ? (
-                  <CardAction>
+                  <CardAction className="flex flex-wrap items-center gap-2">
                     <Badge variant={statusVariant(selected.status)}>{selected.status}</Badge>
+                    {selected.pendingVersion ? <Badge variant="outline">unpublished changes</Badge> : null}
                   </CardAction>
                 ) : null}
               </CardHeader>
@@ -322,7 +336,11 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
               {selected && selected.status === "published" ? (
                 <CardAction>
                   <Button variant="outline" size="sm" asChild>
-                    <a href={`/events/${event.slug}/resources/${fields.slug}`} target="_blank" rel="noreferrer">
+                    <a
+                      href={`/events/${event.slug}/resources/${selected.version.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <ExternalLink data-icon="inline-end" />
                       View published
                     </a>
@@ -349,12 +367,12 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                     Unpublish
                   </Button>
                 )}
-                {selected.status !== "published" && canPublish && (
+                {publishable && (
                   <Button type="button" disabled={mutationPending} onClick={publish}>
-                    Publish
+                    {selected.status === "published" ? "Publish update" : "Publish"}
                   </Button>
                 )}
-                {selected.status !== "published" && !canPublish && (
+                {selected.status !== "published" && !publishable && (
                   <p className="text-muted-foreground text-sm">Save changes to create a new draft before publishing.</p>
                 )}
                 <AlertDialog>

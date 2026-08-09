@@ -91,6 +91,26 @@ test("administers speaker resource lifecycle, ordering, sanitization, and event 
   expect(await page.evaluate(() => (window as unknown as { __xss?: boolean }).__xss)).toBeUndefined();
 
   await page.goto(`/dashboard/events/${eventSlug}/publishing`);
+  await page.getByRole("button", { name: /^Travel and lodging/ }).click();
+  await page.getByLabel("Content").fill("## Before you travel\n\nBook your hotel by **August 15**.");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Resource revision saved.")).toBeVisible();
+  await expect(page.getByText("unpublished changes")).toBeVisible();
+  await expect(page.getByLabel("Content")).toHaveValue(/August 15/);
+
+  await page.goto(`/events/${eventSlug}/resources/travel-and-lodging`);
+  await expect(page.locator("strong", { hasText: "September 1" })).toBeVisible();
+
+  await page.goto(`/dashboard/events/${eventSlug}/publishing`);
+  await page.getByRole("button", { name: /^Travel and lodging/ }).click();
+  await page.getByRole("button", { name: "Publish update" }).click();
+  await expect(page.getByText("Resource published.")).toBeVisible();
+  await expect(page.getByText("unpublished changes")).toBeHidden();
+
+  await page.goto(`/events/${eventSlug}/resources/travel-and-lodging`);
+  await expect(page.locator("strong", { hasText: "August 15" })).toBeVisible();
+
+  await page.goto(`/dashboard/events/${eventSlug}/publishing`);
   await page.getByRole("button", { name: "New resource" }).click();
   await page.getByLabel("Title").fill("Speaker slides");
   await page.getByLabel("URL slug").fill("speaker-slides");
