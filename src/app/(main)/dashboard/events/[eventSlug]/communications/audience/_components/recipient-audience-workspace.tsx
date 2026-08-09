@@ -9,7 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CfpSubmissionStatus, SpeakerTaskAssignmentStatus } from "@/generated/prisma/client";
+import {
+  CfpSubmissionStatus,
+  ProgramSessionParticipantRole,
+  SpeakerTaskAssignmentStatus,
+} from "@/generated/prisma/client";
 import type {
   RecipientAudienceOptions,
   RecipientAudiencePreview,
@@ -40,6 +44,12 @@ const ONBOARDING_OPTIONS = [
   [SpeakerTaskAssignmentStatus.REVISION_REQUESTED, "Revision requested"],
   [SpeakerTaskAssignmentStatus.APPROVED, "Approved"],
   [SpeakerTaskAssignmentStatus.WITHDRAWN, "Withdrawn"],
+] as const;
+
+const PARTICIPANT_ROLE_OPTIONS = [
+  [ProgramSessionParticipantRole.SPEAKER, "Speakers"],
+  [ProgramSessionParticipantRole.MODERATOR, "Moderators"],
+  [ProgramSessionParticipantRole.CHAIRPERSON, "Chairpersons"],
 ] as const;
 
 function checked(values: readonly string[] | undefined, value: string): boolean {
@@ -123,7 +133,7 @@ export function RecipientAudienceWorkspace({
 
               <FieldSet>
                 <FieldLegend variant="label">Sessions</FieldLegend>
-                <FieldDescription>Uses only each active session&apos;s current speaker list.</FieldDescription>
+                <FieldDescription>Uses only each active session&apos;s current participant list.</FieldDescription>
                 <FieldGroup data-slot="checkbox-group" className="grid gap-3 sm:grid-cols-2">
                   {options.sessions.map((session) => (
                     <Field key={session.id} orientation="horizontal">
@@ -135,6 +145,26 @@ export function RecipientAudienceWorkspace({
                       />
                       <FieldLabel htmlFor={`session-${session.id}`} className="font-normal">
                         {session.title}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </FieldGroup>
+              </FieldSet>
+
+              <FieldSet>
+                <FieldLegend variant="label">Program role</FieldLegend>
+                <FieldDescription>Match participants carrying any selected role in a current session.</FieldDescription>
+                <FieldGroup data-slot="checkbox-group" className="grid gap-3 sm:grid-cols-2">
+                  {PARTICIPANT_ROLE_OPTIONS.map(([role, label]) => (
+                    <Field key={role} orientation="horizontal">
+                      <Checkbox
+                        id={`participant-role-${role}`}
+                        name="participantRole"
+                        value={role}
+                        defaultChecked={checked(selection.participantRoles, role)}
+                      />
+                      <FieldLabel htmlFor={`participant-role-${role}`} className="font-normal">
+                        {label}
                       </FieldLabel>
                     </Field>
                   ))}

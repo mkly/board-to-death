@@ -212,6 +212,12 @@ enum ProgramSessionKind {
   PROMOTED
 }
 
+enum ProgramSessionParticipantRole {
+  SPEAKER
+  MODERATOR
+  CHAIRPERSON
+}
+
 enum IntegrationProvider {
   ACCELEVENTS
 }
@@ -1033,16 +1039,18 @@ model ProgramSessionVersion {
 }
 
 model ProgramSessionParticipant {
-  eventId          String                @db.Uuid
-  sessionVersionId String                @db.Uuid
-  speakerId        String                @db.Uuid
+  eventId          String                        @db.Uuid
+  sessionVersionId String                        @db.Uuid
+  speakerId        String                        @db.Uuid
+  role             ProgramSessionParticipantRole @default(SPEAKER)
   sortOrder        Int
-  sessionVersion   ProgramSessionVersion @relation(fields: [eventId, sessionVersionId], references: [eventId, id], onDelete: Cascade)
-  speaker          Speaker               @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
+  sessionVersion   ProgramSessionVersion         @relation(fields: [eventId, sessionVersionId], references: [eventId, id], onDelete: Cascade)
+  speaker          Speaker                       @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
 
   @@id([sessionVersionId, speakerId])
   @@unique([sessionVersionId, sortOrder])
   @@index([eventId, speakerId])
+  @@index([eventId, role])
   @@map("program_session_participants")
 }
 

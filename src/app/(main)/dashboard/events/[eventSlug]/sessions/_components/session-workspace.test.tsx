@@ -2,6 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { ProgramSessionParticipantRole } from "@/generated/prisma/client";
+
 const actionMocks = vi.hoisted(() => ({
   archiveProgramSession: vi.fn(),
   saveProgramSession: vi.fn(),
@@ -35,8 +37,13 @@ const sessions: readonly SessionWorkspaceSession[] = [
     durationMinutes: 60,
     trackId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     trackName: "Game design",
-    speakerIds: ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
-    speakerNames: ["Alex Rivera"],
+    participants: [
+      {
+        speakerId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        speakerName: "Alex Rivera",
+        role: ProgramSessionParticipantRole.MODERATOR,
+      },
+    ],
     versionNumber: 2,
   },
   {
@@ -48,8 +55,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
     durationMinutes: 45,
     trackId: null,
     trackName: null,
-    speakerIds: [],
-    speakerNames: [],
+    participants: [],
     versionNumber: 1,
   },
   {
@@ -61,8 +67,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
     durationMinutes: 30,
     trackId: null,
     trackName: null,
-    speakerIds: [],
-    speakerNames: [],
+    participants: [],
     versionNumber: 3,
   },
 ];
@@ -101,6 +106,13 @@ describe("SessionWorkspace", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Archived" }));
     expect(within(table).getByText("Retired workshop")).toBeTruthy();
     expect(within(table).queryByText("Opening keynote")).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: "All active" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter sessions by participant role" }), {
+      target: { value: ProgramSessionParticipantRole.MODERATOR },
+    });
+    expect(within(table).getByText("Designing cooperative tension")).toBeTruthy();
+    expect(within(table).queryByText("Opening keynote")).toBeNull();
   });
 
   test("inspects and edits persisted session details", async () => {
@@ -110,7 +122,7 @@ describe("SessionWorkspace", () => {
     expect(screen.getAllByText("Designing cooperative tension")).toHaveLength(2);
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Designing cooperative tension");
     expect((screen.getByLabelText("Duration (minutes)") as HTMLInputElement).value).toBe("60");
-    expect(screen.getByRole("checkbox", { name: /Alex Rivera/ }).getAttribute("data-state")).toBe("checked");
+    expect(screen.getByRole("combobox", { name: /Alex Rivera/ }).textContent).toContain("Moderator");
 
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Cooperative tension lab" } });
     await act(async () => {
@@ -121,6 +133,7 @@ describe("SessionWorkspace", () => {
     expect(formData.get("eventSlug")).toBe("board-to-death-2027");
     expect(formData.get("sessionId")).toBe("11111111-1111-4111-8111-111111111111");
     expect(formData.get("title")).toBe("Cooperative tension lab");
+    expect(formData.get("participantRole:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")).toBe("MODERATOR");
   });
 
   test("creates a manual session and renders field-level server validation", async () => {

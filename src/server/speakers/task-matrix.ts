@@ -1,4 +1,9 @@
-import type { Prisma, PrismaClient, SpeakerTaskAssignmentStatus } from "../../generated/prisma/client.ts";
+import {
+  type Prisma,
+  type PrismaClient,
+  ProgramSessionParticipantRole,
+  type SpeakerTaskAssignmentStatus,
+} from "../../generated/prisma/client.ts";
 
 export const speakerTaskMatrixStates = ["outstanding", "overdue", "complete", "withdrawn", "not-applicable"] as const;
 
@@ -9,6 +14,7 @@ export interface SpeakerTaskMatrixFilters {
   readonly state?: SpeakerTaskMatrixState;
   readonly taskId?: string;
   readonly speakerId?: string;
+  readonly participantRole?: ProgramSessionParticipantRole;
   readonly dueFrom?: string;
   readonly dueTo?: string;
 }
@@ -18,6 +24,7 @@ export interface SpeakerTaskMatrixRow {
   readonly speakerId: string;
   readonly speakerName: string;
   readonly speakerEmail: string;
+  readonly participantRoles: readonly ProgramSessionParticipantRole[];
   readonly taskId: string;
   readonly taskTitle: string;
   readonly assignmentId: string | null;
@@ -47,6 +54,11 @@ export function parseSpeakerTaskMatrixFilters(searchParams: URLSearchParams): Sp
       : undefined,
     taskId: searchParams.get("task") || undefined,
     speakerId: searchParams.get("speaker") || undefined,
+    participantRole: Object.values(ProgramSessionParticipantRole).includes(
+      searchParams.get("participantRole") as ProgramSessionParticipantRole,
+    )
+      ? (searchParams.get("participantRole") as ProgramSessionParticipantRole)
+      : undefined,
     dueFrom: date("dueFrom"),
     dueTo: date("dueTo"),
   };
@@ -59,7 +71,21 @@ const speakerInclude = {
     select: { submission: { select: { status: true } } },
   },
   programSessionParticipants: {
-    select: { sessionVersion: { select: { session: { select: { kind: true, archivedAt: true } } } } },
+    select: {
+      role: true,
+      sessionVersion: {
+        select: {
+          id: true,
+          session: {
+            select: {
+              kind: true,
+              archivedAt: true,
+              versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { id: true } },
+            },
+          },
+        },
+      },
+    },
   },
 } as const satisfies Prisma.SpeakerInclude;
 
@@ -114,8 +140,26 @@ function isApplicable(
   if (sessionKinds.length === 0) return true;
   return speaker.programSessionParticipants.some(({ sessionVersion }) => {
     const session = sessionVersion.session;
-    return session.archivedAt === null && sessionKinds.includes(session.kind);
+    return (
+      session.archivedAt === null &&
+      session.versions[0]?.id === sessionVersion.id &&
+      sessionKinds.includes(session.kind)
+    );
   });
+}
+
+function currentParticipantRoles(
+  speaker: Prisma.SpeakerGetPayload<{ include: typeof speakerInclude }>,
+): readonly ProgramSessionParticipantRole[] {
+  return [
+    ...new Set(
+      speaker.programSessionParticipants.flatMap(({ role, sessionVersion }) =>
+        sessionVersion.session.archivedAt === null && sessionVersion.session.versions[0]?.id === sessionVersion.id
+          ? [role]
+          : [],
+      ),
+    ),
+  ].toSorted();
 }
 
 function matchesDueDate(row: SpeakerTaskMatrixRow, filters: SpeakerTaskMatrixFilters, timezone: string): boolean {
@@ -173,6 +217,7 @@ export class SpeakerTaskMatrixRepository {
     for (const speaker of speakers) {
       const profile = speaker.profileVersions[0];
       if (!profile) continue;
+      const participantRoles = currentParticipantRoles(speaker);
       for (const task of tasks) {
         const key = `${speaker.id}:${task.id}`;
         const assignment = latestAssignments.get(key);
@@ -184,6 +229,7 @@ export class SpeakerTaskMatrixRepository {
           speakerId: speaker.id,
           speakerName: speakerName(profile),
           speakerEmail: profile.email,
+          participantRoles,
           taskId: task.id,
           taskTitle: task.title,
           assignmentId: assignment?.id ?? null,
@@ -204,6 +250,7 @@ export class SpeakerTaskMatrixRepository {
         (!filters.state || row.state === filters.state) &&
         (!filters.taskId || row.taskId === filters.taskId) &&
         (!filters.speakerId || row.speakerId === filters.speakerId) &&
+        (!filters.participantRole || row.participantRoles.includes(filters.participantRole)) &&
         matchesDueDate(row, filters, timezone),
     );
     const counts = Object.fromEntries(
@@ -228,11 +275,23 @@ function safeCsvCell(value: string): string {
 
 export function createSpeakerTaskMatrixCsv(rows: readonly SpeakerTaskMatrixRow[], timezone: string): Uint8Array {
   const table = [
-    ["speakerId", "speaker", "email", "taskId", "task", "state", "assignmentStatus", "dueDate", "completedAt"],
+    [
+      "speakerId",
+      "speaker",
+      "email",
+      "participantRoles",
+      "taskId",
+      "task",
+      "state",
+      "assignmentStatus",
+      "dueDate",
+      "completedAt",
+    ],
     ...rows.map((row) => [
       row.speakerId,
       row.speakerName,
       row.speakerEmail,
+      row.participantRoles.join("|"),
       row.taskId,
       row.taskTitle,
       row.state,

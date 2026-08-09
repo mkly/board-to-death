@@ -1,7 +1,14 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { CfpSubmissionKind, EventType, PrismaClient, ProgramSessionKind } from "../../generated/prisma/client.ts";
+import {
+  CfpSubmissionKind,
+  EventType,
+  PrismaClient,
+  ProgramSessionKind,
+  ProgramSessionParticipantRole,
+} from "../../generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
+import { validateAgendaConflicts } from "../agenda/conflicts.ts";
 import { CfpFormRepository } from "../cfp/repositories.ts";
 import { CfpSubmissionRepository } from "../cfp/submissions.ts";
 import { EventRepository, RepositoryError, TrackRepository } from "../events/repositories.ts";
@@ -74,7 +81,7 @@ describe("program session persistence", () => {
     await client.$disconnect();
   });
 
-  test("creates manual and guaranteed sessions with immutable versions and ordered speakers", async () => {
+  test("creates role-aware participants with immutable versions and keeps legacy speakers compatible", async () => {
     const eventId = await createEvent("versioned-sessions");
     const track = await tracks.create({ eventId, name: "Design", color: "blue" });
     const primary = await createSpeaker(eventId, "primary@example.test", "Primary");
@@ -86,35 +93,83 @@ describe("program session persistence", () => {
       description: "Original description",
       durationMinutes: 45,
       trackId: track.id,
-      speakerIds: [coSpeaker.id, primary.id],
+      participants: [
+        { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.MODERATOR },
+        { speakerId: primary.id, role: ProgramSessionParticipantRole.SPEAKER },
+      ],
     });
     assert.equal(manual.kind, ProgramSessionKind.MANUAL);
     assert.deepEqual(manual.version.speakerIds, [coSpeaker.id, primary.id]);
+    assert.deepEqual(manual.version.participants, [
+      { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.MODERATOR },
+      { speakerId: primary.id, role: ProgramSessionParticipantRole.SPEAKER },
+    ]);
+
+    const overlapping = await sessions.createManual({
+      eventId,
+      title: "Moderated at the same time",
+      durationMinutes: 45,
+      participants: [{ speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.MODERATOR }],
+    });
+    const conflicts = validateAgendaConflicts(
+      {
+        startsAt: new Date("2027-03-13T17:00:00.000Z"),
+        endsAt: new Date("2027-03-15T00:00:00.000Z"),
+        timezone: "America/Los_Angeles",
+      },
+      [
+        {
+          id: manual.id,
+          startsAt: new Date("2027-03-13T18:00:00.000Z"),
+          endsAt: new Date("2027-03-13T18:45:00.000Z"),
+          speakerIds: manual.version.speakerIds,
+        },
+        {
+          id: overlapping.id,
+          startsAt: new Date("2027-03-13T18:15:00.000Z"),
+          endsAt: new Date("2027-03-13T19:00:00.000Z"),
+          speakerIds: overlapping.version.speakerIds,
+        },
+      ],
+    );
+    assert.equal(
+      conflicts.some(({ type, resourceId }) => type === "speaker" && resourceId === coSpeaker.id),
+      true,
+    );
 
     const edited = await sessions.update(eventId, manual.id, {
       title: "Designing Better Together",
       durationMinutes: 60,
-      speakerIds: [primary.id, coSpeaker.id],
+      participants: [
+        { speakerId: primary.id, role: ProgramSessionParticipantRole.CHAIRPERSON },
+        { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.SPEAKER },
+      ],
     });
     assert.deepEqual(
-      edited.versions.map(({ versionNumber, title, durationMinutes, speakerIds }) => ({
+      edited.versions.map(({ versionNumber, title, durationMinutes, participants }) => ({
         versionNumber,
         title,
         durationMinutes,
-        speakerIds,
+        participants,
       })),
       [
         {
           versionNumber: 1,
           title: "Designing Together",
           durationMinutes: 45,
-          speakerIds: [coSpeaker.id, primary.id],
+          participants: [
+            { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.MODERATOR },
+            { speakerId: primary.id, role: ProgramSessionParticipantRole.SPEAKER },
+          ],
         },
         {
           versionNumber: 2,
           title: "Designing Better Together",
           durationMinutes: 60,
-          speakerIds: [primary.id, coSpeaker.id],
+          participants: [
+            { speakerId: primary.id, role: ProgramSessionParticipantRole.CHAIRPERSON },
+            { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.SPEAKER },
+          ],
         },
       ],
     );
@@ -127,6 +182,9 @@ describe("program session persistence", () => {
     });
     assert.equal(guaranteed.kind, ProgramSessionKind.GUARANTEED);
     assert.equal(guaranteed.sourceSubmissionId, null);
+    assert.deepEqual(guaranteed.version.participants, [
+      { speakerId: primary.id, role: ProgramSessionParticipantRole.SPEAKER },
+    ]);
   });
 
   test("links one promoted session to its source while allowing independent later edits", async () => {

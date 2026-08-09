@@ -47,6 +47,9 @@ function SelectionInputs({ selection }: { readonly selection: RecipientAudienceS
       {selection.sessionIds?.map((value) => (
         <input key={`session-${value}`} type="hidden" name="session" value={value} />
       ))}
+      {selection.participantRoles?.map((value) => (
+        <input key={`participant-role-${value}`} type="hidden" name="participantRole" value={value} />
+      ))}
       {selection.categoryIds?.map((value) => (
         <input key={`category-${value}`} type="hidden" name="category" value={value} />
       ))}
