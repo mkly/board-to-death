@@ -14,6 +14,7 @@ import { getDatabaseClient } from "@/server/database/client";
 import { getDashboardShellData } from "../../../../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../../../../_lib/dashboard-shell";
 import { CfpPolicySettings } from "./_components/cfp-policy-settings";
+import { CfpPublicationControls } from "./_components/cfp-publication-controls";
 import { CfpSetupWorkspace } from "./_components/cfp-setup-workspace";
 
 function localDateTime(value: Date, timezone: string): string {
@@ -107,6 +108,14 @@ export default async function CfpFormSetupPage({
           Each save creates a new draft version.
         </p>
       </header>
+      <CfpPublicationControls
+        definition={form.definition}
+        eventName={event.name}
+        eventSlug={event.slug}
+        formId={form.formId}
+        policy={policy ? { publicId: policy.publicId, status: policy.status } : null}
+        versionNumber={form.versionNumber}
+      />
       <CfpSetupWorkspace
         administrators={administrators}
         canManageAdministrators={canManageAdministrators}

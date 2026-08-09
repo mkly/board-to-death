@@ -40,9 +40,6 @@ async function setup() {
       instructions: "Complete each required field before submitting your proposal.",
       termsContent: "",
       consentRequired: false,
-      minimumSpeakerCount: 1,
-      maximumSpeakerCount: 1,
-      requiredSpeakerFields: [],
       sections: [{ id: "proposal", kind: "questions", title: "Proposal", questions: [] }],
     },
   });
@@ -121,12 +118,27 @@ async function cleanup(eventSlug: string | undefined) {
   await client.user.deleteMany({ where: { email: adminEmail } });
 }
 
+async function publication(eventSlug: string | undefined) {
+  if (!eventSlug) throw new Error("Publication lookup requires an event slug.");
+  const policy = await client.cfpPolicy.findFirstOrThrow({
+    where: { event: { slug: eventSlug }, key: "main-cfp" },
+    select: {
+      publicId: true,
+      status: true,
+      publishedFormVersion: { select: { title: true, versionNumber: true } },
+    },
+  });
+  console.log(JSON.stringify(policy));
+}
+
 try {
   await client.$connect();
   if (mode === "setup") {
     await setup();
   } else if (mode === "cleanup") {
     await cleanup(process.argv[3]);
+  } else if (mode === "publication") {
+    await publication(process.argv[3]);
   } else {
     throw new Error(`Unknown CFP browser fixture mode: ${mode ?? "(missing)"}`);
   }

@@ -20,6 +20,11 @@ export interface DuplicatedCfpForm extends PersistedCfpFormDefinition {
   readonly publicId: string | null;
 }
 
+export interface PublishedCfpFormDefinition extends PersistedCfpFormDefinition {
+  readonly publicId: string;
+  readonly status: CfpPolicyStatus;
+}
+
 export interface CfpFormSummary {
   readonly id: string;
   readonly eventId: string;
@@ -368,5 +373,18 @@ export class CfpFormRepository {
       include: versionInclude,
     });
     return version ? fromStored(version) : null;
+  }
+
+  async getPublishedByPublicId(publicId: string): Promise<PublishedCfpFormDefinition | null> {
+    const policy = await this.client.cfpPolicy.findUnique({
+      where: { publicId },
+      select: {
+        publicId: true,
+        status: true,
+        publishedFormVersion: { include: versionInclude },
+      },
+    });
+    if (!policy?.publishedFormVersion) return null;
+    return { ...fromStored(policy.publishedFormVersion), publicId: policy.publicId, status: policy.status };
   }
 }

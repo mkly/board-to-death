@@ -316,6 +316,7 @@ model CfpFormVersion {
   steps           CfpFormStep[]
   submissions     CfpSubmission[]
   revisions       CfpSubmissionRevision[]
+  publishedByPolicies CfpPolicy[]
 
   @@unique([formId, versionNumber])
   @@index([formId])
@@ -363,15 +364,18 @@ model CfpPolicy {
   key         String
   publicId    String                @unique @default(uuid()) @db.Uuid
   status      CfpPolicyStatus       @default(DRAFT)
+  publishedFormVersionId String?     @db.Uuid
   createdAt   DateTime              @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime              @updatedAt @db.Timestamptz(3)
   event       Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
   versions    CfpPolicyVersion[]
   transitions CfpPolicyTransition[]
+  publishedFormVersion CfpFormVersion? @relation(fields: [publishedFormVersionId], references: [id], onDelete: SetNull)
 
   @@unique([eventId, key])
   @@unique([eventId, id])
   @@index([eventId, status])
+  @@index([publishedFormVersionId])
   @@map("cfp_policies")
 }
 

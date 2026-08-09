@@ -7,8 +7,8 @@ import { notFound } from "next/navigation";
 import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
-import { CfpAdminRole } from "@/generated/prisma/client";
-import type { CfpFormDefinition } from "@/lib/cfp";
+import { CfpAdminRole, CfpPolicyStatus } from "@/generated/prisma/client";
+import { type CfpFormDefinition, validateCfpDefinitionForPublication } from "@/lib/cfp";
 import { validateCfpMessageSettings } from "@/lib/cfp/messages";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
@@ -83,6 +83,12 @@ export interface SaveCfpSetupState {
 export interface SaveCfpAdministratorsState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
+}
+
+export interface UpdateCfpPublicationState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly errors?: readonly string[];
 }
 
 const administratorSettingsSchema = z
@@ -490,6 +496,64 @@ export async function saveCfpAdministrators(
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
     return { status: "success", message: "Administrator assignments and alert preferences saved." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+export async function updateCfpPublication(
+  eventSlug: string,
+  formId: string,
+  expectedVersionNumber: number,
+  _previousState: UpdateCfpPublicationState,
+  formData: FormData,
+): Promise<UpdateCfpPublicationState> {
+  const intent = value(formData, "intent");
+  if (intent !== "publish" && intent !== "close" && intent !== "reopen") {
+    return { status: "error", message: "Choose a valid publication action." };
+  }
+
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, formId);
+  if (!form) notFound();
+
+  if (intent === "publish") {
+    const issues = validateCfpDefinitionForPublication(form.definition);
+    if (issues.length > 0) {
+      return {
+        status: "error",
+        message: "Complete the saved form setup before publishing.",
+        errors: issues.map(({ message }) => message),
+      };
+    }
+  }
+
+  const policies = new CfpPolicyRepository(client);
+  try {
+    if (intent === "publish") {
+      await policies.publishByForm(event.id, formId, expectedVersionNumber, shell.user.email);
+    } else {
+      await policies.transitionByForm(
+        event.id,
+        formId,
+        intent === "close" ? CfpPolicyStatus.CLOSED : CfpPolicyStatus.PUBLISHED,
+        shell.user.email,
+      );
+    }
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
+    let message = "CFP form reopened.";
+    if (intent === "publish") message = "CFP form published.";
+    if (intent === "close") message = "CFP form closed.";
+    return {
+      status: "success",
+      message,
+    };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;
