@@ -286,6 +286,31 @@ describe("event overview metrics", () => {
     );
   });
 
+  test("counts a promoted session as unscheduled only while its source submission is still accepted", async () => {
+    const event = await createEvent("promoted-overview");
+    const accepted = await createSubmission(event.id, CfpSubmissionStatus.ACCEPTED, now, []);
+    const rejected = await createSubmission(event.id, CfpSubmissionStatus.REJECTED, now, []);
+    const acceptedSession = await sessions.promote({
+      eventId: event.id,
+      sourceSubmissionId: accepted.id,
+      title: "Promoted accepted talk",
+      durationMinutes: 30,
+    });
+    await sessions.promote({
+      eventId: event.id,
+      sourceSubmissionId: rejected.id,
+      title: "Promoted rejected talk",
+      durationMinutes: 30,
+    });
+
+    const metrics = await repository.get(event.id, event.timezone);
+
+    assert.deepEqual(
+      metrics.sessions.unscheduled.map(({ id }) => id),
+      [acceptedSession.id],
+    );
+  });
+
   test("labels speaker task overdue state using the event's own time zone", async () => {
     const event = await createEvent("timezone-overview", "America/Los_Angeles");
     const speaker = await speakers.create({

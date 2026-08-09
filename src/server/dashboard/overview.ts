@@ -135,7 +135,21 @@ export class EventOverviewRepository {
         },
       }),
       this.client.programSession.findMany({
-        where: { eventId, archivedAt: null, agendaPlacement: null },
+        where: {
+          eventId,
+          archivedAt: null,
+          agendaPlacement: null,
+          // Sessions promoted from a submission only need a slot while that submission is still
+          // accepted; manually created sessions have no submission to accept and always count.
+          OR: [
+            { sourceSubmissionId: null },
+            {
+              sourceSubmission: {
+                status: { in: [CfpSubmissionStatus.ACCEPTED, CfpSubmissionStatus.CONFIRMED] },
+              },
+            },
+          ],
+        },
         select: {
           id: true,
           versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { title: true } },

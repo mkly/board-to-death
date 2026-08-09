@@ -38,7 +38,14 @@ const statusVariants: Readonly<Record<CfpSubmissionStatus, BadgeVariant>> = {
   CONFIRMED: "secondary",
 };
 
-const submittedTimeFormatter = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
+function submittedTimeFormatter(timezone: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+    timeZoneName: "short",
+  });
+}
 
 function MetricCard({
   label,
@@ -112,6 +119,7 @@ export function OverviewDashboard({ event, metrics }: OverviewDashboardProps) {
   const speakersHref = dashboardEventHref(event.slug, "speakers");
   const evaluationsHref = `${dashboardEventHref(event.slug, "evaluations")}/assignments`;
   const sessionsHref = dashboardEventHref(event.slug, "sessions");
+  const submittedAtFormatter = submittedTimeFormatter(event.timezone);
 
   const evaluationProgress =
     metrics.evaluations.totalAssignments === 0
@@ -130,7 +138,7 @@ export function OverviewDashboard({ event, metrics }: OverviewDashboardProps) {
         <MetricCard
           label="Participants"
           value={metrics.participants.total}
-          description="Unique speakers across all submissions"
+          description="Unique speakers in this event"
           href={speakersHref}
         />
         <MetricCard
@@ -201,7 +209,7 @@ export function OverviewDashboard({ event, metrics }: OverviewDashboardProps) {
                       </Link>
                       <span className="text-muted-foreground text-xs">
                         {submission.applicantNames.join(", ") || "Not assigned"} ·{" "}
-                        {submittedTimeFormatter.format(submission.submittedAt)}
+                        {submittedAtFormatter.format(submission.submittedAt)}
                       </span>
                     </div>
                     <Badge variant={statusVariants[submission.status]}>{statusLabels[submission.status]}</Badge>
