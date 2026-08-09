@@ -58,10 +58,13 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
   function questionControl(question: CfpQuestion) {
     const name = `answer.${question.id}`;
     const error = state.errors?.[question.id]?.[0];
+    const describedBy = [question.description ? `${name}-description` : null, error ? `${name}-error` : null]
+      .filter((id) => id !== null)
+      .join(" ");
     const common = {
       id: name,
       name,
-      "aria-describedby": question.description ? `${name}-description` : undefined,
+      "aria-describedby": describedBy === "" ? undefined : describedBy,
       "aria-invalid": error ? true : undefined,
     } as const;
 
@@ -178,7 +181,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
                               {question.description}
                             </FieldDescription>
                           ) : null}
-                          <FieldError errors={errorsFor(state, question.id)} />
+                          <FieldError errors={errorsFor(state, question.id)} id={`answer.${question.id}-error`} />
                         </FieldContent>
                       </Field>
                     );
@@ -194,7 +197,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
                         </FieldDescription>
                       ) : null}
                       {questionControl(question)}
-                      <FieldError errors={errorsFor(state, question.id)} />
+                      <FieldError errors={errorsFor(state, question.id)} id={`answer.${question.id}-error`} />
                     </Field>
                   );
                 })}
@@ -208,10 +211,16 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
         <Card size="sm">
           <CardContent>
             <Field data-invalid={state.errors?.consent ? true : undefined} orientation="horizontal">
-              <Checkbox aria-invalid={state.errors?.consent ? true : undefined} id="consent" name="consent" required />
+              <Checkbox
+                aria-describedby={state.errors?.consent ? "consent-error" : undefined}
+                aria-invalid={state.errors?.consent ? true : undefined}
+                id="consent"
+                name="consent"
+                required
+              />
               <FieldLabel htmlFor="consent">I agree to the terms and consent to this submission.</FieldLabel>
             </Field>
-            <FieldError errors={errorsFor(state, "consent")} />
+            <FieldError errors={errorsFor(state, "consent")} id="consent-error" />
           </CardContent>
         </Card>
       ) : null}

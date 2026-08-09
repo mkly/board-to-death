@@ -1,5 +1,6 @@
 import { CfpAccessPolicy, CfpPolicyStatus, type PrismaClient } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
+import { cfpDefinitionInputFromStored } from "./definition.ts";
 
 export interface CfpPublicAccessEvent {
   readonly id: string;
@@ -133,39 +134,7 @@ export class CfpPublicAccessRepository {
     }
 
     const stored = policy.publishedFormVersion;
-    const parsed = parseCfpDefinition({
-      version: stored.schemaVersion,
-      title: stored.title,
-      ...(stored.description === null ? {} : { description: stored.description }),
-      ...(stored.submissionKind === null ? {} : { submissionKind: stored.submissionKind }),
-      ...(stored.accessPolicy === null ? {} : { accessPolicy: stored.accessPolicy }),
-      ...(stored.welcomeTitle === null ? {} : { welcomeTitle: stored.welcomeTitle }),
-      ...(stored.welcomeContent === null ? {} : { welcomeContent: stored.welcomeContent }),
-      ...(stored.instructions === null ? {} : { instructions: stored.instructions }),
-      ...(stored.termsContent === null ? {} : { termsContent: stored.termsContent }),
-      ...(stored.consentRequired === null ? {} : { consentRequired: stored.consentRequired }),
-      ...(stored.minimumSpeakerCount === null ? {} : { minimumSpeakerCount: stored.minimumSpeakerCount }),
-      ...(stored.maximumSpeakerCount === null ? {} : { maximumSpeakerCount: stored.maximumSpeakerCount }),
-      ...(stored.requiredSpeakerFields === null ? {} : { requiredSpeakerFields: stored.requiredSpeakerFields }),
-      ...((stored.customTypes as unknown[]).length === 0 ? {} : { customQuestionTypes: stored.customTypes }),
-      ...(stored.categories === null ? {} : { categories: stored.categories }),
-      sections: stored.steps.map((step) => ({
-        id: step.key,
-        kind: step.kind,
-        title: step.title,
-        ...(step.description === null ? {} : { description: step.description }),
-        questions: step.questions.map((question) => ({
-          id: question.key,
-          type: question.type,
-          label: question.label,
-          ...(question.description === null ? {} : { description: question.description }),
-          required: question.required,
-          ...(question.constraints === null ? {} : { constraints: question.constraints }),
-          ...(question.visibleWhen === null ? {} : { visibleWhen: question.visibleWhen }),
-        })),
-      })),
-      ...(stored.categoryRules === null ? {} : { categoryRouting: stored.categoryRules }),
-    });
+    const parsed = parseCfpDefinition(cfpDefinitionInputFromStored(stored));
     if (!parsed.ok) return { status: "unknown" };
 
     return {
