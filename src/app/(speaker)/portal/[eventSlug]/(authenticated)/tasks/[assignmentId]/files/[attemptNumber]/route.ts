@@ -4,7 +4,7 @@ import { getDatabaseClient } from "@/server/database/client";
 import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
-import { getPortalViewer } from "../../../../../_lib/portal-session";
+import { requirePortalContent } from "../../../../../_lib/portal-session";
 
 interface TaskFileRouteContext {
   readonly params: Promise<{
@@ -26,7 +26,8 @@ export async function GET(_request: Request, context: TaskFileRouteContext): Pro
   const attemptNumber = Number(inputAttemptNumber);
   if (!Number.isSafeInteger(attemptNumber) || attemptNumber < 1) return notFound();
 
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer, portal } = await requirePortalContent(eventSlug, "tasks");
+  if (!portal.contentVisibility.files) return new Response("Not found", { status: 404 });
   const task = await new SpeakerPortalRepository(getDatabaseClient()).getTask(viewer, assignmentId);
   const response = objectValue(
     task?.submissions.find((submission) => submission.attemptNumber === attemptNumber)?.response ?? null,

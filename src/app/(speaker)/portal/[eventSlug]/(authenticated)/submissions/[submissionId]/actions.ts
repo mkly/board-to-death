@@ -9,7 +9,7 @@ import type { UpdateSubmissionParticipantFilesInput } from "@/server/speakers/re
 import { SpeakerRepository } from "@/server/speakers/repositories";
 import { createSpeakerFileService } from "@/server/speakers/speaker-file-storage";
 
-import { getPortalViewer, portalHref } from "../../../_lib/portal-session";
+import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 
 export type SubmissionFilePurpose = "slides" | "supportingDocument";
 
@@ -39,7 +39,7 @@ export async function uploadSubmissionFile(
   _previousState: SubmissionFileActionState,
   formData: FormData,
 ): Promise<SubmissionFileActionState> {
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "files");
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { status: "error", message: "Choose a file to upload." };
@@ -97,7 +97,7 @@ export async function removeSubmissionFile(
   _previousState: SubmissionFileActionState,
   _formData: FormData,
 ): Promise<SubmissionFileActionState> {
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "files");
   const repository = new SpeakerRepository(getDatabaseClient());
   const participant = await repository.getSubmissionParticipant(viewer.eventId, submissionId, viewer.speakerId);
   if (!participant) {

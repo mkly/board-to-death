@@ -204,15 +204,15 @@ test("shows the populated speaker portal and keeps another speaker's submission 
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}`);
   await expect(page.getByRole("heading", { name: "Welcome, Ada" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Home");
-  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Submissions");
-  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Profile");
-  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Tasks");
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("My submissions");
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("My profile");
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Onboarding tasks");
   await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Resources");
   await expect(page.getByText("Designing asymmetric systems players can learn")).toBeVisible();
   await expect(page.getByText("Review your public profile")).toBeVisible();
   await expect(page.getByText("Speaker arrival guide")).toBeVisible();
 
-  await page.getByRole("link", { name: "Submissions" }).click();
+  await page.getByRole("link", { name: "My submissions" }).click();
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/submissions`);
   await expect(page.getByRole("heading", { name: "My submissions" })).toBeVisible();
   await page.goto(`/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}`);
@@ -232,6 +232,56 @@ test("renders an empty dashboard without exposing populated-speaker data", async
   await expect(page.getByText("No sessions scheduled")).toBeVisible();
   await expect(page.getByText("Speaker arrival guide")).toBeVisible();
   await expect(page.getByText("Ada Lovelace")).toHaveCount(0);
+});
+
+test("creates an audience portal, previews its match, and enforces participant visibility", async ({
+  context,
+  page,
+}) => {
+  const fixture = await preparePortal();
+  const eventResult = await database.query<{ id: string }>(`SELECT id FROM events WHERE slug = $1`, [
+    fixture.eventSlug,
+  ]);
+  const eventId = eventResult.rows[0]?.id;
+  if (!eventId) throw new Error("Expected the portal fixture event.");
+
+  await context.addCookies([
+    { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
+    { name: "board_to_death_active_event", value: eventId, url: baseURL },
+  ]);
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/portals`);
+  await expect(page.getByRole("heading", { name: "Participant portals" })).toBeVisible();
+
+  await page.getByLabel("Name").fill("VIP speakers");
+  await page.getByLabel("Slug").fill("vip-speakers");
+  await page.getByLabel("Welcome message").fill("Welcome to your private speaker workspace.");
+  await page.getByRole("tab", { name: "Audience" }).click();
+  await page.getByRole("checkbox", { name: "speaker" }).check();
+  await page.getByRole("tab", { name: "Content" }).click();
+  await page.getByRole("checkbox", { name: "Resources" }).uncheck();
+  await page.getByRole("tab", { name: "Fields" }).click();
+  await page.getByLabel("Organization").click();
+  await page.getByRole("option", { name: "View only" }).click();
+  await page.getByLabel("Accessibility needs").click();
+  await page.getByRole("option", { name: "Hidden" }).click();
+  await page.getByRole("button", { name: "Save portal" }).click();
+  await expect(page.getByText("Portal created.")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await page.getByLabel("Preview participant").click();
+  await page.getByRole("option", { name: /Ada Lovelace/ }).click();
+  await expect(page.getByLabel("Preview", { exact: true }).getByText("VIP speakers", { exact: true })).toBeVisible();
+
+  await page.goto(fixture.populatedAuthHref);
+  await expect(page.getByText("Welcome to your private speaker workspace.")).toBeVisible();
+  await expect(page.getByText("VIP speakers", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).not.toContainText("Resources");
+  const hiddenResource = await page.goto(`/portal/${fixture.eventSlug}/resources`);
+  expect(hiddenResource?.status()).toBe(404);
+
+  await page.goto(`/portal/${fixture.eventSlug}/profile`);
+  await expect(page.getByLabel("Organization")).toBeDisabled();
+  await expect(page.getByLabel("Accessibility needs")).toBeHidden();
 });
 
 test("navigates ordered published resources and reflects publication changes", async ({ page }) => {
@@ -299,7 +349,7 @@ test("shows a useful resource empty state for an event without publications", as
 test("validates, saves, and reloads only speaker-editable profile fields", async ({ page }) => {
   const fixture = await preparePortal();
   await page.goto(fixture.populatedAuthHref);
-  await expect(page.getByRole("link", { name: "Profile" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "My profile" })).toHaveAttribute(
     "href",
     `/portal/${fixture.eventSlug}/profile`,
   );

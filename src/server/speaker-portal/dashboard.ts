@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { parsePortalFormAnswers, parsePortalFormDefinition } from "../../lib/portal-forms.ts";
 import { LIST_BOUNDS } from "../database/list-bounds.ts";
+import { resolveParticipantPortal } from "../participant-portals.ts";
 
 export interface SpeakerPortalIdentity {
   readonly eventId: string;
@@ -105,7 +106,7 @@ export class SpeakerPortalRepository {
     const profile = speaker?.profileVersions[0];
     if (!speaker || !profile) return null;
 
-    const [submissions, storedSessions, tasks, resources] = await Promise.all([
+    const [submissions, storedSessions, tasks, resources, portal] = await Promise.all([
       this.#database.cfpSubmission.findMany({
         where: {
           eventId: identity.eventId,
@@ -175,6 +176,7 @@ export class SpeakerPortalRepository {
         orderBy: [{ dueAt: "asc" }, { assignedAt: "asc" }, { id: "asc" }],
       }),
       this.listResources(identity.eventId),
+      resolveParticipantPortal(this.#database, identity),
     ]);
 
     const visibleSessions = storedSessions.flatMap((session) => {
@@ -217,8 +219,11 @@ export class SpeakerPortalRepository {
         if (right.parentSessionId === null) return 1;
         return startedAt(left) - startedAt(right);
       }),
-      tasks,
+      tasks: portal.contentVisibility.forms
+        ? tasks
+        : tasks.filter((task) => !parsePortalFormDefinition(task.definitionVersion.responseSchema)),
       resources,
+      portal,
     };
   }
 

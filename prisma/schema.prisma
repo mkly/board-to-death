@@ -427,6 +427,7 @@ model Event {
   apiTokens                 ApiToken[]
   webhookEndpoints          WebhookEndpoint[]
   webhookDeliveries         WebhookDelivery[]
+  participantPortals        ParticipantPortal[]
 
   @@index([archivedAt, startsAt])
   @@index([clonedFromEventId])
@@ -505,6 +506,31 @@ model WebhookDelivery {
   @@index([eventId, createdAt])
   @@index([status, nextAttemptAt])
   @@map("webhook_deliveries")
+}
+
+model ParticipantPortal {
+  id                    String   @id @default(uuid()) @db.Uuid
+  eventId               String   @db.Uuid
+  name                  String
+  slug                  String
+  welcomeMessage        String?
+  accentColor           String   @default("neutral")
+  logoObjectKey         String?
+  backgroundObjectKey   String?
+  sectionTitles         Json
+  audienceRules         Json
+  contentVisibility     Json
+  profileFieldVisibility Json
+  isDefault             Boolean  @default(false)
+  sortOrder             Int
+  createdAt             DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(3)
+  event                 Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, slug])
+  @@unique([eventId, id])
+  @@index([eventId, sortOrder])
+  @@map("participant_portals")
 }
 
 model CustomDashboard {

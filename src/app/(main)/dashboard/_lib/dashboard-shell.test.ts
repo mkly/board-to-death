@@ -67,6 +67,7 @@ describe("program workspace navigation", () => {
       "evaluations",
       "agenda",
       "publishing",
+      "portals",
       "integrations",
       "settings",
     ]);

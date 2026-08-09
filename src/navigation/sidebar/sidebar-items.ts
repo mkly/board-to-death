@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Mail,
+  PanelsTopLeft,
   Plug,
   Presentation,
   Rows3,
@@ -77,6 +78,7 @@ const workspaces = [
   { id: "evaluations", title: "Evaluations", icon: ChartNoAxesCombined },
   { id: "agenda", title: "Agenda", icon: CalendarDays },
   { id: "publishing", title: "Publishing", icon: Sparkles },
+  { id: "portals", title: "Participant portals", icon: PanelsTopLeft },
   { id: "integrations", title: "Integrations", icon: Plug },
   { id: "settings", title: "Event settings", icon: Settings },
 ] as const;

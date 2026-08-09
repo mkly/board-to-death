@@ -12,7 +12,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
-import { getPortalViewer, portalHref } from "../../../_lib/portal-session";
+import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 import { PortalSectionHeading, SubmissionStatus } from "../../_components/portal-content";
 import { SubmissionParticipantFiles } from "./_components/submission-participant-files";
 
@@ -31,7 +31,7 @@ function answerText(value: Prisma.JsonValue): string {
 
 export default async function SpeakerSubmissionPage({ params, searchParams }: SpeakerSubmissionPageProps) {
   const [{ eventSlug, submissionId }, query] = await Promise.all([params, searchParams]);
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "submissions");
   const submission = await new SpeakerPortalRepository(getDatabaseClient()).getSubmission(viewer, submissionId);
   if (!submission) notFound();
 

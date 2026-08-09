@@ -2,7 +2,7 @@ import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { createSpeakerFileService } from "@/server/speakers/speaker-file-storage";
 
-import { getPortalViewer } from "../../../../_lib/portal-session";
+import { requirePortalContent } from "../../../../_lib/portal-session";
 
 type ProfileFilePurpose = "headshot" | "agreement";
 
@@ -22,7 +22,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   const { eventSlug, purpose } = await context.params;
   if (!isProfileFilePurpose(purpose)) return notFound();
 
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "files");
   const database = getDatabaseClient();
   const profile = await new SpeakerPortalRepository(database).getProfile(viewer);
   const key = purpose === "headshot" ? profile?.photoObjectKey : profile?.agreementObjectKey;

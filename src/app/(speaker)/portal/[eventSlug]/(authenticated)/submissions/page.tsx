@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
-import { getPortalViewer } from "../../_lib/portal-session";
+import { requirePortalContent } from "../../_lib/portal-session";
 import { PortalSectionHeading, SubmissionList } from "../_components/portal-content";
 
 interface SpeakerSubmissionsPageProps {
@@ -15,7 +15,7 @@ interface SpeakerSubmissionsPageProps {
 
 export default async function SpeakerSubmissionsPage({ params }: SpeakerSubmissionsPageProps) {
   const { eventSlug } = await params;
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer, portal } = await requirePortalContent(eventSlug, "submissions");
   const dashboard = await new SpeakerPortalRepository(getDatabaseClient()).getDashboard(viewer);
   if (!dashboard) notFound();
 
@@ -23,7 +23,7 @@ export default async function SpeakerSubmissionsPage({ params }: SpeakerSubmissi
     <>
       <PortalSectionHeading
         icon={FileTextIcon}
-        title="My submissions"
+        title={portal.sectionTitles.submissions}
         description="Review every proposal you are attached to and its current decision state."
       />
       <Card>
