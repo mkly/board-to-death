@@ -71,7 +71,9 @@ export function FileRequestDetail({
 }) {
   const indexHref = `/dashboard/events/${encodeURIComponent(event.slug)}/file-requests`;
   const filesByAssignment = new Map(files.map((entry) => [entry.assignmentId, entry.files]));
-  const collected = files.reduce((total, entry) => total + entry.files.filter((file) => !file.supersededAt).length, 0);
+  // Counted per assignment, not per file: a KEEP_HISTORY request keeps every upload live, and
+  // "3 of 2 assignments fulfilled" is not a sentence.
+  const collected = files.filter((entry) => entry.files.some((file) => !file.supersededAt)).length;
   const archived = request.archivedAt !== null;
 
   return (

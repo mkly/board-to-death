@@ -6,7 +6,7 @@ import { FileText, FileUp, Info, Pencil, Plus, Users } from "lucide-react";
 import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -143,9 +143,11 @@ export function FileRequestFormSheet({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor={`${fieldId}-target`}>Type *</FieldLabel>
+              {/* Neither branch is a single labelable control — the create form is a radio group and the edit
+                  form is static text — so this is a title, not a `label` pointing at nothing. */}
+              <FieldTitle>Type</FieldTitle>
               {editing ? (
-                <FieldDescription id={`${fieldId}-target`}>
+                <FieldDescription>
                   {TARGET_KIND_LABELS[request.targetKind]} — the target type cannot change after a request is created.
                   <input name="targetKind" type="hidden" value={request.targetKind} />
                 </FieldDescription>
