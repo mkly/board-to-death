@@ -11,6 +11,8 @@ const database = new Pool({ connectionString: testDatabaseUrl });
 let webhook: Server;
 let resolveMagicLink: ((url: string) => void) | undefined;
 
+test.setTimeout(120_000);
+
 function nextMagicLink(): Promise<string> {
   return new Promise((resolve) => {
     resolveMagicLink = resolve;
@@ -48,7 +50,9 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
   const suffix = randomUUID().slice(0, 8);
   const event = { id: randomUUID(), slug: `browser-agenda-${suffix}` };
   const roomId = randomUUID();
+  const secondaryRoomId = randomUUID();
   const trackId = randomUUID();
+  const secondaryTrackId = randomUUID();
   const firstSessionId = randomUUID();
   const firstVersionId = randomUUID();
   const secondSessionId = randomUUID();
@@ -64,13 +68,13 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     );
     await seedConnection.query(
       `INSERT INTO "rooms" ("id", "eventId", "name", "sortOrder", "updatedAt")
-       VALUES ($1, $2, 'Main Hall', 0, $3)`,
-      [roomId, event.id, now],
+       VALUES ($1, $2, 'Main Hall', 0, $4), ($3, $2, 'Workshop Room', 1, $4)`,
+      [roomId, event.id, secondaryRoomId, now],
     );
     await seedConnection.query(
       `INSERT INTO "tracks" ("id", "eventId", "name", "color", "sortOrder", "updatedAt")
-       VALUES ($1, $2, 'Game design', 'blue', 0, $3)`,
-      [trackId, event.id, now],
+       VALUES ($1, $2, 'Game design', 'blue', 0, $4), ($3, $2, 'Publishing', 'orange', 1, $4)`,
+      [trackId, event.id, secondaryTrackId, now],
     );
     await seedConnection.query(
       `INSERT INTO "program_sessions" ("id", "eventId", "kind", "updatedAt")
@@ -111,8 +115,8 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
 
     await page.goto(`/dashboard/events/${event.slug}/agenda`);
     await expect(page.getByRole("heading", { name: "Agenda" })).toBeVisible();
-    await page.getByRole("radio", { name: "Unscheduled" }).focus();
-    await page.keyboard.press("Space");
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Unscheduled", exact: true }).click();
     await expect(page.getByText("2 sessions")).toBeVisible();
 
     await page.getByRole("button", { name: "Schedule Opening keynote" }).click();
@@ -122,11 +126,50 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await expect(page.getByText("Session added to the agenda.")).toBeVisible();
 
     await page.reload();
-    await page.getByRole("radio", { name: "Scheduled" }).click();
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Scheduled", exact: true }).click();
     await expect(page.getByText("Opening keynote")).toBeVisible();
     await expect(page.getByText("Cooperative tension lab")).toHaveCount(0);
 
-    await page.getByRole("radio", { name: "Unscheduled" }).click();
+    await page.getByRole("tab", { name: "Day" }).click();
+    await expect(page.getByText("Saturday, March 13, 2027")).toBeVisible();
+    await expect(page.getByText("10:00 AM–10:45 AM America/Los_Angeles")).toBeVisible();
+    await page.getByRole("button", { name: "Next period" }).click();
+    await expect(page.getByText("No sessions in this view")).toBeVisible();
+    await page.getByRole("button", { name: "Previous period" }).click();
+
+    await page.getByRole("tab", { name: "Week" }).click();
+    await expect(page.getByText("Mar 8–Mar 14, 2027")).toBeVisible();
+    await page.getByRole("tab", { name: "Month" }).click();
+    await expect(page.getByText("March 2027")).toBeVisible();
+    await page.getByRole("tab", { name: "Track" }).click();
+    await expect(page.getByRole("heading", { name: "Game design" })).toBeVisible();
+    await page.getByRole("tab", { name: "Room" }).click();
+    await expect(page.getByRole("heading", { name: "Main Hall" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Workshop Room" })).toBeVisible();
+
+    await page.getByRole("combobox", { name: "Room" }).click();
+    await page.getByRole("option", { name: "Workshop Room" }).click();
+    await expect(page.getByText("No sessions in this view")).toBeVisible();
+    await page.getByRole("combobox", { name: "Room" }).click();
+    await page.getByRole("option", { name: "Main Hall" }).click();
+    await page.getByRole("combobox", { name: "Track" }).click();
+    await page.getByRole("option", { name: "Game design" }).click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("link", { name: "Export filtered CSV" }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe(`${event.slug}-agenda.csv`);
+
+    const sessionLink = page.getByRole("link", { name: "Opening keynote" });
+    await expect(sessionLink).toHaveAttribute("href", new RegExp(`/sessions\\?sessionId=${firstSessionId}$`));
+
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Unscheduled", exact: true }).click();
+    await page.getByRole("combobox", { name: "Room" }).click();
+    await page.getByRole("option", { name: "All rooms" }).click();
+    await page.getByRole("combobox", { name: "Track" }).click();
+    await page.getByRole("option", { name: "All tracks" }).click();
+    await page.getByRole("tab", { name: "List" }).click();
     await page.getByRole("button", { name: "Schedule Cooperative tension lab" }).click();
     await page.getByLabel("Starts at").fill("2027-03-13T10:15");
     await page.getByRole("button", { name: "Add to agenda" }).click();
@@ -142,8 +185,17 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await page.keyboard.press("Enter");
     await expect(page.getByText("Session added to the agenda.")).toBeVisible();
 
+    const concurrentPage = await context.newPage();
+    await concurrentPage.goto(`/dashboard/events/${event.slug}/agenda`);
+    await concurrentPage.getByRole("combobox", { name: "Status" }).click();
+    await concurrentPage.getByRole("option", { name: "Scheduled", exact: true }).click();
+    await expect(concurrentPage.getByText("Opening keynote")).toBeVisible();
+    await expect(concurrentPage.getByText("Cooperative tension lab")).toBeVisible();
+    await concurrentPage.close();
+
     await page.reload();
-    await page.getByRole("radio", { name: "Scheduled" }).click();
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Scheduled", exact: true }).click();
     await page.getByRole("button", { name: "Edit placement for Cooperative tension lab" }).click();
     await expect(page.getByLabel("Starts at")).toHaveValue("2027-03-13T10:15");
     await page.getByLabel("Starts at").fill("2027-03-13T12:00");
@@ -151,7 +203,8 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await expect(page.getByText("Agenda placement saved.")).toBeVisible();
 
     await page.reload();
-    await page.getByRole("radio", { name: "Scheduled" }).click();
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Scheduled", exact: true }).click();
     await page.getByRole("button", { name: "Edit placement for Cooperative tension lab" }).click();
     await expect(page.getByLabel("Starts at")).toHaveValue("2027-03-13T12:00");
     await page.getByRole("button", { name: "Remove" }).click();
