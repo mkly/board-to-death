@@ -55,7 +55,10 @@ test.afterAll(async () => {
   await database.end();
 });
 
-test("administers speaker resource lifecycle, ordering, sanitization, and event isolation", async ({ context, page }) => {
+test("administers speaker resource lifecycle, ordering, sanitization, and event isolation", async ({
+  context,
+  page,
+}) => {
   await context.addCookies([
     { name: "better-auth.session_token", value: sessionCookie, url: baseURL, httpOnly: true, sameSite: "Lax" },
   ]);

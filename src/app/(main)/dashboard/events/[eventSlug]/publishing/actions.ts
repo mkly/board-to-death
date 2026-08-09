@@ -29,7 +29,11 @@ const resourceSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and single hyphens."),
   title: z.string().trim().min(1, "Enter a title.").max(160, "Keep the title under 160 characters."),
   summary: z.string().trim().max(500, "Keep the summary under 500 characters."),
-  bodyMarkdown: z.string().trim().min(1, "Enter resource content.").max(100_000, "Keep content under 100,000 characters."),
+  bodyMarkdown: z
+    .string()
+    .trim()
+    .min(1, "Enter resource content.")
+    .max(100_000, "Keep content under 100,000 characters."),
 });
 
 function stringValue(formData: FormData, name: string): string {
@@ -75,7 +79,11 @@ export async function saveResourcePage(
     bodyMarkdown: stringValue(formData, "bodyMarkdown"),
   });
   if (!parsed.success) {
-    return { status: "error", message: "Review the highlighted resource fields.", errors: validationErrors(parsed.error) };
+    return {
+      status: "error",
+      message: "Review the highlighted resource fields.",
+      errors: validationErrors(parsed.error),
+    };
   }
   const event = await authorizedEvent(parsed.data.eventSlug);
   if (!event) return { status: "error", message: "This event is not available." };
