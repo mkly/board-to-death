@@ -1,15 +1,17 @@
 import { notFound, redirect } from "next/navigation";
 
-import { CalendarDays, Clock3, MapPin, PanelsTopLeft } from "lucide-react";
+import { PanelsTopLeft } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { dashboardEventHref, dashboardWorkspaceTitle, isDashboardWorkspace } from "@/navigation/sidebar/sidebar-items";
+import { EventOverviewRepository } from "@/server/dashboard/overview";
+import { getDatabaseClient } from "@/server/database";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 import { OnboardingWorkspace } from "./_components/onboarding-workspace";
+import { OverviewDashboard } from "./_components/overview-dashboard";
 
 export default async function EventWorkspacePage({
   params,
@@ -62,6 +64,8 @@ export default async function EventWorkspacePage({
     timeZone: event.timezone,
   });
 
+  const metrics = await new EventOverviewRepository(getDatabaseClient()).get(event.id, event.timezone);
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
@@ -70,43 +74,12 @@ export default async function EventWorkspacePage({
         </Badge>
         <div>
           <h1 className="font-semibold text-2xl tracking-tight">{event.name}</h1>
-          <p className="text-muted-foreground text-sm">Program administration overview</p>
+          <p className="text-muted-foreground text-sm">
+            {dateFormatter.format(event.startsAt)} – {dateFormatter.format(event.endsAt)} · {event.timezone}
+          </p>
         </div>
       </header>
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule</CardTitle>
-            <CardDescription>Dates in the event time zone</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <CalendarDays />
-            <span>
-              {dateFormatter.format(event.startsAt)} – {dateFormatter.format(event.endsAt)}
-            </span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Time zone</CardTitle>
-            <CardDescription>Used for agenda and deadlines</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <Clock3 />
-            <span>{event.timezone}</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Workspace</CardTitle>
-            <CardDescription>All program tools stay event-scoped</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <MapPin />
-            <span>{event.slug}</span>
-          </CardContent>
-        </Card>
-      </div>
+      <OverviewDashboard event={event} metrics={metrics} />
     </div>
   );
 }
