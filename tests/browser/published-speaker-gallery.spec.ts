@@ -150,6 +150,8 @@ test("renders, filters, resizes, republishes, and unpublishes an isolated access
   const photoResponse = await page.request.get(`${baseURL}/embed/${eventSlug}/speakers/${speakerIds.alex}/photo?v=1`);
   expect(photoResponse.status()).toBe(200);
   expect(photoResponse.headers()["content-type"]).toBe("image/svg+xml");
+  expect(photoResponse.headers()["content-security-policy"]).toContain("sandbox");
+  expect(photoResponse.headers()["x-content-type-options"]).toBe("nosniff");
   await page.route(`${baseURL}/speaker-gallery-host`, async (route) => {
     await route.fulfill({
       contentType: "text/html",

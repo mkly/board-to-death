@@ -29,6 +29,10 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   const etag = `"${stored.value.metadata.etag}"`;
   const headers = {
     "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+    // Headshots are attendee-supplied bytes served from the application origin, and image/svg+xml
+    // is a document format: navigating straight to this URL would otherwise run the file's script
+    // against the dashboard's own origin. Neutralize the document case; <img> loads are unaffected.
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
     "Content-Type": stored.value.metadata.contentType,
     ETag: etag,
     "X-Content-Type-Options": "nosniff",
