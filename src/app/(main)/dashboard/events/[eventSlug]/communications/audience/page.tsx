@@ -42,6 +42,7 @@ function selectionFrom(searchParams: Record<string, string | string[] | undefine
     onboardingStatuses: values(searchParams.onboarding).filter((value) => ONBOARDING_STATUSES.has(value)) as
       | SpeakerTaskAssignmentStatus[]
       | undefined,
+    tierIds: values(searchParams.tier),
   };
 }
 
@@ -53,6 +54,7 @@ function hasSelection(selection: RecipientAudienceSelection): boolean {
     selection.categoryIds,
     selection.acceptanceStatuses,
     selection.onboardingStatuses,
+    selection.tierIds,
   ].some((criteria) => (criteria?.length ?? 0) > 0);
 }
 

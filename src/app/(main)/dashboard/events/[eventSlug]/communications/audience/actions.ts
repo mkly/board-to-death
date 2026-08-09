@@ -52,6 +52,7 @@ function audienceFrom(formData: FormData): RecipientAudienceSelection {
     onboardingStatuses: fieldValues(formData, "onboarding").filter((value) =>
       ONBOARDING_STATUSES.has(value),
     ) as SpeakerTaskAssignmentStatus[],
+    tierIds: fieldValues(formData, "tier"),
   };
 }
 

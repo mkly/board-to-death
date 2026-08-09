@@ -210,6 +210,26 @@ export function RecipientAudienceWorkspace({
                   ))}
                 </FieldGroup>
               </FieldSet>
+
+              <FieldSet>
+                <FieldLegend variant="label">Sponsor and exhibitor tiers</FieldLegend>
+                <FieldDescription>Email each matching group&apos;s designated primary contact.</FieldDescription>
+                <FieldGroup data-slot="checkbox-group" className="grid gap-3 sm:grid-cols-2">
+                  {options.tiers.map((tier) => (
+                    <Field key={tier.id} orientation="horizontal">
+                      <Checkbox
+                        id={`tier-${tier.id}`}
+                        name="tier"
+                        value={tier.id}
+                        defaultChecked={checked(selection.tierIds, tier.id)}
+                      />
+                      <FieldLabel htmlFor={`tier-${tier.id}`} className="font-normal">
+                        {tier.kind === "SPONSOR" ? "Sponsor" : "Exhibitor"} · {tier.label}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </FieldGroup>
+              </FieldSet>
             </FieldGroup>
           </CardContent>
           <CardFooter className="flex gap-2">

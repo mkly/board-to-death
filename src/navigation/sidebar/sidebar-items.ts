@@ -1,4 +1,5 @@
 import {
+  Building2,
   CalendarDays,
   ChartNoAxesCombined,
   CircleGauge,
@@ -63,6 +64,7 @@ const workspaces = [
   { id: "sessions", title: "Sessions", icon: Presentation },
   { id: "speakers", title: "Speakers", icon: Users },
   { id: "contacts", title: "Contacts", icon: ContactRound },
+  { id: "groups", title: "Sponsors & exhibitors", icon: Building2 },
   { id: "onboarding", title: "Onboarding", icon: UserRoundCheck },
   { id: "file-requests", title: "File requests", icon: FileUp },
   { id: "communications", title: "Communications", icon: Mail },
