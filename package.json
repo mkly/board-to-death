@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/production-runtime.mjs start",
     "lint": "biome lint",
     "format": "biome format --write",

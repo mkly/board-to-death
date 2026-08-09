@@ -75,6 +75,47 @@ A restart uses the same start command and persistent paths. Do not run migration
 The deployment service should use a bounded restart policy for unexpected exits and should not restart a configuration
 or migration failure indefinitely.
 
+## Vercel
+
+Vercel is a supported target with two caveats: functions get a read-only filesystem, and migrations are not part of a
+deployment. Everything else works from the repository defaults.
+
+Set these project environment variables (Settings → Environment Variables):
+
+| Variable | Notes |
+| --- | --- |
+| `DATABASE_URL` | Must point at a **pooled** Postgres endpoint (Neon/Supabase pooler, PgBouncer, or Prisma Accelerate). |
+| `AUTH_SECRET` | At least 32 characters. |
+| `BETTER_AUTH_SECRET` | At least 32 characters. |
+| `AUTH_ALLOWED_EMAILS` | Comma-separated admin allowlist. |
+| `AUTH_MAGIC_LINK_WEBHOOK_URL` | Required in production; magic links are not printed to the console there. |
+| `AUTH_MAGIC_LINK_WEBHOOK_TOKEN` | Optional. |
+
+`BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, and `FILE_STORAGE_PATH` are **not** required on Vercel and are usually better
+left unset. The runtime config derives the first two from `VERCEL_PROJECT_PRODUCTION_URL` (production) or `VERCEL_URL`
+(preview), so every preview deployment authenticates against its own host instead of a hardcoded origin. Setting them
+explicitly still wins, but pins every preview to that one origin. Leave Vercel's "Automatically expose System
+Environment Variables" setting on — the client bundle reads the `NEXT_PUBLIC_VERCEL_*` twins.
+
+`FILE_STORAGE_PATH` defaults to `/tmp/board-to-death/files`, the only writable location in a Vercel function. That is
+per-instance scratch space that disappears between invocations, so it satisfies the readiness probe but is **not**
+durable storage. Anything that must survive a request needs an object store (Vercel Blob, S3) behind
+`FileStorageService` before it is wired into a route.
+
+Migrations do not run on deploy. Apply them as a separate release step against the same database before promoting:
+
+```sh
+DATABASE_URL=... npm run db:deploy
+```
+
+Use the database's direct (non-pooled) connection string for that command; pooler endpoints reject the advisory locks
+Prisma Migrate takes. Do not add `db:deploy` to the build command — Vercel builds preview and production deployments
+against whatever `DATABASE_URL` is in scope, and a preview build would migrate production.
+
+The build command is `npm run build`, which runs `prisma generate` first. That is deliberate: Vercel restores a
+dependency cache and skips `postinstall` on subsequent deployments, which otherwise ships a Prisma Client generated
+against an older schema.
+
 ## Persistence, backup, and recovery
 
 Back up PostgreSQL and the volume mounted at `FILE_STORAGE_PATH` together according to the application's recovery-point

@@ -164,6 +164,71 @@ test("production requires an absolute persistent file-storage path", () => {
   );
 });
 
+const vercelEnvironment = {
+  AUTH_ALLOWED_EMAILS: productionEnvironment.AUTH_ALLOWED_EMAILS,
+  AUTH_MAGIC_LINK_WEBHOOK_URL: productionEnvironment.AUTH_MAGIC_LINK_WEBHOOK_URL,
+  AUTH_SECRET: productionEnvironment.AUTH_SECRET,
+  BETTER_AUTH_SECRET: productionEnvironment.BETTER_AUTH_SECRET,
+  DATABASE_URL: productionEnvironment.DATABASE_URL,
+  NODE_ENV: "production",
+  VERCEL: "1",
+} as const;
+
+test("a Vercel production deployment resolves its origin and storage without extra configuration", () => {
+  const config = parseRuntimeConfig({
+    ...vercelEnvironment,
+    VERCEL_ENV: "production",
+    VERCEL_PROJECT_PRODUCTION_URL: "events.example.com",
+    VERCEL_URL: "board-to-death-abc123.vercel.app",
+  });
+
+  assert.equal(config.server.BETTER_AUTH_URL, "https://events.example.com");
+  assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://events.example.com");
+  assert.equal(config.server.FILE_STORAGE_PATH, "/tmp/board-to-death/files");
+});
+
+test("a Vercel preview deployment resolves its own per-deployment origin", () => {
+  const config = parseRuntimeConfig({
+    ...vercelEnvironment,
+    VERCEL_ENV: "preview",
+    VERCEL_PROJECT_PRODUCTION_URL: "events.example.com",
+    VERCEL_URL: "board-to-death-abc123.vercel.app",
+  });
+
+  assert.equal(config.server.BETTER_AUTH_URL, "https://board-to-death-abc123.vercel.app");
+  assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://board-to-death-abc123.vercel.app");
+});
+
+test("explicit configuration still wins over the Vercel-derived defaults", () => {
+  const config = parseRuntimeConfig({
+    ...vercelEnvironment,
+    BETTER_AUTH_URL: "https://custom.example.com",
+    FILE_STORAGE_PATH: "/mnt/files",
+    NEXT_PUBLIC_APP_URL: "https://custom.example.com",
+    VERCEL_ENV: "production",
+    VERCEL_PROJECT_PRODUCTION_URL: "events.example.com",
+  });
+
+  assert.equal(config.server.BETTER_AUTH_URL, "https://custom.example.com");
+  assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://custom.example.com");
+  assert.equal(config.server.FILE_STORAGE_PATH, "/mnt/files");
+});
+
+test("the Vercel defaults do not apply off Vercel", () => {
+  assert.throws(
+    () => parseRuntimeConfig({ ...vercelEnvironment, VERCEL: undefined }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, [
+        "BETTER_AUTH_URL is required when NODE_ENV=production",
+        "FILE_STORAGE_PATH is required when NODE_ENV=production",
+        "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
+      ]);
+      return true;
+    },
+  );
+});
+
 test("the public parser returns only its explicit allowlist", () => {
   const publicConfig = parsePublicRuntimeConfig(productionEnvironment);
 

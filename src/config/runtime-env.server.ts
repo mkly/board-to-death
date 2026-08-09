@@ -4,6 +4,7 @@ import {
   type Environment,
   formatIssues,
   getRuntimeMode,
+  getVercelDeploymentUrl,
   hasAllowedUrlProtocol,
   type PublicRuntimeConfig,
   parsePublicRuntimeConfig,
@@ -82,11 +83,31 @@ const serverSchema = z.object({
 
 export type ServerRuntimeConfig = z.infer<typeof serverSchema>;
 
+// Vercel functions get a read-only filesystem with /tmp as the only writable
+// location, and no stable per-deployment URL to hardcode. Supply both rather
+// than failing the production check on values the platform cannot be told.
+// /tmp is per-instance and ephemeral, so this is scratch space only.
+export const VERCEL_FILE_STORAGE_PATH = "/tmp/board-to-death/files";
+
+function getVercelDefaults(environment: Environment): ServerRuntimeValues {
+  if (!environment.VERCEL) {
+    return {};
+  }
+
+  const deploymentUrl = getVercelDeploymentUrl(environment);
+
+  return {
+    FILE_STORAGE_PATH: VERCEL_FILE_STORAGE_PATH,
+    ...(deploymentUrl ? { BETTER_AUTH_URL: deploymentUrl } : {}),
+  };
+}
+
 function getServerValues(environment: Environment, mode: RuntimeMode): ServerRuntimeValues {
+  const vercelDefaults = getVercelDefaults(environment);
   const values = Object.fromEntries(
     SERVER_KEYS.map((key) => {
       const configuredValue = environment[key]?.trim();
-      const defaultValue = mode === "production" ? undefined : DEFAULTS[mode][key];
+      const defaultValue = mode === "production" ? vercelDefaults[key] : (DEFAULTS[mode][key] ?? vercelDefaults[key]);
 
       return [key, configuredValue || defaultValue];
     }),
