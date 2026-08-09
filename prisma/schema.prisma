@@ -20,6 +20,7 @@ model User {
   accounts           Account[]
   twoFactors         TwoFactor[]
   cfpSubmissionViews CfpSubmissionView[]
+  contactGroupIntakeReviews ContactGroupIntakeSubmission[]
 
   @@unique([email])
   @@map("user")
@@ -303,6 +304,18 @@ enum ContactGroupKind {
   SPONSOR
 }
 
+enum ContactGroupIntakeFormStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ContactGroupIntakeSubmissionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 enum BulkEditEntityType {
   CONTACT
   SESSION
@@ -399,6 +412,8 @@ model Event {
   contactGroups             ContactGroup[]
   contactGroupTiers         ContactGroupTier[]
   bulkEditOperations        BulkEditOperation[]
+  contactGroupIntakeForms   ContactGroupIntakeForm[]
+  contactGroupIntakeSubmissions ContactGroupIntakeSubmission[]
   fileRequests              FileRequest[]
   fileRequestAssignments    FileRequestAssignment[]
   speakerInterestForms      SpeakerInterestForm[]
@@ -644,6 +659,7 @@ model Contact {
   person       Person?                 @relation(fields: [personId], references: [id], onDelete: SetNull)
   memberships  ContactGroupMember[]
   primaryForGroups ContactGroup[] @relation("ContactGroupPrimaryContact")
+  acceptedIntakeSubmissions ContactGroupIntakeSubmission[]
   assignments  FileRequestAssignment[]
 
   @@unique([eventId, email])
@@ -670,6 +686,7 @@ model ContactGroup {
   primaryContact Contact?             @relation("ContactGroupPrimaryContact", fields: [eventId, primaryContactId], references: [eventId, id], onDelete: Restrict)
   members     ContactGroupMember[]
   assignments FileRequestAssignment[]
+  acceptedIntakeSubmissions ContactGroupIntakeSubmission[]
 
   @@unique([eventId, slug])
   @@unique([eventId, id])
@@ -695,6 +712,58 @@ model ContactGroupTier {
   @@unique([eventId, kind, sortOrder])
   @@index([eventId, kind, sortOrder])
   @@map("contact_group_tiers")
+}
+
+model ContactGroupIntakeForm {
+  id          String                       @id @default(uuid()) @db.Uuid
+  eventId     String                       @db.Uuid
+  kind        ContactGroupKind
+  publicId    String                       @unique @default(uuid()) @db.Uuid
+  status      ContactGroupIntakeFormStatus @default(DRAFT)
+  title       String
+  description String?
+  publishedAt DateTime?                    @db.Timestamptz(3)
+  closedAt    DateTime?                    @db.Timestamptz(3)
+  createdAt   DateTime                     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                     @updatedAt @db.Timestamptz(3)
+  event       Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submissions ContactGroupIntakeSubmission[]
+
+  @@unique([eventId, kind])
+  @@unique([eventId, id])
+  @@index([eventId, status])
+  @@map("contact_group_intake_forms")
+}
+
+model ContactGroupIntakeSubmission {
+  id                   String                              @id @default(uuid()) @db.Uuid
+  eventId              String                              @db.Uuid
+  formId               String                              @db.Uuid
+  status               ContactGroupIntakeSubmissionStatus @default(PENDING)
+  organizationName     String
+  organizationSlug     String
+  contactGivenName     String
+  contactFamilyName    String
+  contactEmail         String
+  contactPhone         String?
+  contactJobTitle      String?
+  acceptedGroupId      String?                             @db.Uuid
+  acceptedContactId    String?                             @db.Uuid
+  reviewedById         String?
+  reviewedAt           DateTime?                           @db.Timestamptz(3)
+  createdAt            DateTime                            @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                            @updatedAt @db.Timestamptz(3)
+  event                Event                               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  form                 ContactGroupIntakeForm              @relation(fields: [eventId, formId], references: [eventId, id], onDelete: Cascade)
+  acceptedGroup        ContactGroup?                       @relation(fields: [eventId, acceptedGroupId], references: [eventId, id], onDelete: Restrict)
+  acceptedContact      Contact?                            @relation(fields: [eventId, acceptedContactId], references: [eventId, id], onDelete: Restrict)
+  reviewedBy           User?                               @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, id])
+  @@index([eventId, status, createdAt])
+  @@index([eventId, organizationSlug])
+  @@index([reviewedById])
+  @@map("contact_group_intake_submissions")
 }
 
 model ContactGroupMember {
