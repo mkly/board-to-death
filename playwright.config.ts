@@ -40,6 +40,12 @@ export default defineConfig({
       BETTER_AUTH_URL: baseURL,
       AUTH_ALLOWED_EMAILS: process.env.AUTH_ALLOWED_EMAILS ?? "admin@example.test",
       AUTH_MAGIC_LINK_WEBHOOK_URL: magicLinkWebhookUrl,
+      // Resend takes precedence over the webhook in createConfiguredMagicLinkSender,
+      // so a developer .env carrying real Resend credentials would send every
+      // browser-suite magic link to the internet and leave the broker waiting.
+      // Blank values fall back to "unset" in runtime-env.server.ts.
+      RESEND_API_KEY: "",
+      RESEND_FROM_EMAIL: "",
       NEXT_PUBLIC_APP_URL: baseURL,
     },
   },

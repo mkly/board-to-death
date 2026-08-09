@@ -23,7 +23,13 @@ const defaultWebhookUrl = "http://127.0.0.1:3199";
 const controlPrefix = "/__magic-link-broker";
 const requestPathPattern = new RegExp(`^${controlPrefix}/requests/([^/]+)$`);
 const adminEmail = "admin@example.test";
-const defaultDeliveryTimeoutMs = 30_000;
+// A turn's deadline starts when the spec registers, and the spec only reaches
+// the sign-in click after the dev web server compiles /auth/v1/login on demand.
+// The authenticated specs allow 120s of test time for exactly that compile, so
+// a 30s broker deadline would expire on a healthy but cold run. Stay under the
+// specs' own timeout so a genuinely undelivered link still fails here, with the
+// broker's explanation, rather than as an opaque Playwright timeout.
+const defaultDeliveryTimeoutMs = 90_000;
 
 export interface MagicLinkWebhookOptions {
   /** Origin the broker listens on. Only the hostname and port are used. */
