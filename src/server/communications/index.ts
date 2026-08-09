@@ -1,4 +1,13 @@
 export type {
+  ExcludedRecipientAudienceMember,
+  RecipientAudienceMatch,
+  RecipientAudienceMember,
+  RecipientAudienceOptions,
+  RecipientAudiencePreview,
+  RecipientAudienceSelection,
+} from "./audiences.ts";
+export { RecipientAudienceRepository } from "./audiences.ts";
+export type {
   AttemptClaim,
   DeliverEmailInput,
   DeliveryAttemptAudit,
