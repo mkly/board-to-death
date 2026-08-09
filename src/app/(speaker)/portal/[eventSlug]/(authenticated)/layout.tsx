@@ -41,7 +41,7 @@ export default async function SpeakerPortalLayout({ children, params }: SpeakerP
   const navigation = [
     { href: home, label: "Home", icon: HomeIcon },
     { href: portalHref(eventSlug, "/submissions"), label: "Submissions", icon: FileTextIcon },
-    { href: `${home}#profile`, label: "Profile", icon: UserRoundIcon },
+    { href: portalHref(eventSlug, "/profile"), label: "Profile", icon: UserRoundIcon },
     { href: `${home}#tasks`, label: "Tasks", icon: ClipboardCheckIcon },
     { href: `${home}#resources`, label: "Resources", icon: BookOpenIcon },
   ] as const;

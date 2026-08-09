@@ -668,6 +668,7 @@ model SpeakerProfileVersion {
   jobTitle                String?
   biography               String?
   websiteUrl              String?
+  accessibilityNeeds      String?
   photoObjectKey          String?
   consentToPublishProfile Boolean   @default(false)
   consentToReceiveEmail   Boolean   @default(false)

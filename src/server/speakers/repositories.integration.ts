@@ -96,16 +96,22 @@ describe("speaker persistence", () => {
     const created = await createSpeaker(eventId, "sam@example.test", "Sam");
     const consentedAt = new Date("2027-01-05T12:00:00.000Z");
 
-    const updated = await speakers.updateProfile(eventId, created.id, {
-      preferredName: "Sammie",
-      pronouns: "they/them",
-      biography: "Designs cooperative games.",
-      websiteUrl: "https://example.test/sam",
-      photoObjectKey: "events/profile-history/speakers/sam/photo.jpg",
-      consentToPublishProfile: true,
-      consentToReceiveEmail: true,
-      consentedAt,
-    });
+    const updated = await speakers.updateProfile(
+      eventId,
+      created.id,
+      {
+        preferredName: "Sammie",
+        pronouns: "they/them",
+        biography: "Designs cooperative games.",
+        websiteUrl: "https://example.test/sam",
+        accessibilityNeeds: "A step-free route to the stage.",
+        photoObjectKey: "events/profile-history/speakers/sam/photo.jpg",
+        consentToPublishProfile: true,
+        consentToReceiveEmail: true,
+        consentedAt,
+      },
+      1,
+    );
 
     assert.deepEqual(
       updated.profileVersions.map(({ versionNumber, preferredName }) => [versionNumber, preferredName]),
@@ -115,9 +121,16 @@ describe("speaker persistence", () => {
       ],
     );
     assert.equal(updated.profile.biography, "Designs cooperative games.");
+    assert.equal(updated.profile.accessibilityNeeds, "A step-free route to the stage.");
     assert.equal(updated.profile.consentToPublishProfile, true);
     assert.deepEqual(updated.profile.consentedAt, consentedAt);
     assert.equal(updated.profileVersions[0]?.biography, null);
+
+    await expectRepositoryError(
+      speakers.updateProfile(eventId, created.id, { biography: "A stale edit." }, 1),
+      "conflict",
+    );
+    assert.equal((await speakers.get(eventId, created.id))?.profile.biography, "Designs cooperative games.");
   });
 
   test("stores one or many participants in deterministic order and rejects cross-event assignments", async () => {
