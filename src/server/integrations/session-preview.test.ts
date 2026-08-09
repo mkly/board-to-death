@@ -264,9 +264,7 @@ describe("Accelevents session mapping preview", () => {
       adapter: new DeterministicAcceleventsAdapter({
         remoteEventId: "remote-event",
         apiKey: "runtime-key",
-        speakers: [
-          { remoteId: "remote-speaker-1", email: "ada@example.test", firstName: "Ada", lastName: "Lovelace" },
-        ],
+        speakers: [{ remoteId: "remote-speaker-1", email: "ada@example.test", firstName: "Ada", lastName: "Lovelace" }],
         sessions: [],
       }),
     });
