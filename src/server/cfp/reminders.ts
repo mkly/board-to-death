@@ -100,7 +100,9 @@ function candidateRecipient(candidate: ReminderCandidate): DraftRecipient | null
 }
 
 function scheduledFor(closesAt: Date, timezone: string, daysBeforeClose: number, sendAtMinute: number): Date {
-  const closeDate = Temporal.Instant.fromEpochMilliseconds(closesAt.getTime()).toZonedDateTimeISO(timezone).toPlainDate();
+  const closeDate = Temporal.Instant.fromEpochMilliseconds(closesAt.getTime())
+    .toZonedDateTimeISO(timezone)
+    .toPlainDate();
   const reminderDate = closeDate.subtract({ days: daysBeforeClose });
   return new Date(
     reminderDate
@@ -146,16 +148,18 @@ async function currentPolicies(client: PrismaClient, now: Date): Promise<Reminde
     if (now < version.submissionOpensAt || now > version.submissionClosesAt) return [];
     const messages = version.messages as unknown as CfpPolicyMessages;
     if (!messages.reminder?.enabled) return [];
-    return [{
-      id: policy.id,
-      publicId: policy.publicId,
-      eventId: policy.eventId,
-      versionNumber: version.versionNumber,
-      submissionOpensAt: version.submissionOpensAt,
-      submissionClosesAt: version.submissionClosesAt,
-      messages,
-      event: policy.event,
-    }];
+    return [
+      {
+        id: policy.id,
+        publicId: policy.publicId,
+        eventId: policy.eventId,
+        versionNumber: version.versionNumber,
+        submissionOpensAt: version.submissionOpensAt,
+        submissionClosesAt: version.submissionClosesAt,
+        messages,
+        event: policy.event,
+      },
+    ];
   });
 }
 

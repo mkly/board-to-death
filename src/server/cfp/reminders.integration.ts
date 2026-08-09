@@ -78,11 +78,7 @@ async function createFixture(key: string, options: FixtureOptions = {}) {
   return { event, formVersion, policy };
 }
 
-async function createDraft(
-  fixture: Awaited<ReturnType<typeof createFixture>>,
-  email: string,
-  clock: { now(): Date },
-) {
+async function createDraft(fixture: Awaited<ReturnType<typeof createFixture>>, email: string, clock: { now(): Date }) {
   const repository = new CfpDraftRepository({ database: client, clock });
   const saved = await repository.save({
     eventId: fixture.event.id,
@@ -144,7 +140,10 @@ describe("CFP draft reminders", () => {
 
     const expired = await createFixture("expired");
     const expiredDraft = await createDraft(expired, "expired@example.test", infrastructure.clock);
-    await client.cfpSubmissionDraft.update({ where: { id: expiredDraft.draft.id }, data: { expiresAt: OCCURRENCE_AT } });
+    await client.cfpSubmissionDraft.update({
+      where: { id: expiredDraft.draft.id },
+      data: { expiresAt: OCCURRENCE_AT },
+    });
 
     const closed = await createFixture("closed");
     await createDraft(closed, "closed@example.test", infrastructure.clock);
