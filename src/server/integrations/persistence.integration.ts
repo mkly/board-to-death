@@ -10,6 +10,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { AcceleventsConfigurationRepository, acceleventsAuditDetails } from "./configuration.ts";
+import { AcceleventsSessionMappingRepository } from "./session-preview.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -123,6 +124,34 @@ describe("external integration persistence", () => {
         data: { eventId: event.id, provider: IntegrationProvider.ACCELEVENTS },
       }),
     );
+  });
+
+  test("versions session mappings without crossing event configuration boundaries", async () => {
+    const first = await createIntegration("integration-test-session-mapping");
+    const second = await createIntegration("integration-test-session-mapping-other");
+    const repository = new AcceleventsSessionMappingRepository(client);
+
+    const versionOne = await repository.save(first.event.id, {
+      title: "session.title",
+      description: "session.description",
+      speakers: "linked-speakers",
+    });
+    const versionTwo = await repository.save(first.event.id, {
+      title: "event.name",
+      description: "event.theme",
+      speakers: "omit",
+    });
+
+    assert.equal(versionOne.versionNumber, 1);
+    assert.equal(versionTwo.versionNumber, 2);
+    assert.deepEqual((await repository.get(first.event.id))?.definition, {
+      title: "event.name",
+      description: "event.theme",
+      speakers: "omit",
+    });
+    assert.equal(await repository.get(second.event.id), null);
+    assert.equal(versionTwo.configurationId, first.configuration.id);
+    assert.notEqual(versionTwo.configurationId, second.configuration.id);
   });
 
   test("stores only a runtime credential reference and redacts configuration responses and audit details", async () => {
