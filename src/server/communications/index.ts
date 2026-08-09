@@ -8,6 +8,18 @@ export type {
 } from "./audiences.ts";
 export { RecipientAudienceRepository } from "./audiences.ts";
 export type {
+  BulkDelivery,
+  BulkDeliveryDispatcherOptions,
+  BulkDeliveryRecipient,
+  ConfirmBulkDeliveryInput,
+  ConfirmedBulkDelivery,
+} from "./bulk-dispatch.ts";
+export {
+  BulkCommunicationRepository,
+  BulkDeliveryDispatcher,
+  PrismaDeliveryAuditRepository,
+} from "./bulk-dispatch.ts";
+export type {
   AttemptClaim,
   DeliverEmailInput,
   DeliveryAttemptAudit,

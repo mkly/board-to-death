@@ -26,6 +26,21 @@ const event = await database.event.create({
     endsAt: new Date("2027-05-12T00:00:00.000Z"),
   },
 });
+await database.communicationTemplate.create({
+  data: {
+    eventId: event.id,
+    key: "speaker-update",
+    name: "Speaker update",
+    versions: {
+      create: {
+        version: 1,
+        subjectTemplate: "Hello {{ recipient.name }}",
+        htmlTemplate: "The latest update for {{ event.name }} is ready.",
+        textTemplate: "Hello {{ recipient.name }} at {{ recipient.email }}.",
+      },
+    },
+  },
+});
 const form = await database.cfpForm.create({
   data: {
     eventId: event.id,

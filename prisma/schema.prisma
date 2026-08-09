@@ -1159,6 +1159,7 @@ model MessageDelivery {
   idempotencyKey    String
   occurrenceKey     String?
   scheduledFor      DateTime?                    @db.Timestamptz(3)
+  cancelledAt       DateTime?                    @db.Timestamptz(3)
   createdAt         DateTime                     @default(now()) @db.Timestamptz(3)
   event             Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   templateVersion   CommunicationTemplateVersion @relation(fields: [templateVersionId, eventId], references: [id, eventId])

@@ -2,11 +2,13 @@ import { notFound } from "next/navigation";
 
 import { CfpSubmissionStatus, SpeakerTaskAssignmentStatus } from "@/generated/prisma/client";
 import { RecipientAudienceRepository, type RecipientAudienceSelection } from "@/server/communications/audiences";
+import { EmailTemplateRepository } from "@/server/communications/templates";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { getDashboardShellData } from "../../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../../_lib/dashboard-shell";
 import { RecipientAudienceWorkspace } from "./_components/recipient-audience-workspace";
+import { randomUUID } from "node:crypto";
 
 interface RecipientAudiencePageProps {
   readonly params: Promise<{ eventSlug: string }>;
@@ -59,10 +61,20 @@ export default async function RecipientAudiencePage({ params, searchParams }: Re
 
   const selection = selectionFrom(query);
   const repository = new RecipientAudienceRepository(client);
-  const [options, preview] = await Promise.all([
+  const [options, preview, templates] = await Promise.all([
     repository.listOptions(event.id),
     hasSelection(selection) ? repository.preview(event.id, selection) : Promise.resolve(null),
+    new EmailTemplateRepository(client).list(event.id),
   ]);
 
-  return <RecipientAudienceWorkspace event={event} options={options} preview={preview} selection={selection} />;
+  return (
+    <RecipientAudienceWorkspace
+      event={event}
+      options={options}
+      preview={preview}
+      selection={selection}
+      confirmationToken={randomUUID()}
+      templates={templates.map(({ id, name, version }) => ({ id, name, version }))}
+    />
+  );
 }
