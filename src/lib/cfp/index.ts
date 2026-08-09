@@ -3,6 +3,7 @@ export { type CfpParseResult, parseCfpDefinition } from "./parser.ts";
 export {
   CFP_BUILT_IN_QUESTION_TYPES,
   CFP_SUPPORTED_VERSIONS,
+  type CfpAccessPolicy,
   type CfpBuiltInQuestionType,
   type CfpCategory,
   type CfpCategoryRoutingRule,
@@ -15,5 +16,6 @@ export {
   type CfpQuestionType,
   type CfpSection,
   type CfpSectionKind,
+  type CfpSubmissionKind,
   type CfpVisibilityRule,
 } from "./types.ts";

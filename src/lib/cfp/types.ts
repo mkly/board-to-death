@@ -58,6 +58,10 @@ export interface CfpQuestion {
 
 export type CfpSectionKind = "speaker" | "questions";
 
+export type CfpSubmissionKind = "ABSTRACT" | "GUARANTEED_SESSION";
+
+export type CfpAccessPolicy = "OPEN" | "RESTRICTED";
+
 export interface CfpSection {
   id: string;
   kind: CfpSectionKind;
@@ -81,6 +85,13 @@ export interface CfpFormDefinition {
   version: number;
   title: string;
   description?: string;
+  submissionKind?: CfpSubmissionKind;
+  accessPolicy?: CfpAccessPolicy;
+  welcomeTitle?: string;
+  welcomeContent?: string;
+  instructions?: string;
+  termsContent?: string;
+  consentRequired?: boolean;
   /** Question type identifiers beyond CFP_BUILT_IN_QUESTION_TYPES that this definition may use. */
   customQuestionTypes?: string[];
   categories?: CfpCategory[];
