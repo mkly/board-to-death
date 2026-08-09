@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { Temporal } from "temporal-polyfill";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { type AgendaConflict, AgendaPlacementRepository, validateAgendaConflicts } from "@/server/agenda";
 import { getDatabaseClient } from "@/server/database/client";
@@ -57,13 +58,21 @@ export default async function AgendaPage({ params }: AgendaPageProps) {
   if (!event) notFound();
 
   const client = getDatabaseClient();
-  const [sessions, placements, rooms, tracks, speakers] = await Promise.all([
-    new ProgramSessionRepository(client).list(event.id),
-    new AgendaPlacementRepository(client).list(event.id),
+  // Each read takes one bounded page rather than the whole table, so this screen
+  // costs the same at ten sessions and at ten thousand. The caps sit above the
+  // benchmarked profile in performance/budgets.json; past them the page says so
+  // instead of silently dropping rows.
+  const [sessionPage, placementPage, rooms, tracks, speakerPage] = await Promise.all([
+    new ProgramSessionRepository(client).listPage(event.id),
+    new AgendaPlacementRepository(client).listPage(event.id),
     client.room.findMany({ where: { eventId: event.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     client.track.findMany({ where: { eventId: event.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    new SpeakerRepository(client).list(event.id),
+    new SpeakerRepository(client).listPage(event.id),
   ]);
+  const sessions = sessionPage.items;
+  const placements = placementPage.items;
+  const speakers = speakerPage.items;
+  const truncated = sessionPage.hasMore || placementPage.hasMore || speakerPage.hasMore;
   const placementBySession = new Map(placements.map((placement) => [placement.sessionId, placement]));
   const roomNames = new Map(rooms.map((room) => [room.id, room.name]));
   const trackNames = new Map(tracks.map((track) => [track.id, track.name]));
@@ -114,6 +123,15 @@ export default async function AgendaPage({ params }: AgendaPageProps) {
 
   return (
     <div className="flex flex-col gap-8">
+      {truncated ? (
+        <Alert>
+          <AlertTitle>Showing part of this event</AlertTitle>
+          <AlertDescription>
+            This event has more sessions, placements, or speakers than the agenda screen loads at once. Conflicts are
+            checked against the {placements.length} placements shown here; use the schedule export for the full program.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <AgendaWorkspace
         event={{
           name: event.name,

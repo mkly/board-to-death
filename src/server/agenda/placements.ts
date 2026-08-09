@@ -1,8 +1,14 @@
 import { addMinutes, differenceInMinutes } from "date-fns";
 
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { type AgendaConflict, validateAgendaConflicts } from "./conflicts.ts";
+
+export interface ListAgendaPlacementsOptions {
+  readonly cursor?: string | null;
+  readonly limit?: number;
+}
 
 export interface AgendaPlacementDetails {
   readonly startsAt: Date;
@@ -330,13 +336,24 @@ export class AgendaPlacementRepository {
     return placement ? fromStored(placement) : null;
   }
 
-  async list(eventId: string): Promise<PersistedAgendaPlacement[]> {
+  /** One bounded page of an event's placements, ordered by start time. */
+  async listPage(
+    eventId: string,
+    options: ListAgendaPlacementsOptions = {},
+  ): Promise<ListPage<PersistedAgendaPlacement>> {
+    const limit = boundedLimit(options.limit, LIST_BOUNDS.agendaPlacements);
     const placements = await this.client.agendaPlacement.findMany({
       where: { eventId },
       include: placementInclude,
       orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      take: limit + 1,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });
-    return placements.map(fromStored);
+    return toListPage(placements.map(fromStored), limit, (placement) => placement.id);
+  }
+
+  async list(eventId: string): Promise<PersistedAgendaPlacement[]> {
+    return collectPages((cursor, take) => this.listPage(eventId, { cursor, limit: take }));
   }
 
   private async replaceRelations(

@@ -1,5 +1,11 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
+
+export interface ListSpeakersOptions {
+  readonly cursor?: string | null;
+  readonly limit?: number;
+}
 
 export interface SpeakerProfileInput {
   readonly email: string;
@@ -249,13 +255,21 @@ export class SpeakerRepository {
     return speaker ? fromStored(speaker) : null;
   }
 
-  async list(eventId: string): Promise<PersistedSpeaker[]> {
+  /** One bounded page of an event's speakers, oldest first. */
+  async listPage(eventId: string, options: ListSpeakersOptions = {}): Promise<ListPage<PersistedSpeaker>> {
+    const limit = boundedLimit(options.limit, LIST_BOUNDS.speakers);
     const speakers = await this.client.speaker.findMany({
       where: { eventId },
       include: speakerInclude,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: limit + 1,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });
-    return speakers.map(fromStored);
+    return toListPage(speakers.map(fromStored), limit, (speaker) => speaker.id);
+  }
+
+  async list(eventId: string): Promise<PersistedSpeaker[]> {
+    return collectPages((cursor, take) => this.listPage(eventId, { cursor, limit: take }));
   }
 
   async updateProfile(

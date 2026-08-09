@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "profile": {
+    "eventSlug": "board-to-death-benchmark",
+    "speakers": 1000,
+    "submissions": 10000,
+    "sessions": 500
+  },
+  "surfaces": {
+    "admin-submission-table": {
+      "maxQueries": 4,
+      "maxDatabaseDurationMs": 1500,
+      "maxTotalDurationMs": 3000
+    },
+    "public-cfp": {
+      "maxQueries": 2,
+      "maxDatabaseDurationMs": 750,
+      "maxTotalDurationMs": 1500
+    },
+    "speaker-portal-dashboard": {
+      "maxQueries": 6,
+      "maxDatabaseDurationMs": 1500,
+      "maxTotalDurationMs": 3000
+    },
+    "agenda": {
+      "maxQueries": 6,
+      "maxDatabaseDurationMs": 4000,
+      "maxTotalDurationMs": 6000
+    },
+    "embeds": {
+      "maxQueries": 3,
+      "maxDatabaseDurationMs": 1500,
+      "maxTotalDurationMs": 3000,
+      "maxResponseBytes": 262144
+    }
+  }
+}

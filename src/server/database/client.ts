@@ -3,6 +3,7 @@ import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "@/generated/prisma/client";
+import { withQueryInstrumentation } from "@/server/observability/prisma-instrumentation";
 
 type PrismaGlobal = typeof globalThis & {
   boardToDeathPrisma?: PrismaClient;
@@ -30,12 +31,17 @@ const SERVERLESS_POOL: Record<string, number> = {
 };
 
 export function createDatabaseClient(databaseUrl = requireDatabaseUrl()): PrismaClient {
-  return new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString: databaseUrl,
-      ...(process.env.VERCEL ? SERVERLESS_POOL : {}),
+  // Instrumentation is unconditional: outside a `withQueryMetrics` scope the
+  // extension only reads a clock, so the benchmark and the browser route
+  // metrics measure the same client production runs.
+  return withQueryInstrumentation(
+    new PrismaClient({
+      adapter: new PrismaPg({
+        connectionString: databaseUrl,
+        ...(process.env.VERCEL ? SERVERLESS_POOL : {}),
+      }),
     }),
-  });
+  );
 }
 
 export function getDatabaseClient(): PrismaClient {

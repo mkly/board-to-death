@@ -66,3 +66,71 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+  performance:
+    name: Performance budgets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: board_to_death_test
+          POSTGRES_USER: board_to_death
+          POSTGRES_PASSWORD: board_to_death
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U board_to_death -d board_to_death_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death?schema=public
+      TEST_DATABASE_URL: postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public
+      AUTH_SECRET: quality-gate-auth-secret-at-least-32-characters
+      BETTER_AUTH_SECRET: quality-gate-better-auth-secret-at-least-32-characters
+      BETTER_AUTH_URL: http://127.0.0.1:3100
+      AUTH_ALLOWED_EMAILS: admin@example.test
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      FILE_STORAGE_PATH: ./.data/files
+      CI: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Reset the test database
+        run: npm run db:test:reset
+
+      - name: Seed the fixed benchmark profile
+        run: npm run perf:seed
+
+      # Fails the job when a committed budget in performance/budgets.json regresses.
+      - name: Measure server-side budgets
+        run: npm run perf:bench
+
+      - name: Measure production-browser route metrics
+        run: npx playwright test tests/browser/performance-budgets.spec.ts
+
+      - name: Publish the performance artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-run
+          path: |
+            performance/latest-run.json
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 30

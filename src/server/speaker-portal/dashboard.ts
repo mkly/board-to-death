@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 
 import { parseCfpDefinition } from "../../lib/cfp/index.ts";
+import { LIST_BOUNDS } from "../database/list-bounds.ts";
 
 export interface SpeakerPortalIdentity {
   readonly eventId: string;
@@ -114,7 +115,16 @@ export class SpeakerPortalRepository {
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       }),
       this.#database.programSession.findMany({
-        where: { eventId: identity.eventId, archivedAt: null },
+        // The participant clause is a prefilter, not the decision: the dashboard
+        // shows a session only when the *latest* version lists this speaker, and
+        // that check still happens below. Without it this read loaded the whole
+        // program on every dashboard render to keep a handful of rows.
+        where: {
+          eventId: identity.eventId,
+          archivedAt: null,
+          versions: { some: { participants: { some: { speakerId: identity.speakerId } } } },
+        },
+        take: LIST_BOUNDS.speakerPortalSessions,
         select: {
           id: true,
           agendaPlacement: { select: { startsAt: true, endsAt: true, room: { select: { name: true } } } },
