@@ -307,6 +307,24 @@ export class CfpAdministratorRepository {
       return mapDatabaseError(error);
     }
   }
+
+  async ensure(input: {
+    readonly eventId: string;
+    readonly externalId: string;
+    readonly displayName: string;
+  }): Promise<CfpAdministrator> {
+    const externalId = requireText(input.externalId, "externalId").toLowerCase();
+    const displayName = requireText(input.displayName, "displayName");
+    try {
+      return await this.client.cfpAdministrator.upsert({
+        where: { eventId_externalId: { eventId: input.eventId, externalId } },
+        create: { eventId: input.eventId, externalId, displayName },
+        update: { displayName },
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
 }
 
 export class CfpPolicyRepository {
@@ -371,6 +389,15 @@ export class CfpPolicyRepository {
   async get(eventId: string, policyId: string, versionNumber?: number): Promise<PersistedCfpPolicyDefinition | null> {
     const version = await this.client.cfpPolicyVersion.findFirst({
       where: { eventId, policyId, ...(versionNumber === undefined ? {} : { versionNumber }) },
+      orderBy: { versionNumber: "desc" },
+      include: versionInclude,
+    });
+    return version ? fromStored(version) : null;
+  }
+
+  async getByKey(eventId: string, key: string): Promise<PersistedCfpPolicyDefinition | null> {
+    const version = await this.client.cfpPolicyVersion.findFirst({
+      where: { eventId, policy: { key: normalizeKey(key) } },
       orderBy: { versionNumber: "desc" },
       include: versionInclude,
     });
