@@ -28,6 +28,7 @@ export interface EvaluationCriterionAggregate {
 
 export interface EvaluationSubmissionResult {
   readonly id: string;
+  readonly status: CfpSubmissionStatus;
   readonly reference: string;
   readonly formTitle: string;
   readonly primarySpeaker: string | null;
@@ -36,6 +37,8 @@ export interface EvaluationSubmissionResult {
   readonly completedReviewerCount: number;
   readonly incompleteReviewerCount: number;
   readonly withdrawnReviewerCount: number;
+  readonly participantCount: number;
+  readonly confirmedParticipantCount: number;
   readonly criteria: readonly EvaluationCriterionAggregate[];
   readonly weightedAverage: number | null;
   readonly rank: number | null;
@@ -156,8 +159,8 @@ export class EvaluationResultsRepository {
         categories: { orderBy: { sortOrder: "asc" }, select: { category: { select: { label: true } } } },
         participants: {
           orderBy: { sortOrder: "asc" },
-          take: 1,
           select: {
+            confirmedAt: true,
             speaker: {
               select: {
                 profileVersions: {
@@ -259,6 +262,7 @@ export class EvaluationResultsRepository {
 
       return {
         id: submission.id,
+        status: submission.status,
         reference: `Submission ${submission.id.slice(0, 8).toUpperCase()}`,
         formTitle: submission.formVersion.title,
         primarySpeaker: speakerName(submission.participants[0]),
@@ -267,6 +271,8 @@ export class EvaluationResultsRepository {
         completedReviewerCount,
         incompleteReviewerCount: activeAssignments.length - completedReviewerCount,
         withdrawnReviewerCount: submission.evaluationAssignments.length - activeAssignments.length,
+        participantCount: submission.participants.length,
+        confirmedParticipantCount: submission.participants.filter(({ confirmedAt }) => confirmedAt !== null).length,
         criteria: calculatedCriteria.map(({ aggregate }) => aggregate),
         weightedAverage,
         rank: null,

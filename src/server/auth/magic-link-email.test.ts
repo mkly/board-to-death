@@ -37,6 +37,35 @@ describe("configured magic-link delivery", () => {
     });
   });
 
+  test("delivers configured wording instead of the sign-in copy", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const send = createConfiguredMagicLinkSender({
+      resendApiKey: "re_test_key",
+      resendFromEmail: "noreply@updates.example.com",
+      wording: {
+        subject: "Confirm your speaking participation",
+        textIntro: "Use this single-use link to confirm your speaking participation. This link expires in 7 days:",
+        htmlIntro: "Use this single-use link to confirm your speaking participation:",
+        linkLabel: "Confirm your participation",
+        htmlExpiry: "This link expires in 7 days.",
+      },
+    });
+
+    await send({ email: "speaker@example.com", url: "https://events.example.com/portal/summit/confirm?token=a" });
+
+    const [, request] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(request?.body))).toEqual({
+      from: "Board to Death <noreply@updates.example.com>",
+      to: ["speaker@example.com"],
+      subject: "Confirm your speaking participation",
+      text: "Use this single-use link to confirm your speaking participation. This link expires in 7 days: https://events.example.com/portal/summit/confirm?token=a",
+      html: '<p>Use this single-use link to confirm your speaking participation:</p><p><a href="https://events.example.com/portal/summit/confirm?token=a">Confirm your participation</a></p><p>This link expires in 7 days.</p>',
+    });
+  });
+
   test("surfaces rejected Resend deliveries without exposing the response body", async () => {
     vi.stubGlobal(
       "fetch",

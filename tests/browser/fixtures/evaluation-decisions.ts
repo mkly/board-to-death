@@ -89,6 +89,48 @@ async function setup() {
       }),
     ),
   );
+  const acceptedSpeakers = await Promise.all(
+    ["ada", "grace"].map((name) =>
+      database.speaker.create({
+        data: {
+          eventId: event.id,
+          normalizedEmail: `${name}@browser-decision.test`,
+          profileVersions: {
+            create: {
+              versionNumber: 1,
+              email: `${name}@browser-decision.test`,
+              givenName: name === "ada" ? "Ada" : "Grace",
+              familyName: name === "ada" ? "Lovelace" : "Hopper",
+            },
+          },
+        },
+      }),
+    ),
+  );
+  const acceptedSubmission = submissions[1];
+  if (!acceptedSubmission) throw new Error("Expected an accepted-submission fixture target.");
+  await database.cfpSubmissionParticipant.createMany({
+    data: acceptedSpeakers.map((speaker, sortOrder) => ({
+      eventId: event.id,
+      submissionId: acceptedSubmission.id,
+      speakerId: speaker.id,
+      sortOrder,
+    })),
+  });
+  await database.speakerTaskDefinition.create({
+    data: {
+      eventId: event.id,
+      key: "speaker-profile",
+      versions: {
+        create: {
+          versionNumber: 1,
+          sortOrder: 0,
+          title: "Complete your confirmed speaker profile",
+          applicability: { confirmedOnly: true, sessionKinds: [] },
+        },
+      },
+    },
+  });
   const plan = await database.evaluationPlan.create({
     data: {
       eventId: event.id,
@@ -147,6 +189,7 @@ async function setup() {
     eventSlug: event.slug,
     roundId: round.id,
     submissionIds: submissions.map(({ id }) => id),
+    acceptedSpeakerIds: acceptedSpeakers.map(({ id }) => id),
     sessionToken: await createAdministratorSession(),
   };
 }
