@@ -50,6 +50,15 @@ test.describe("evaluation reviewer assignments", () => {
   });
 
   test("assigns, reassigns, and withdraws a reviewer through the event workspace", async ({ page }) => {
+    // Every successful apply renders the same "N reviewer assignment(s) updated." alert, so that text
+    // cannot tell one step from the next: the assertion after step two passes instantly against step
+    // one's alert. Wait on the selection counter instead — the workspace clears the selection only
+    // once the action actually resolves, and clicking a checkbox before that clear lands loses it.
+    const applyAction = async () => {
+      await page.getByRole("button", { name: "Apply action" }).click();
+      await expect(page.getByText("0 submissions selected")).toBeVisible();
+    };
+
     await page.goto(`/dashboard/events/${fixture.eventSlug}/evaluations/assignments`);
     await expect(page.getByRole("heading", { name: "Reviewer assignments" })).toBeVisible();
     await expect(page.getByLabel("Open round")).toHaveValue(/.+/);
@@ -61,7 +70,7 @@ test.describe("evaluation reviewer assignments", () => {
       .first()
       .click();
     await page.getByLabel("Reviewer", { exact: true }).selectOption(fixture.sourceReviewerId);
-    await page.getByRole("button", { name: "Apply action" }).click();
+    await applyAction();
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Alex Source", { exact: true })).toBeVisible();
 
@@ -72,7 +81,7 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel("Action").selectOption("reassign");
     await page.getByLabel("Current reviewer").selectOption(fixture.sourceReviewerId);
     await page.getByLabel("Replacement reviewer").selectOption(fixture.targetReviewerId);
-    await page.getByRole("button", { name: "Apply action" }).click();
+    await applyAction();
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Bailey Target", { exact: true })).toBeVisible();
 
@@ -82,14 +91,14 @@ test.describe("evaluation reviewer assignments", () => {
       .click();
     await page.getByLabel("Action").selectOption("withdraw");
     await page.getByLabel("Current reviewer").selectOption(fixture.targetReviewerId);
-    await page.getByRole("button", { name: "Apply action" }).click();
+    await applyAction();
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await expect(page.getByText("Unassigned").first()).toBeVisible();
 
     await page.getByLabel("Select all eligible submissions").click();
     await page.getByLabel("Action").selectOption("assign-committee");
     await page.getByLabel("Reviewer committee").selectOption(fixture.committeeId);
-    await page.getByRole("button", { name: "Apply action" }).click();
+    await applyAction();
     await expect(page.getByText("4 reviewer assignments updated.")).toBeVisible();
     await expect(page.getByText(/Program committee/).first()).toBeVisible();
     await expect(page.getByLabel("Assigned: 2")).toBeVisible();
@@ -102,12 +111,12 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel(`Select submission ${fixture.secondSubmissionId}`).click();
     await page.getByLabel("Action").selectOption("withdraw");
     await page.getByLabel("Current reviewer").selectOption(fixture.sourceReviewerId);
-    await page.getByRole("button", { name: "Apply action" }).click();
+    await applyAction();
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
     await page.getByLabel(`Select submission ${fixture.secondSubmissionId}`).click();
     await page.getByLabel("Action").selectOption("assign-committee");
     await page.getByLabel("Reviewer committee").selectOption(fixture.committeeId);
-    await page.getByRole("button", { name: "Apply action" }).click();
+    await applyAction();
     await expect(page.getByText("0 reviewer assignments updated.")).toBeVisible();
 
     await runFixture("start-evaluation", fixture.firstSubmissionId);

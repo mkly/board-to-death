@@ -42,7 +42,8 @@ test("previews a deduplicated live audience with exact recipients and explained 
   await page.getByRole("checkbox", { name: "Approved" }).check();
   await page.getByRole("button", { name: "Preview audience" }).click();
 
-  await expect(page.getByRole("heading", { name: "2 eligible recipients" })).toBeVisible();
+  // The count renders in a CardTitle, which is a div in this shadcn style rather than a heading.
+  await expect(page.getByText("2 eligible recipients", { exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toHaveCount(1);
   await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toContainText("Selected directly");
   await expect(page.getByRole("row", { name: /Grace Hopper/ })).toContainText("Onboarding approved");
@@ -69,6 +70,6 @@ test("previews a deduplicated live audience with exact recipients and explained 
   await page.getByRole("link", { name: "Clear" }).click();
   await page.getByRole("checkbox", { name: "Rejected" }).check();
   await page.getByRole("button", { name: "Preview audience" }).click();
-  await expect(page.getByRole("heading", { name: "0 eligible recipients" })).toBeVisible();
+  await expect(page.getByText("0 eligible recipients", { exact: true })).toBeVisible();
   await expect(page.getByText("No currently eligible speaker matches the selected criteria.")).toBeVisible();
 });

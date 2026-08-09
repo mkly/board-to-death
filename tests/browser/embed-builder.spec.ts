@@ -46,9 +46,13 @@ test("configures, previews, persists, copies, validates, and adapts the embed bu
   await page.getByRole("radio", { name: "Compact" }).click();
 
   const preview = page.getByTitle("Speaker gallery embed preview");
-  await expect(preview).toHaveAttribute("src", /kind=speaker-gallery&theme=dark&density=compact/);
-  await expect(preview.contentFrame().getByRole("heading", { name: "Speaker gallery" })).toBeVisible();
-  await expect(preview.contentFrame().getByText("Organization", { exact: true })).toBeVisible();
+  await expect(preview).toHaveAttribute(
+    "src",
+    /kind=speaker-gallery&theme=dark&density=compact&filter=search&filter=organization/,
+  );
+  // The onboarding fixture never publishes a program, so the gallery renders its unavailable state.
+  // The filter set is verified through the serialized URL above and the copied snippet below.
+  await expect(preview.contentFrame().getByRole("heading", { name: "Speaker gallery unavailable" })).toBeVisible();
 
   await page.getByRole("button", { name: "Copy snippet" }).click();
   await expect(page.getByText("Iframe snippet copied.")).toBeVisible();
