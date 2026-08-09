@@ -2,15 +2,33 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ArrowLeft } from "lucide-react";
+import { Temporal } from "temporal-polyfill";
 
 import { Button } from "@/components/ui/button";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
+import { CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { getDashboardShellData } from "../../../../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../../../../_lib/dashboard-shell";
+import { CfpPolicySettings } from "./_components/cfp-policy-settings";
 import { CfpSetupWorkspace } from "./_components/cfp-setup-workspace";
+
+function localDateTime(value: Date, timezone: string): string {
+  return Temporal.Instant.fromEpochMilliseconds(value.getTime())
+    .toZonedDateTimeISO(timezone)
+    .toPlainDateTime()
+    .toString({ smallestUnit: "minute" });
+}
+
+function defaultLocalDateTime(value: Date, timezone: string, daysBefore: number): string {
+  return Temporal.Instant.fromEpochMilliseconds(value.getTime())
+    .toZonedDateTimeISO(timezone)
+    .subtract({ days: daysBefore })
+    .toPlainDateTime()
+    .toString({ smallestUnit: "minute" });
+}
 
 export default async function CfpFormSetupPage({
   params,
@@ -25,8 +43,25 @@ export default async function CfpFormSetupPage({
     redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "cfp") : "/dashboard");
   }
 
-  const form = await new CfpFormRepository(getDatabaseClient()).get(event.id, formId);
+  const database = getDatabaseClient();
+  const form = await new CfpFormRepository(database).get(event.id, formId);
   if (!form) notFound();
+  const policy = await new CfpPolicyRepository(database).getByKey(event.id, form.key);
+  const initialSettings = policy
+    ? {
+        submissionOpensAt: localDateTime(policy.definition.submissionOpensAt, event.timezone),
+        submissionClosesAt: localDateTime(policy.definition.submissionClosesAt, event.timezone),
+        draftPolicy: policy.definition.draftPolicy,
+        maxSubmissionsPerSpeaker: policy.definition.submissionLimits.maxSubmissionsPerSpeaker,
+        maxParticipantsPerSubmission: policy.definition.submissionLimits.maxParticipantsPerSubmission,
+      }
+    : {
+        submissionOpensAt: defaultLocalDateTime(event.startsAt, event.timezone, 120),
+        submissionClosesAt: defaultLocalDateTime(event.startsAt, event.timezone, 60),
+        draftPolicy: "ALLOWED" as const,
+        maxSubmissionsPerSpeaker: 3,
+        maxParticipantsPerSubmission: 4,
+      };
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
@@ -42,11 +77,17 @@ export default async function CfpFormSetupPage({
           {form.definition.title}
         </h1>
         <p className="max-w-2xl text-muted-foreground text-sm">
-          Configure the applicant-facing setup, welcome message, and consent terms. Each save creates a new draft
-          version.
+          Configure applicant access, speaker requirements, welcome content, and consent terms. Each save creates a new
+          draft version.
         </p>
       </header>
       <CfpSetupWorkspace definition={form.definition} eventSlug={event.slug} formId={form.formId} />
+      <CfpPolicySettings
+        eventSlug={event.slug}
+        formId={form.formId}
+        timezone={event.timezone}
+        initialSettings={initialSettings}
+      />
     </div>
   );
 }

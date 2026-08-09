@@ -62,6 +62,10 @@ export type CfpSubmissionKind = "ABSTRACT" | "GUARANTEED_SESSION";
 
 export type CfpAccessPolicy = "OPEN" | "RESTRICTED";
 
+export const CFP_REQUIRED_SPEAKER_FIELDS = ["biography", "contact", "consent"] as const;
+
+export type CfpRequiredSpeakerField = (typeof CFP_REQUIRED_SPEAKER_FIELDS)[number];
+
 export interface CfpSection {
   id: string;
   kind: CfpSectionKind;
@@ -92,6 +96,9 @@ export interface CfpFormDefinition {
   instructions?: string;
   termsContent?: string;
   consentRequired?: boolean;
+  minimumSpeakerCount?: number;
+  maximumSpeakerCount?: number;
+  requiredSpeakerFields?: CfpRequiredSpeakerField[];
   /** Question type identifiers beyond CFP_BUILT_IN_QUESTION_TYPES that this definition may use. */
   customQuestionTypes?: string[];
   categories?: CfpCategory[];

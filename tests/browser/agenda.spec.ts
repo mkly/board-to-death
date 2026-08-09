@@ -189,27 +189,58 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await concurrentPage.goto(`/dashboard/events/${event.slug}/agenda`);
     await concurrentPage.getByRole("combobox", { name: "Status" }).click();
     await concurrentPage.getByRole("option", { name: "Scheduled", exact: true }).click();
-    await expect(concurrentPage.getByText("Opening keynote")).toBeVisible();
-    await expect(concurrentPage.getByText("Cooperative tension lab")).toBeVisible();
+    await expect(concurrentPage.getByRole("link", { name: "Opening keynote" })).toBeVisible();
+    await expect(concurrentPage.getByRole("link", { name: "Cooperative tension lab" })).toBeVisible();
     await concurrentPage.close();
 
     await page.reload();
-    await page.getByRole("combobox", { name: "Status" }).click();
-    await page.getByRole("option", { name: "Scheduled", exact: true }).click();
-    await page.getByRole("button", { name: "Edit placement for Cooperative tension lab" }).click();
-    await expect(page.getByLabel("Starts at")).toHaveValue("2027-03-13T10:15");
-    await page.getByLabel("Starts at").fill("2027-03-13T12:00");
-    await page.getByRole("button", { name: "Save placement" }).click();
-    await expect(page.getByText("Agenda placement saved.")).toBeVisible();
+    const persistedPlacements = await database.query<{ id: string; sessionId: string }>(
+      `SELECT "id", "sessionId" FROM "agenda_placements" WHERE "eventId" = $1`,
+      [event.id],
+    );
+    const firstPlacementId = persistedPlacements.rows.find(({ sessionId }) => sessionId === firstSessionId)?.id;
+    const secondPlacementId = persistedPlacements.rows.find(({ sessionId }) => sessionId === secondSessionId)?.id;
+    expect(firstPlacementId).toBeTruthy();
+    expect(secondPlacementId).toBeTruthy();
 
-    await page.reload();
+    const conflictReview = page.getByRole("region", { name: "Conflict review" });
+    await expect(conflictReview.getByRole("heading", { name: "Room", exact: true })).toBeVisible();
+    const roomConflict = conflictReview.getByRole("alert").filter({ hasText: "Room: Main Hall" });
+    await expect(roomConflict).toContainText("Opening keynote");
+    await expect(roomConflict).toContainText("Cooperative tension lab");
+    await conflictReview.getByRole("link", { name: "Review Opening keynote" }).first().click();
+    await expect(page).toHaveURL(new RegExp(`#conflict-placement-${firstPlacementId}$`));
+    await conflictReview.getByRole("link", { name: "Review Cooperative tension lab" }).first().click();
+    await expect(page).toHaveURL(new RegExp(`#conflict-placement-${secondPlacementId}$`));
+    await conflictReview.getByRole("radio", { name: "Speaker" }).click();
+    await expect(conflictReview.getByText("0 of 2 conflicts")).toBeVisible();
+    await conflictReview.getByRole("radio", { name: "Room" }).click();
+    await expect(conflictReview.getByText("1 of 2 conflicts")).toBeVisible();
+
+    await database.query(`UPDATE "agenda_placements" SET "version" = "version" + 1, "updatedAt" = $1 WHERE "id" = $2`, [
+      new Date(),
+      secondPlacementId,
+    ]);
+    const staleEditor = page.locator(`#conflict-placement-${secondPlacementId}`);
+    await staleEditor.getByLabel("Start time").fill("2027-03-13T12:00");
+    await staleEditor.getByRole("button", { name: "Save placement" }).click();
+    await expect(staleEditor.getByText("The agenda placement changed; reload it before saving again.")).toBeVisible();
+
+    await conflictReview.getByRole("button", { name: "Refresh conflicts" }).click();
+    const refreshedEditor = page.locator(`#conflict-placement-${secondPlacementId}`);
+    await expect(refreshedEditor.getByText("v2")).toBeVisible();
+    await refreshedEditor.getByLabel("Start time").fill("2027-03-13T12:00");
+    await refreshedEditor.getByRole("button", { name: "Save placement" }).click();
+    await expect(conflictReview.getByText("No agenda conflicts")).toBeVisible();
+
     await page.getByRole("combobox", { name: "Status" }).click();
     await page.getByRole("option", { name: "Scheduled", exact: true }).click();
     await page.getByRole("button", { name: "Edit placement for Cooperative tension lab" }).click();
     await expect(page.getByLabel("Starts at")).toHaveValue("2027-03-13T12:00");
     await page.getByRole("button", { name: "Remove" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Remove placement" }).click();
-    await expect(page.getByText("Session removed from the agenda.")).toBeVisible();
+    await expect(page.getByText("1 session")).toBeVisible();
+    await expect(page.getByText("Cooperative tension lab")).toHaveCount(0);
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [event.id]);
   }

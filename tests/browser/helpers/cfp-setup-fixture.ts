@@ -39,6 +39,9 @@ async function setup() {
       instructions: "Complete each required field before submitting your proposal.",
       termsContent: "",
       consentRequired: false,
+      minimumSpeakerCount: 1,
+      maximumSpeakerCount: 1,
+      requiredSpeakerFields: [],
       sections: [{ id: "proposal", kind: "questions", title: "Proposal", questions: [] }],
     },
   });

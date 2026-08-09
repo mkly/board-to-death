@@ -60,6 +60,48 @@ describe("parseCfpDefinition", () => {
     }
   });
 
+  it("accepts supported speaker count and required-field rules", () => {
+    const result = parseCfpDefinition(
+      baseDefinition({
+        minimumSpeakerCount: 1,
+        maximumSpeakerCount: 4,
+        requiredSpeakerFields: ["biography", "contact", "consent"],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects inconsistent counts and unsupported required speaker fields", () => {
+    const inconsistent = parseCfpDefinition(baseDefinition({ minimumSpeakerCount: 3, maximumSpeakerCount: 2 }));
+    const partial = parseCfpDefinition(baseDefinition({ minimumSpeakerCount: 1 }));
+    const unsupported = parseCfpDefinition({
+      ...baseDefinition(),
+      requiredSpeakerFields: ["social-security-number"],
+    });
+
+    expect(inconsistent).toEqual(
+      expect.objectContaining({
+        ok: false,
+        errors: expect.arrayContaining([expect.objectContaining({ path: "minimumSpeakerCount" })]),
+      }),
+    );
+    expect(partial).toEqual(
+      expect.objectContaining({
+        ok: false,
+        errors: expect.arrayContaining([expect.objectContaining({ path: "maximumSpeakerCount" })]),
+      }),
+    );
+    expect(unsupported).toEqual(
+      expect.objectContaining({
+        ok: false,
+        errors: expect.arrayContaining([
+          expect.objectContaining({ code: "malformed_definition", path: "requiredSpeakerFields.0" }),
+        ]),
+      }),
+    );
+  });
+
   it("accepts a custom question type declared in customQuestionTypes", () => {
     const definition = baseDefinition({
       customQuestionTypes: ["speaker_bio_rich_text"],

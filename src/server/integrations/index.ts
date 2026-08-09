@@ -27,3 +27,9 @@ export type {
   SpeakerPreviewItem,
 } from "./speaker-mapping.ts";
 export { SpeakerMappingRepository, speakerMappingSources } from "./speaker-mapping.ts";
+export type {
+  PushAcceleventsSpeakersInput,
+  SpeakerPushRecordResult,
+  SpeakerPushResult,
+} from "./speaker-push.ts";
+export { AcceleventsSpeakerPushService } from "./speaker-push.ts";

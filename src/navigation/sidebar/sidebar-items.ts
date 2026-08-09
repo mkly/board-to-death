@@ -108,6 +108,24 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
           };
         }
 
+        if (id === "publishing") {
+          return {
+            id,
+            title,
+            icon,
+            disabled,
+            subItems: [
+              { id: "publishing-overview", title: "Publishing", url, disabled },
+              {
+                id: "embed-builder",
+                title: "Embed builder",
+                url: eventSlug ? `${url}/embeds` : "/dashboard",
+                disabled,
+              },
+            ],
+          };
+        }
+
         return { id, title, icon, url, disabled };
       }),
     },
