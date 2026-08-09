@@ -1,6 +1,10 @@
 import type { Prisma } from "@/generated/prisma/client";
 
-import { parsePortalFormAnswers, parsePortalFormDefinition, validatePortalFormAnswers } from "../../lib/portal-forms.ts";
+import {
+  parsePortalFormAnswers,
+  parsePortalFormDefinition,
+  validatePortalFormAnswers,
+} from "../../lib/portal-forms.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export type SpeakerTaskResponseKind = "CONFIRMATION" | "FILE" | "FORM" | "NONE" | "TEXT";

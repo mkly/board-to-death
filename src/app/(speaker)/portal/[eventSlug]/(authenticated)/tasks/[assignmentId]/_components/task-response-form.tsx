@@ -158,9 +158,7 @@ function PortalFormResponse({ action, definition, initialAnswers }: PortalFormRe
                       />
                       <div className="flex flex-col gap-1">
                         <FieldLabel htmlFor={field.id}>{field.label}</FieldLabel>
-                        {field.reusableKey ? (
-                          <FieldDescription>Reused across assigned forms.</FieldDescription>
-                        ) : null}
+                        {field.reusableKey ? <FieldDescription>Reused across assigned forms.</FieldDescription> : null}
                         <FieldError>{error}</FieldError>
                       </div>
                     </Field>

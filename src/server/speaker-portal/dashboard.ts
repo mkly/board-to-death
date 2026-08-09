@@ -151,7 +151,9 @@ export class SpeakerPortalRepository {
           dueAt: true,
           submittedAt: true,
           completedAt: true,
-          definitionVersion: { select: { title: true, description: true, responseRequired: true, responseSchema: true } },
+          definitionVersion: {
+            select: { title: true, description: true, responseRequired: true, responseSchema: true },
+          },
         },
         orderBy: [{ dueAt: "asc" }, { assignedAt: "asc" }, { id: "asc" }],
       }),
