@@ -59,6 +59,7 @@ const workspaces = [
   { id: "dashboards", title: "Custom dashboards", icon: LayoutDashboard },
   { id: "cfp", title: "Call for proposals", icon: FormInput },
   { id: "submissions", title: "Submissions", icon: FileText },
+  { id: "contacts", title: "Contacts", icon: Users },
   { id: "sessions", title: "Sessions", icon: Presentation },
   { id: "speakers", title: "Speakers", icon: Users },
   { id: "onboarding", title: "Onboarding", icon: UserRoundCheck },
