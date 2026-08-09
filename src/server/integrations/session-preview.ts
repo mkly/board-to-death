@@ -254,8 +254,12 @@ export function buildSessionOutboundRecords(
   const rooms = new Map(snapshot.rooms.map((room) => [room.id, room.name]));
   const tracks = new Map(snapshot.tracks.map((track) => [track.id, track.name]));
   const links = new Map(remoteRecords.map((record) => [`${record.resourceType}:${record.localId}`, record]));
+  // A published snapshot carries one session entry per agenda placement, so a
+  // session placed twice appears twice. One local session must yield exactly
+  // one outbound record for the preview, the CSV, and any later push.
+  const sessions = [...new Map(snapshot.sessions.map((session) => [session.id, session])).values()];
 
-  return snapshot.sessions.map((session) => {
+  return sessions.map((session) => {
     const explanations: string[] = [];
     const placements = placementsBySession.get(session.id) ?? [];
     const placement = placements[0];

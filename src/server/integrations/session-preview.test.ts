@@ -229,4 +229,77 @@ describe("Accelevents session mapping preview", () => {
     expect(records[0]).toMatchObject({ action: "invalid" });
     expect(records[0]?.explanations).toContain("Published schedule times are invalid or out of order.");
   });
+
+  it("invalidates records whose linked remote speaker no longer exists remotely", async () => {
+    const result = await previewAcceleventsSessions({
+      eventId,
+      remoteEventId: "remote-event",
+      snapshot: snapshot(),
+      mapping: DEFAULT_SESSION_MAPPING,
+      remoteRecords: remoteRecords(),
+      connection: { remoteEventId: "remote-event", apiKey: "runtime-key" },
+      adapter: new DeterministicAcceleventsAdapter({
+        remoteEventId: "remote-event",
+        apiKey: "runtime-key",
+        speakers: [],
+        sessions: [
+          { remoteId: "remote-update", title: "Old title", description: "update description", speakerRemoteIds: [] },
+        ],
+      }),
+    });
+
+    const record = result.records.find(({ localId }) => localId === "update");
+    expect(record?.action).toBe("invalid");
+    expect(record?.explanations).toContain("Linked Accelevents speaker remote-speaker-1 is unavailable.");
+  });
+
+  it("invalidates records whose linked remote session no longer exists remotely", async () => {
+    const result = await previewAcceleventsSessions({
+      eventId,
+      remoteEventId: "remote-event",
+      snapshot: snapshot(),
+      mapping: DEFAULT_SESSION_MAPPING,
+      remoteRecords: remoteRecords(),
+      connection: { remoteEventId: "remote-event", apiKey: "runtime-key" },
+      adapter: new DeterministicAcceleventsAdapter({
+        remoteEventId: "remote-event",
+        apiKey: "runtime-key",
+        speakers: [
+          { remoteId: "remote-speaker-1", email: "ada@example.test", firstName: "Ada", lastName: "Lovelace" },
+        ],
+        sessions: [],
+      }),
+    });
+
+    const record = result.records.find(({ localId }) => localId === "update");
+    expect(record?.action).toBe("invalid");
+    expect(record?.explanations).toContain("Linked Accelevents session remote-update is unavailable.");
+  });
+
+  it("emits one outbound record per local session when a session is placed more than once", () => {
+    const source = snapshot();
+    const doubled: PublishedProgramSnapshot = {
+      ...source,
+      // A published snapshot repeats the session entry for every placement.
+      sessions: [...source.sessions, ...source.sessions.filter(({ id }) => id === "unchanged")],
+      placements: [
+        ...source.placements,
+        {
+          id: "placement-unchanged-second",
+          sessionId: "unchanged",
+          roomId: "room-1",
+          startsAt: "2027-03-13T15:00:00.000Z",
+          endsAt: "2027-03-13T15:45:00.000Z",
+          trackIds: ["track-1"],
+          speakerIds: ["speaker-1"],
+        },
+      ],
+    };
+    const records = buildSessionOutboundRecords(eventId, doubled, DEFAULT_SESSION_MAPPING, remoteRecords());
+
+    expect(records.map(({ localId }) => localId)).toEqual([...sessionIds]);
+    const record = records.find(({ localId }) => localId === "unchanged");
+    expect(record?.action).toBe("invalid");
+    expect(record?.explanations).toContain("Session must have exactly one published placement.");
+  });
 });
