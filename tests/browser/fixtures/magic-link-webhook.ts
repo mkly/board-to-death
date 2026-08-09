@@ -22,7 +22,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 const defaultWebhookUrl = "http://127.0.0.1:3199";
 const controlPrefix = "/__magic-link-broker";
 const requestPathPattern = new RegExp(`^${controlPrefix}/requests/([^/]+)$`);
-const adminEmail = "admin@example.test";
+export const adminEmail = "admin@example.test";
 // A turn's deadline starts when the spec registers, and the spec only reaches
 // the sign-in click after the dev web server compiles /auth/v1/login on demand.
 // The authenticated specs allow 120s of test time for exactly that compile, so
