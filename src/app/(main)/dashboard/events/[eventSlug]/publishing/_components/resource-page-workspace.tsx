@@ -123,12 +123,21 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
 
   const [feedback, setFeedback] = useState("");
   const [mutationPending, startMutation] = useTransition();
+
+  // Refreshing inside a transition keeps that transition pending on the server round trip, which leaves the
+  // workspace showing pre-mutation data. Requesting the refresh here runs it after the transition settles.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const requestRefresh = () => setRefreshToken((current) => current + 1);
+  useEffect(() => {
+    if (refreshToken > 0) router.refresh();
+  }, [refreshToken, router]);
+
   const [saveState, saveAction, savePending] = useActionState(
     async (previousState: ResourcePageMutationState, formData: FormData) => {
       const result = await saveResourcePage(previousState, formData);
       if (result.status === "success") {
         if (result.pageId) setSelectedId(result.pageId);
-        router.refresh();
+        requestRefresh();
       }
       return result;
     },
@@ -148,7 +157,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     startMutation(async () => {
       const result = await publishResourcePage(event.slug, selected.id, publishable.id);
       setFeedback(result.message ?? "");
-      if (result.status === "success") router.refresh();
+      if (result.status === "success") requestRefresh();
     });
   };
 
@@ -157,7 +166,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     startMutation(async () => {
       const result = await unpublishResourcePage(event.slug, selected.id);
       setFeedback(result.message ?? "");
-      if (result.status === "success") router.refresh();
+      if (result.status === "success") requestRefresh();
     });
   };
 
@@ -168,7 +177,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
       setFeedback(result.message ?? "");
       if (result.status === "success") {
         setSelectedId(null);
-        router.refresh();
+        requestRefresh();
       }
     });
   };
@@ -177,7 +186,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     startMutation(async () => {
       const result = await moveResourcePage(event.slug, pageId, direction);
       setFeedback(result.message ?? "");
-      if (result.status === "success") router.refresh();
+      if (result.status === "success") requestRefresh();
     });
   };
 
