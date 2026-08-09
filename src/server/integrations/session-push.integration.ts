@@ -10,8 +10,9 @@ import {
   PublishedProgramState,
 } from "../../generated/prisma/client.ts";
 import type { PublishedProgramSnapshot } from "../published-program/repositories.ts";
+import { SpeakerRepository } from "../speakers/repositories.ts";
 import { DeterministicAcceleventsAdapter } from "./accelevents.ts";
-import { AcceleventsSessionPushService } from "./session-push.ts";
+import { AcceleventsProgramPushService, AcceleventsSessionPushService } from "./session-push.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -158,6 +159,126 @@ async function createFixture() {
   return { event, configuration, updateId, missingId, createId };
 }
 
+async function createProgramFixture() {
+  const event = await client.event.create({
+    data: {
+      name: "Session push test",
+      slug: "session-push-test",
+      timezone: "America/Los_Angeles",
+      startsAt: new Date("2027-04-10T16:00:00.000Z"),
+      endsAt: new Date("2027-04-11T00:00:00.000Z"),
+    },
+  });
+  await client.integrationConfiguration.create({
+    data: {
+      eventId: event.id,
+      provider: IntegrationProvider.ACCELEVENTS,
+      versions: {
+        create: {
+          versionNumber: 1,
+          remoteEventId: connection.remoteEventId,
+          credentialReference: "local://program-push-test",
+          settings: {},
+        },
+      },
+      fieldMappings: {
+        create: [
+          {
+            resourceType: "speaker",
+            key: "public-profile",
+            versions: {
+              create: {
+                versionNumber: 1,
+                definition: {
+                  email: "profile.email",
+                  firstName: "profile.givenName",
+                  lastName: "profile.familyName",
+                },
+              },
+            },
+          },
+          {
+            resourceType: "session",
+            key: "outbound-session",
+            versions: {
+              create: {
+                versionNumber: 1,
+                definition: {
+                  title: "session.title",
+                  description: "session.description",
+                  speakers: "linked-speakers",
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+  const speaker = await new SpeakerRepository(client).create({
+    eventId: event.id,
+    email: "program@example.test",
+    givenName: "Program",
+    familyName: "Speaker",
+    consentToPublishProfile: true,
+    consentedAt: new Date("2027-01-10T18:00:00.000Z"),
+  });
+  const sessionId = "session-program";
+  const roomId = "room-main";
+  const snapshot: PublishedProgramSnapshot = {
+    schemaVersion: 1,
+    event: {
+      id: event.id,
+      name: event.name,
+      slug: event.slug,
+      websiteUrl: null,
+      location: null,
+      timezone: event.timezone,
+      startsAt: event.startsAt.toISOString(),
+      endsAt: event.endsAt.toISOString(),
+      theme: null,
+    },
+    rooms: [{ id: roomId, name: "Main", sortOrder: 0 }],
+    tracks: [],
+    speakers: [],
+    sessions: [
+      {
+        id: sessionId,
+        title: "Program session",
+        description: null,
+        durationMinutes: 30,
+        trackId: null,
+        speakerIds: [speaker.id],
+      },
+    ],
+    placements: [
+      {
+        id: "placement-0",
+        sessionId,
+        roomId,
+        startsAt: new Date(Date.UTC(2027, 3, 10, 16, 0)).toISOString(),
+        endsAt: new Date(Date.UTC(2027, 3, 10, 16, 30)).toISOString(),
+        trackIds: [],
+        speakerIds: [],
+      },
+    ],
+  };
+  await client.publishedProgram.create({
+    data: {
+      eventId: event.id,
+      versions: {
+        create: {
+          versionNumber: 1,
+          state: PublishedProgramState.PUBLISHED,
+          actorPrincipalId: "program-push-test",
+          snapshot: snapshot as unknown as Prisma.InputJsonValue,
+        },
+      },
+    },
+  });
+  return { event, speaker, sessionId };
+}
+
 function byLocalId(result: Awaited<ReturnType<AcceleventsSessionPushService["push"]>>) {
   return new Map(result.records.map((record) => [record.localId, record]));
 }
@@ -273,5 +394,31 @@ describe("Accelevents session push", () => {
     });
     assert.equal(preserved?.remoteId, "stale-session");
     assert.equal(preserved?.comparisonHash, "old-hash");
+  });
+
+  test("pushes speakers before the sessions that link them", async () => {
+    const fixture = await createProgramFixture();
+    const adapter = new DeterministicAcceleventsAdapter({ ...connection });
+    const result = await new AcceleventsProgramPushService(client).push({
+      eventId: fixture.event.id,
+      idempotencyKey: "published-program:1",
+      confirmed: true,
+      adapter,
+      connection,
+    });
+
+    assert.equal(result.speakers.status, IntegrationSyncRunStatus.SUCCEEDED);
+    assert.equal(result.sessions.status, IntegrationSyncRunStatus.SUCCEEDED);
+    assert.deepEqual(
+      adapter.requests.map(({ operation }) => operation),
+      ["create-speaker", "create-session"],
+    );
+
+    const speakerRemoteId = byLocalId(result.speakers).get(fixture.speaker.id)?.remoteId;
+    const sessionRemoteId = byLocalId(result.sessions).get(fixture.sessionId)?.remoteId;
+    if (!speakerRemoteId || !sessionRemoteId) throw new Error("The program push did not persist both remote ids.");
+    const remote = await adapter.getSession(connection, sessionRemoteId);
+    if (!remote.ok) throw new Error("The pushed session was not created remotely.");
+    assert.deepEqual(remote.value.speakerRemoteIds, [speakerRemoteId]);
   });
 });
