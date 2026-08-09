@@ -9,6 +9,11 @@ export function publicCfpHref(publicId: string): string {
   return `/cfp/${encodeURIComponent(publicId)}`;
 }
 
+export function publicCfpStartHref(publicId: string, draftToken?: string): string {
+  const base = `${publicCfpHref(publicId)}/start`;
+  return draftToken ? `${base}?draft=${encodeURIComponent(draftToken)}` : base;
+}
+
 export function validateCfpDefinitionForPublication(definition: CfpFormDefinition): readonly CfpPublicationIssue[] {
   const issues: CfpPublicationIssue[] = [];
   const requireLength = (path: string, value: string | undefined, minimum: number, message: string) => {

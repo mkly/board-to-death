@@ -1,4 +1,4 @@
-import { CfpAccessPolicy, CfpPolicyStatus, type PrismaClient } from "../../generated/prisma/client.ts";
+import { CfpAccessPolicy, CfpDraftPolicy, CfpPolicyStatus, type PrismaClient } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { cfpDefinitionInputFromStored } from "./definition.ts";
 
@@ -27,6 +27,8 @@ export type CfpPublicAccessLookup =
   | {
       readonly status: "open";
       readonly publicId: string;
+      readonly policyId: string;
+      readonly draftPolicy: CfpDraftPolicy;
       readonly event: CfpPublicAccessEvent & { readonly timezone: string; readonly theme: string | null };
       readonly form: CfpPublicAccessForm;
       readonly opensAt: Date | null;
@@ -53,6 +55,7 @@ export class CfpPublicAccessRepository {
     const policy = await this.client.cfpPolicy.findUnique({
       where: { publicId },
       select: {
+        id: true,
         status: true,
         event: { select: { id: true, name: true, timezone: true, theme: true } },
         publishedFormVersion: {
@@ -100,7 +103,7 @@ export class CfpPublicAccessRepository {
         versions: {
           orderBy: { versionNumber: "desc" },
           take: 1,
-          select: { submissionOpensAt: true, submissionClosesAt: true },
+          select: { submissionOpensAt: true, submissionClosesAt: true, draftPolicy: true },
         },
       },
     });
@@ -140,6 +143,8 @@ export class CfpPublicAccessRepository {
     return {
       status: "open",
       publicId,
+      policyId: policy.id,
+      draftPolicy: policyVersion?.draftPolicy ?? CfpDraftPolicy.DISABLED,
       event: { ...event, timezone: policy.event.timezone, theme: policy.event.theme },
       form: {
         versionId: stored.id,

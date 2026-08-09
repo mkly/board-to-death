@@ -36,22 +36,37 @@ interface SpeakerFields {
 interface PublicCfpSpeakersProps {
   readonly definition: CfpFormDefinition;
   readonly state: PublicCfpFormActionState;
+  readonly initialParticipants?: readonly Record<string, string>[];
 }
 
 function emptySpeaker(key: number): SpeakerFields {
   return { key, givenName: "", familyName: "", email: "", phone: "", biography: "", consent: false };
 }
 
+function speakerFromRecord(record: Record<string, string> | undefined, key: number): SpeakerFields {
+  return {
+    key,
+    givenName: record?.givenName ?? "",
+    familyName: record?.familyName ?? "",
+    email: record?.email ?? "",
+    phone: record?.phone ?? "",
+    biography: record?.biography ?? "",
+    consent: Boolean(record?.consent),
+  };
+}
+
 function fieldErrors(state: PublicCfpFormActionState, name: string) {
   return state.errors?.[name]?.map((message) => ({ message }));
 }
 
-export function PublicCfpSpeakers({ definition, state }: PublicCfpSpeakersProps) {
+export function PublicCfpSpeakers({ definition, state, initialParticipants }: PublicCfpSpeakersProps) {
   const minimum = definition.minimumSpeakerCount;
   const maximum = definition.maximumSpeakerCount;
-  const nextKey = useRef(minimum ?? 0);
+  const nextKey = useRef(Math.max(initialParticipants?.length ?? 0, minimum ?? 0));
   const [speakers, setSpeakers] = useState<readonly SpeakerFields[]>(() =>
-    Array.from({ length: minimum ?? 0 }, (_, index) => emptySpeaker(index)),
+    initialParticipants && initialParticipants.length > 0
+      ? initialParticipants.map((participant, index) => speakerFromRecord(participant, index))
+      : Array.from({ length: minimum ?? 0 }, (_, index) => emptySpeaker(index)),
   );
   if (minimum === undefined || maximum === undefined) return null;
 

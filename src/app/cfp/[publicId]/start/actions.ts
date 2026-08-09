@@ -2,8 +2,10 @@
 
 import { z } from "zod";
 
+import { CfpDraftPolicy } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
 import { validateCfpAnswers } from "@/lib/cfp";
+import { CfpDraftRepository } from "@/server/cfp/drafts";
 import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
 import {
   CfpCategoryRepository,
@@ -11,12 +13,20 @@ import {
   CfpSubmissionRepository,
 } from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
+import { RepositoryError } from "@/server/events/repositories";
 
 export interface PublicCfpFormActionState {
   readonly status: "idle" | "error" | "success";
   readonly message?: string;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
   readonly submissionId?: string;
+}
+
+export interface SaveCfpDraftActionState {
+  readonly status: "idle" | "error" | "success";
+  readonly message?: string;
+  readonly token?: string;
+  readonly expiresAt?: string;
 }
 
 function valuesFromFormData(definition: CfpFormDefinition, formData: FormData): Record<string, unknown> {
@@ -32,6 +42,23 @@ function valuesFromFormData(definition: CfpFormDefinition, formData: FormData): 
     if (name.startsWith("answer.")) values[name.slice("answer.".length)] ??= value;
   }
   return values;
+}
+
+function rawParticipantsFromFormData(formData: FormData): readonly Record<string, string>[] {
+  const raw = new Map<number, Record<string, string>>();
+  for (const [name, value] of formData.entries()) {
+    if (typeof value !== "string") continue;
+    const match = /^speaker\.(\d+)\.([A-Za-z][A-Za-z0-9]*)$/.exec(name);
+    if (!match) continue;
+    const index = Number(match[1]);
+    const participant = raw.get(index) ?? {};
+    participant[match[2]] = value;
+    raw.set(index, participant);
+  }
+  return [...raw.keys()]
+    .sort((left, right) => left - right)
+    .map((index) => raw.get(index))
+    .filter((participant) => participant !== undefined);
 }
 
 type SpeakerParseResult =
@@ -178,6 +205,14 @@ export async function submitPublicCfpForm(
       categoryIds,
       participants: speakers.participants,
     });
+
+    const draftToken = formData.get("draftToken");
+    if (typeof draftToken === "string" && draftToken.trim() !== "") {
+      await new CfpDraftRepository({ database: client })
+        .discard({ eventId: lookup.event.id, policyId: lookup.policyId, token: draftToken })
+        .catch(() => undefined);
+    }
+
     return {
       status: "success",
       message: "Your proposal was submitted.",
@@ -185,5 +220,49 @@ export async function submitPublicCfpForm(
     };
   } catch {
     return { status: "error", message: "Your proposal could not be submitted. Try again." };
+  }
+}
+
+export async function saveCfpDraft(
+  publicId: string,
+  _previousState: SaveCfpDraftActionState,
+  formData: FormData,
+): Promise<SaveCfpDraftActionState> {
+  const client = getDatabaseClient();
+  const lookup = await new CfpPublicAccessRepository(client).findByPublicId(publicId);
+  if (lookup.status !== "open") {
+    return { status: "error", message: "This CFP is no longer accepting responses. Refresh the page to continue." };
+  }
+  if (lookup.draftPolicy === CfpDraftPolicy.DISABLED) {
+    return { status: "error", message: "Drafts are not enabled for this form." };
+  }
+
+  const answers = valuesFromFormData(lookup.form.definition, formData);
+  const participants = rawParticipantsFromFormData(formData);
+  const existingToken = formData.get("draftToken");
+  const token = typeof existingToken === "string" && existingToken.trim() !== "" ? existingToken : undefined;
+
+  try {
+    const draft = await new CfpDraftRepository({ database: client }).save({
+      eventId: lookup.event.id,
+      policyId: lookup.policyId,
+      draftPolicy: lookup.draftPolicy,
+      formVersionId: lookup.form.versionId,
+      answers,
+      participants,
+      categoryKeys: [],
+      token,
+    });
+    return {
+      status: "success",
+      message: "Your draft was saved. Use the link below to resume it later.",
+      token: draft.token,
+      expiresAt: draft.expiresAt.toISOString(),
+    };
+  } catch (error) {
+    if (error instanceof RepositoryError) {
+      return { status: "error", message: error.message };
+    }
+    return { status: "error", message: "Your draft could not be saved. Try again." };
   }
 }
