@@ -1,13 +1,17 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { EventType, PrismaClient } from "../../generated/prisma/client.ts";
+import { EventType, PrismaClient, ProgramSessionParticipantRole } from "../../generated/prisma/client.ts";
 import { EventRepository } from "../events/repositories.ts";
+import { ProgramSessionRepository } from "../sessions/repositories.ts";
+import { SpeakerRepository } from "../speakers/repositories.ts";
 import {
   archiveContact,
   createContact,
   getDirectoryPersonProfile,
   linkDirectoryPersonToEvent,
+  listContactProgramSessionParticipations,
   listContacts,
+  reassignContactProgramSessionParticipations,
   searchDirectoryPeople,
   updateContact,
 } from "./repositories.ts";
@@ -19,6 +23,8 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for contact director
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const events = new EventRepository(client);
+const sessions = new ProgramSessionRepository(client);
+const speakers = new SpeakerRepository(client);
 
 async function createEvent(slug: string, startsAt: string) {
   return events.create({
@@ -141,6 +147,102 @@ describe("organization contact directory", () => {
     assert.deepEqual(
       (await listContacts(client, event.id)).map(({ id }) => id),
       [contact.id],
+    );
+  });
+
+  test("lists a contact's program session participation through its person identity", async () => {
+    const event = await createEvent("contact-participation", "2027-08-01T16:00:00.000Z");
+    const otherEvent = await createEvent("contact-participation-other", "2027-09-01T16:00:00.000Z");
+    const contact = await createContact(client, {
+      eventId: event.id,
+      email: "speaker@example.test",
+      givenName: "Session",
+      familyName: "Speaker",
+    });
+    assert.ok(contact.personId);
+    const otherContact = await linkDirectoryPersonToEvent(client, otherEvent.id, contact.personId);
+    const speaker = await speakers.create({
+      eventId: event.id,
+      email: contact.email,
+      givenName: contact.givenName,
+      familyName: contact.familyName,
+    });
+    const storedSpeaker = await client.speaker.findUniqueOrThrow({ where: { id: speaker.id } });
+    assert.equal(storedSpeaker.personId, contact.personId);
+
+    const session = await sessions.createManual({
+      eventId: event.id,
+      title: "Identity joins",
+      durationMinutes: 45,
+      participants: [{ speakerId: speaker.id, role: ProgramSessionParticipantRole.SPEAKER }],
+    });
+
+    const participations = await listContactProgramSessionParticipations(client, event.id, contact.id);
+    assert.deepEqual(
+      participations.map(({ sessionVersion, role }) => ({ sessionId: sessionVersion.sessionId, role })),
+      [{ sessionId: session.id, role: ProgramSessionParticipantRole.SPEAKER }],
+    );
+    assert.deepEqual(await listContactProgramSessionParticipations(client, otherEvent.id, otherContact.id), []);
+  });
+
+  test("reassigns session participation while collapsing target and order collisions", async () => {
+    const event = await createEvent("reassign-participation", "2027-10-01T16:00:00.000Z");
+    const sourceContact = await createContact(client, {
+      eventId: event.id,
+      email: "duplicate@example.test",
+      givenName: "Duplicate",
+      familyName: "Speaker",
+    });
+    const targetContact = await createContact(client, {
+      eventId: event.id,
+      email: "survivor@example.test",
+      givenName: "Surviving",
+      familyName: "Speaker",
+    });
+    const sourceSpeaker = await speakers.create({
+      eventId: event.id,
+      email: sourceContact.email,
+      givenName: sourceContact.givenName,
+      familyName: sourceContact.familyName,
+    });
+    const targetSpeaker = await speakers.create({
+      eventId: event.id,
+      email: targetContact.email,
+      givenName: targetContact.givenName,
+      familyName: targetContact.familyName,
+    });
+    const sharedSession = await sessions.createManual({
+      eventId: event.id,
+      title: "Duplicate participants",
+      durationMinutes: 30,
+      participants: [
+        { speakerId: sourceSpeaker.id, role: ProgramSessionParticipantRole.MODERATOR },
+        { speakerId: targetSpeaker.id, role: ProgramSessionParticipantRole.SPEAKER },
+      ],
+    });
+    const sourceOnlySession = await sessions.createManual({
+      eventId: event.id,
+      title: "Source only",
+      durationMinutes: 30,
+      participants: [{ speakerId: sourceSpeaker.id, role: ProgramSessionParticipantRole.CHAIRPERSON }],
+    });
+
+    assert.equal(
+      await reassignContactProgramSessionParticipations(client, event.id, sourceContact.id, targetContact.id),
+      2,
+    );
+    assert.deepEqual(await listContactProgramSessionParticipations(client, event.id, sourceContact.id), []);
+    const targetParticipations = await listContactProgramSessionParticipations(client, event.id, targetContact.id);
+    assert.deepEqual(
+      targetParticipations.map(({ sessionVersion, speakerId, sortOrder }) => ({
+        sessionId: sessionVersion.sessionId,
+        speakerId,
+        sortOrder,
+      })),
+      [
+        { sessionId: sharedSession.id, speakerId: targetSpeaker.id, sortOrder: 1 },
+        { sessionId: sourceOnlySession.id, speakerId: targetSpeaker.id, sortOrder: 0 },
+      ],
     );
   });
 });

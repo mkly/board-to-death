@@ -8,6 +8,7 @@ import {
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
+import { resolvePersonIdentity } from "../contacts/person-identity.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { type SpeakerProfileInput, validateSpeakerProfileInput } from "../speakers/repositories.ts";
 import { cfpDefinitionInputFromStored } from "./definition.ts";
@@ -558,6 +559,7 @@ async function createSubmission(
   }
   const speakerIds: string[] = [];
   for (const profile of participantProfiles) {
+    const person = await resolvePersonIdentity(transaction, profile);
     const existing = await transaction.speaker.findUnique({
       where: { eventId_normalizedEmail: { eventId: input.eventId, normalizedEmail: profile.email } },
       include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },
@@ -566,13 +568,14 @@ async function createSubmission(
       const latestVersion = existing.profileVersions[0]?.versionNumber ?? 0;
       await transaction.speaker.update({
         where: { id: existing.id },
-        data: { profileVersions: { create: { versionNumber: latestVersion + 1, ...profile } } },
+        data: { personId: person.id, profileVersions: { create: { versionNumber: latestVersion + 1, ...profile } } },
       });
       speakerIds.push(existing.id);
     } else {
       const speaker = await transaction.speaker.create({
         data: {
           eventId: input.eventId,
+          personId: person.id,
           normalizedEmail: profile.email,
           profileVersions: { create: { versionNumber: 1, ...profile } },
         },

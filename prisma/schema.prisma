@@ -408,6 +408,7 @@ model Person {
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
   contacts     Contact[]
+  speakers     Speaker[]
 
   @@index([familyName, givenName])
   @@map("people")
@@ -807,10 +808,12 @@ model CfpSubmissionDraft {
 model Speaker {
   id                         String                      @id @default(uuid()) @db.Uuid
   eventId                    String                      @db.Uuid
+  personId                   String?                     @db.Uuid
   normalizedEmail            String
   createdAt                  DateTime                    @default(now()) @db.Timestamptz(3)
   updatedAt                  DateTime                    @updatedAt @db.Timestamptz(3)
   event                      Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  person                     Person?                     @relation(fields: [personId], references: [id], onDelete: SetNull)
   profileVersions            SpeakerProfileVersion[]
   submissions                CfpSubmissionParticipant[]
   taskAssignments            SpeakerTaskAssignment[]
@@ -821,7 +824,9 @@ model Speaker {
 
   @@unique([eventId, normalizedEmail])
   @@unique([eventId, id])
+  @@unique([eventId, personId])
   @@index([eventId])
+  @@index([personId])
   @@map("speakers")
 }
 
