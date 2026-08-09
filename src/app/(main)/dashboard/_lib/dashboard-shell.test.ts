@@ -71,6 +71,7 @@ describe("program workspace navigation", () => {
     expect(evaluations.subItems.map(({ url }) => url)).toEqual([
       "/dashboard/events/tabletop-summit/evaluations",
       "/dashboard/events/tabletop-summit/evaluations/assignments",
+      "/dashboard/events/tabletop-summit/evaluations/results",
     ]);
   });
 

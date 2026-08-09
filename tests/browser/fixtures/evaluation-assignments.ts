@@ -113,8 +113,7 @@ async function setup() {
         create: {
           versionNumber: 1,
           title: "2027 evaluation plan",
-          status: EvaluationPlanVersionStatus.ACTIVE,
-          activatedAt: new Date("2027-01-01T18:00:00.000Z"),
+          status: EvaluationPlanVersionStatus.DRAFT,
         },
       },
     },
@@ -131,6 +130,19 @@ async function setup() {
       status: EvaluationRoundStatus.OPEN,
       visibilitySnapshot: ReviewerVisibility.BLIND,
       opensAt: new Date("2027-01-15T18:00:00.000Z"),
+      criteria: {
+        create: [
+          { key: "clarity", label: "Clarity", sortOrder: 0, weight: 1, minimum: 1, maximum: 5 },
+          { key: "fit", label: "Event fit", sortOrder: 1, weight: 3, minimum: 1, maximum: 5 },
+        ],
+      },
+    },
+  });
+  await database.evaluationPlanVersion.update({
+    where: { id: planVersion.id },
+    data: {
+      status: EvaluationPlanVersionStatus.ACTIVE,
+      activatedAt: new Date("2027-01-01T18:00:00.000Z"),
     },
   });
   const [sourceReviewer, targetReviewer] = await Promise.all([
@@ -187,21 +199,29 @@ async function startEvaluation(submissionId: string) {
 async function completeSubmission(submissionId: string) {
   const assignments = await database.evaluationAssignment.findMany({
     where: { submissionId, status: EvaluationAssignmentStatus.ASSIGNED },
+    include: { round: { include: { criteria: { orderBy: { sortOrder: "asc" } } } } },
   });
   const completedAt = new Date("2027-01-20T18:00:00.000Z");
-  await database.$transaction(
-    assignments.flatMap((assignment) => [
-      database.evaluation.upsert({
+  await database.$transaction(async (transaction) => {
+    for (const assignment of assignments) {
+      const evaluation = await transaction.evaluation.upsert({
         where: { assignmentId: assignment.id },
         create: { assignmentId: assignment.id, status: EvaluationStatus.FINAL, submittedAt: completedAt },
         update: { status: EvaluationStatus.FINAL, submittedAt: completedAt },
-      }),
-      database.evaluationAssignment.update({
+      });
+      for (const [index, criterion] of assignment.round.criteria.entries()) {
+        await transaction.evaluationResult.upsert({
+          where: { evaluationId_criterionId: { evaluationId: evaluation.id, criterionId: criterion.id } },
+          create: { evaluationId: evaluation.id, criterionId: criterion.id, score: 4 + index },
+          update: { score: 4 + index },
+        });
+      }
+      await transaction.evaluationAssignment.update({
         where: { id: assignment.id },
         data: { status: EvaluationAssignmentStatus.COMPLETED, completedAt },
-      }),
-    ]),
-  );
+      });
+    }
+  });
 }
 
 const action = process.argv[2];
