@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ArrowLeftIcon, FileTextIcon, UsersRoundIcon } from "lucide-react";
+import { ArrowLeftIcon, CircleCheckIcon, FileTextIcon, UsersRoundIcon } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import { SubmissionParticipantFiles } from "./_components/submission-participant
 
 interface SpeakerSubmissionPageProps {
   readonly params: Promise<{ readonly eventSlug: string; readonly submissionId: string }>;
+  readonly searchParams: Promise<{ readonly confirmed?: string }>;
 }
 
 function answerText(value: Prisma.JsonValue): string {
@@ -27,14 +29,23 @@ function answerText(value: Prisma.JsonValue): string {
   return JSON.stringify(value);
 }
 
-export default async function SpeakerSubmissionPage({ params }: SpeakerSubmissionPageProps) {
-  const { eventSlug, submissionId } = await params;
+export default async function SpeakerSubmissionPage({ params, searchParams }: SpeakerSubmissionPageProps) {
+  const [{ eventSlug, submissionId }, query] = await Promise.all([params, searchParams]);
   const viewer = await getPortalViewer(eventSlug);
   const submission = await new SpeakerPortalRepository(getDatabaseClient()).getSubmission(viewer, submissionId);
   if (!submission) notFound();
 
   return (
     <>
+      {query.confirmed ? (
+        <Alert>
+          <CircleCheckIcon />
+          <AlertTitle>Participation confirmed</AlertTitle>
+          <AlertDescription>
+            Your speaker participation is confirmed and applicable onboarding tasks are ready.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div>
         <Button asChild variant="ghost" size="sm">
           <Link href={portalHref(eventSlug, "/submissions")}>
@@ -96,6 +107,9 @@ export default async function SpeakerSubmissionPage({ params }: SpeakerSubmissio
                     {participant.organization ? (
                       <p className="text-muted-foreground text-sm">{participant.organization}</p>
                     ) : null}
+                    <Badge className="mt-2" variant={participant.confirmedAt ? "secondary" : "outline"}>
+                      {participant.confirmedAt ? "Confirmed" : "Awaiting confirmation"}
+                    </Badge>
                   </div>
                   {participant.isSelf ? (
                     <SubmissionParticipantFiles

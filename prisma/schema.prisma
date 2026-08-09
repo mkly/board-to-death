@@ -955,15 +955,33 @@ model CfpSubmissionParticipant {
   submissionId                String        @db.Uuid
   speakerId                   String        @db.Uuid
   sortOrder                   Int
+  confirmedAt                 DateTime?     @db.Timestamptz(3)
   slidesObjectKey             String?
   supportingDocumentObjectKey String?
   submission                  CfpSubmission @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Cascade)
   speaker                     Speaker       @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
+  invitations                 CfpSpeakerInvitation[]
 
   @@id([submissionId, speakerId])
   @@unique([submissionId, sortOrder])
   @@index([eventId, speakerId])
   @@map("cfp_submission_participants")
+}
+
+model CfpSpeakerInvitation {
+  id           String                   @id @default(uuid()) @db.Uuid
+  eventId      String                   @db.Uuid
+  submissionId String                   @db.Uuid
+  speakerId    String                   @db.Uuid
+  tokenHash    String                   @unique
+  expiresAt    DateTime                 @db.Timestamptz(3)
+  consumedAt   DateTime?                @db.Timestamptz(3)
+  createdAt    DateTime                 @default(now()) @db.Timestamptz(3)
+  participant  CfpSubmissionParticipant @relation(fields: [submissionId, speakerId], references: [submissionId, speakerId], onDelete: Cascade)
+
+  @@index([eventId, submissionId, speakerId, createdAt])
+  @@index([eventId, expiresAt])
+  @@map("cfp_speaker_invitations")
 }
 
 model ProgramSession {

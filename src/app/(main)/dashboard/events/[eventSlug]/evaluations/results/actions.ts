@@ -10,6 +10,8 @@ import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/prisma/client";
 import { getAllowedAdminEmails, isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
+import { SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
 import { getDatabaseClient } from "@/server/database/client";
 import {
   EvaluationDecisionRepository,
@@ -33,6 +35,13 @@ const decisionSchema = actionSchema.extend({
   expectedDecisionNumber: z.number().int().nonnegative(),
 });
 const allowedAdminEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
+const runtimeConfig = getRuntimeConfig().server;
+const sendConfirmationLink = createConfiguredMagicLinkSender({
+  resendApiKey: runtimeConfig.RESEND_API_KEY,
+  resendFromEmail: runtimeConfig.RESEND_FROM_EMAIL,
+  webhookToken: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_TOKEN,
+  webhookUrl: runtimeConfig.AUTH_MAGIC_LINK_WEBHOOK_URL,
+});
 
 function destination(
   eventSlug: string,
@@ -102,6 +111,39 @@ export async function recordEvaluationDecision(
     redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
   }
   redirect(destination(eventSlug, roundId, { notice: decisionNotices[outcome] }));
+}
+
+export async function inviteAcceptedSpeakers(eventSlug: string, roundId: string, submissionId: string): Promise<never> {
+  const parsed = actionSchema.safeParse({ eventSlug, roundId, submissionId });
+  if (!parsed.success || !parsed.data.submissionId) {
+    redirect(destination(eventSlug, roundId, { error: "The speaker invitation request was invalid." }));
+  }
+  let invitationCount = 0;
+  try {
+    const { event } = await requireAdminEvent(parsed.data.eventSlug);
+    const invitations = await new SpeakerConfirmationService({ database: getDatabaseClient() }).issueInvitations(
+      event.id,
+      parsed.data.submissionId,
+    );
+    await Promise.all(
+      invitations.map(async (invitation) => {
+        const url = new URL(`/portal/${encodeURIComponent(event.slug)}/confirm`, runtimeConfig.BETTER_AUTH_URL);
+        url.searchParams.set("submissionId", invitation.submissionId);
+        url.searchParams.set("speakerId", invitation.speakerId);
+        url.searchParams.set("token", invitation.token);
+        await sendConfirmationLink({ email: invitation.email, url: url.toString() });
+      }),
+    );
+    invitationCount = invitations.length;
+    refresh(event.slug);
+  } catch (error) {
+    redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
+  }
+  redirect(
+    destination(eventSlug, roundId, {
+      notice: `Invitation${invitationCount === 1 ? "" : "s"} sent to ${invitationCount} speaker${invitationCount === 1 ? "" : "s"}.`,
+    }),
+  );
 }
 
 export async function advanceEvaluationSubmission(

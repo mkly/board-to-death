@@ -1,4 +1,4 @@
-import { ChartNoAxesCombinedIcon, CircleAlertIcon, CircleCheckIcon, MoveRightIcon } from "lucide-react";
+import { ChartNoAxesCombinedIcon, CircleAlertIcon, CircleCheckIcon, MoveRightIcon, SendIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -8,10 +8,15 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EvaluationDecisionOutcome } from "@/generated/prisma/client";
+import { CfpSubmissionStatus, EvaluationDecisionOutcome } from "@/generated/prisma/client";
 import type { EvaluationResultsWorkspace, EvaluationSubmissionResult } from "@/server/evaluations/results";
 
-import { advanceEvaluationSubmission, closeEvaluationRound, recordEvaluationDecision } from "../actions";
+import {
+  advanceEvaluationSubmission,
+  closeEvaluationRound,
+  inviteAcceptedSpeakers,
+  recordEvaluationDecision,
+} from "../actions";
 
 interface EvaluationResultsProps {
   readonly event: { readonly name: string; readonly slug: string };
@@ -127,6 +132,35 @@ function DecisionAction({
           </form>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SpeakerInvitationAction({
+  eventSlug,
+  roundId,
+  submission,
+}: {
+  readonly eventSlug: string;
+  readonly roundId: string;
+  readonly submission: EvaluationSubmissionResult;
+}) {
+  if (submission.status === CfpSubmissionStatus.CONFIRMED) {
+    return <Badge variant="secondary">All speakers confirmed</Badge>;
+  }
+  if (submission.status !== CfpSubmissionStatus.ACCEPTED) return null;
+
+  return (
+    <div className="flex min-w-36 flex-col items-start gap-2">
+      <Badge variant="outline">
+        {submission.confirmedParticipantCount}/{submission.participantCount} confirmed
+      </Badge>
+      <form action={inviteAcceptedSpeakers.bind(null, eventSlug, roundId, submission.id)}>
+        <Button type="submit" size="xs" variant="outline">
+          <SendIcon data-icon="inline-start" />
+          {submission.confirmedParticipantCount > 0 ? "Reissue invites" : "Invite speakers"}
+        </Button>
+      </form>
     </div>
   );
 }
@@ -326,6 +360,7 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                     <TableHead>Weighted average</TableHead>
                     <TableHead>Rank</TableHead>
                     <TableHead>Progression</TableHead>
+                    <TableHead>Speaker confirmation</TableHead>
                     <TableHead className="pr-(--card-spacing)">Final decision</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -387,6 +422,15 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                             {submission.tied ? <Badge variant="outline">Tie</Badge> : null}
                           </div>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        {workspace.selectedRoundId ? (
+                          <SpeakerInvitationAction
+                            eventSlug={event.slug}
+                            roundId={workspace.selectedRoundId}
+                            submission={submission}
+                          />
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {workspace.selectedRoundId ? (

@@ -234,6 +234,7 @@ export class SpeakerPortalRepository {
         participants: {
           orderBy: { sortOrder: "asc" },
           select: {
+            confirmedAt: true,
             slidesObjectKey: true,
             supportingDocumentObjectKey: true,
             speaker: {
@@ -267,22 +268,25 @@ export class SpeakerPortalRepository {
       updatedAt: submission.updatedAt,
       title: submission.formVersion.title,
       categories: submission.categories.map(({ category }) => category),
-      participants: submission.participants.flatMap(({ speaker, slidesObjectKey, supportingDocumentObjectKey }) => {
-        const profile = speaker.profileVersions[0];
-        const isSelf = speaker.id === identity.speakerId;
-        return profile
-          ? [
-              {
-                id: speaker.id,
-                displayName: displayName(profile),
-                organization: profile.organization,
-                isSelf,
-                slidesObjectKey: isSelf ? slidesObjectKey : null,
-                supportingDocumentObjectKey: isSelf ? supportingDocumentObjectKey : null,
-              },
-            ]
-          : [];
-      }),
+      participants: submission.participants.flatMap(
+        ({ speaker, confirmedAt, slidesObjectKey, supportingDocumentObjectKey }) => {
+          const profile = speaker.profileVersions[0];
+          const isSelf = speaker.id === identity.speakerId;
+          return profile
+            ? [
+                {
+                  id: speaker.id,
+                  displayName: displayName(profile),
+                  organization: profile.organization,
+                  isSelf,
+                  confirmedAt,
+                  slidesObjectKey: isSelf ? slidesObjectKey : null,
+                  supportingDocumentObjectKey: isSelf ? supportingDocumentObjectKey : null,
+                },
+              ]
+            : [];
+        },
+      ),
       answers: (revision?.answers ?? []).map((answer) => ({
         ...answer,
         label: questionLabels.get(answer.questionId) ?? answer.questionId,
