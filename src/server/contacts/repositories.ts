@@ -1,4 +1,4 @@
-import type { Contact, ContactGroup, ContactGroupKind, Prisma } from "../../generated/prisma/client.ts";
+import type { Contact, ContactGroup, ContactGroupKind, Person, Prisma } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export interface CreateContactInput {
@@ -28,6 +28,26 @@ export interface ListContactsOptions {
 
 export interface ListContactGroupsOptions extends ListContactsOptions {
   readonly kind?: ContactGroupKind;
+}
+
+export interface DirectoryPersonSummary extends Person {
+  readonly linkedEventIds: readonly string[];
+}
+
+export interface DirectoryPersonEventLink {
+  readonly contact: Contact;
+  readonly event: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+    readonly startsAt: Date;
+  };
+  readonly relationship: "new" | "returning";
+}
+
+export interface DirectoryPersonProfile {
+  readonly person: Person;
+  readonly events: readonly DirectoryPersonEventLink[];
 }
 
 function invalid(message: string): never {
@@ -84,21 +104,127 @@ function mapDatabaseError(error: unknown): never {
 }
 
 export async function createContact(client: Prisma.TransactionClient, input: CreateContactInput): Promise<Contact> {
+  const email = normalizeEmail(input.email);
+  const givenName = requiredText(input.givenName, "givenName");
+  const familyName = requiredText(input.familyName, "familyName");
+  const organization = optionalText(input.organization);
+  const jobTitle = optionalText(input.jobTitle);
+  const phone = optionalText(input.phone);
+
   try {
+    const person = await client.person.upsert({
+      where: { email },
+      update: {},
+      create: { email, givenName, familyName, organization, jobTitle, phone },
+    });
     return await client.contact.create({
       data: {
         eventId: input.eventId,
-        email: normalizeEmail(input.email),
-        givenName: requiredText(input.givenName, "givenName"),
-        familyName: requiredText(input.familyName, "familyName"),
-        organization: optionalText(input.organization),
-        jobTitle: optionalText(input.jobTitle),
-        phone: optionalText(input.phone),
+        personId: person.id,
+        email,
+        givenName,
+        familyName,
+        organization,
+        jobTitle,
+        phone,
       },
     });
   } catch (error) {
     mapDatabaseError(error);
   }
+}
+
+export async function searchDirectoryPeople(
+  client: Prisma.TransactionClient,
+  query: string,
+): Promise<readonly DirectoryPersonSummary[]> {
+  const normalized = query.trim();
+  const people = await client.person.findMany({
+    where:
+      normalized === ""
+        ? undefined
+        : {
+            OR: [
+              { email: { contains: normalized, mode: "insensitive" } },
+              { givenName: { contains: normalized, mode: "insensitive" } },
+              { familyName: { contains: normalized, mode: "insensitive" } },
+              { organization: { contains: normalized, mode: "insensitive" } },
+            ],
+          },
+    include: { contacts: { select: { eventId: true } } },
+    orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
+    take: 50,
+  });
+
+  return people.map(({ contacts, ...person }) => ({
+    ...person,
+    linkedEventIds: contacts.map(({ eventId }) => eventId),
+  }));
+}
+
+export async function linkDirectoryPersonToEvent(
+  client: Prisma.TransactionClient,
+  eventId: string,
+  personId: string,
+): Promise<Contact> {
+  const person = await client.person.findUnique({ where: { id: personId } });
+  if (!person) throw new RepositoryError("not-found", "The directory person was not found.");
+
+  const linked = await client.contact.findUnique({ where: { eventId_personId: { eventId, personId } } });
+  if (linked) return linked;
+
+  const legacyContact = await client.contact.findUnique({ where: { eventId_email: { eventId, email: person.email } } });
+  if (legacyContact) {
+    try {
+      return await client.contact.update({ where: { id: legacyContact.id }, data: { personId } });
+    } catch (error) {
+      mapDatabaseError(error);
+    }
+  }
+
+  try {
+    return await client.contact.create({
+      data: {
+        eventId,
+        personId,
+        email: person.email,
+        givenName: person.givenName,
+        familyName: person.familyName,
+        organization: person.organization,
+        jobTitle: person.jobTitle,
+        phone: person.phone,
+      },
+    });
+  } catch (error) {
+    mapDatabaseError(error);
+  }
+}
+
+export async function getDirectoryPersonProfile(
+  client: Prisma.TransactionClient,
+  personId: string,
+): Promise<DirectoryPersonProfile | null> {
+  const person = await client.person.findUnique({
+    where: { id: personId },
+    include: {
+      contacts: {
+        where: { archivedAt: null },
+        include: { event: { select: { id: true, name: true, slug: true, startsAt: true } } },
+        orderBy: [{ event: { startsAt: "asc" } }, { createdAt: "asc" }],
+      },
+    },
+  });
+  if (!person) return null;
+
+  const { contacts, ...directoryPerson } = person;
+  return {
+    person: directoryPerson,
+    events: contacts.map(({ event, ...contact }, index) => ({
+      contact,
+      event,
+      relationship: index === 0 ? "new" : "returning",
+    })),
+  };
 }
 
 export async function updateContact(
