@@ -73,7 +73,7 @@ describe("bulk communication dispatch", () => {
   });
 
   beforeEach(async () => {
-    await client.event.deleteMany();
+    await client.event.deleteMany({ where: { slug: { startsWith: "bulk-dispatch-test-" } } });
   });
 
   afterAll(async () => {
@@ -81,7 +81,7 @@ describe("bulk communication dispatch", () => {
   });
 
   test("snapshots current eligible content and returns the original delivery for duplicate confirmations", async () => {
-    const fixture = await createFixture("snapshot-event", ["Ada Lovelace"]);
+    const fixture = await createFixture("bulk-dispatch-test-snapshot-event", ["Ada Lovelace"]);
     const repository = new BulkCommunicationRepository(client);
     const first = await repository.confirm({
       eventId: fixture.event.id,
@@ -90,7 +90,10 @@ describe("bulk communication dispatch", () => {
       audience: fixture.audience,
     });
     assert.equal(first.duplicate, false);
-    assert.equal(first.delivery.recipients[0]?.subjectSnapshot, "Hello Ada Lovelace for Event snapshot-event");
+    assert.equal(
+      first.delivery.recipients[0]?.subjectSnapshot,
+      "Hello Ada Lovelace for Event bulk-dispatch-test-snapshot-event",
+    );
 
     await client.communicationTemplateVersion.create({
       data: {
@@ -121,9 +124,9 @@ describe("bulk communication dispatch", () => {
     assert.equal(duplicate.duplicate, true);
     assert.equal(duplicate.delivery.id, first.delivery.id);
     assert.equal(duplicate.delivery.templateVersion, 1);
-    assert.equal(duplicate.delivery.recipients[0]?.email, "speaker-0@snapshot-event.example.test");
+    assert.equal(duplicate.delivery.recipients[0]?.email, "speaker-0@bulk-dispatch-test-snapshot-event.example.test");
 
-    const other = await createFixture("other-event", ["Other Speaker"]);
+    const other = await createFixture("bulk-dispatch-test-other-event", ["Other Speaker"]);
     await assert.rejects(
       repository.confirm({
         eventId: other.event.id,
@@ -137,7 +140,7 @@ describe("bulk communication dispatch", () => {
   });
 
   test("records mixed outcomes and retries only the due transient failure", async () => {
-    const fixture = await createFixture("mixed-outcomes");
+    const fixture = await createFixture("bulk-dispatch-test-mixed-outcomes");
     const repository = new BulkCommunicationRepository(client);
     const confirmed = await repository.confirm({
       eventId: fixture.event.id,
@@ -182,7 +185,7 @@ describe("bulk communication dispatch", () => {
   });
 
   test("cancellation stops new claims without rewinding the provider attempt already in flight", async () => {
-    const fixture = await createFixture("cancel-boundary", ["Ada Lovelace", "Grace Hopper"]);
+    const fixture = await createFixture("bulk-dispatch-test-cancel-boundary", ["Ada Lovelace", "Grace Hopper"]);
     const repository = new BulkCommunicationRepository(client);
     const confirmed = await repository.confirm({
       eventId: fixture.event.id,
