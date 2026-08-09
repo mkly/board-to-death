@@ -8,12 +8,19 @@ import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { CfpAdminRole, CfpPolicyStatus } from "@/generated/prisma/client";
-import { type CfpFormDefinition, parseCfpDefinition, validateCfpDefinitionForPublication } from "@/lib/cfp";
+import {
+  type CfpFormDefinition,
+  cfpVisibilityRuleSchema,
+  parseCfpDefinition,
+  validateCfpDefinitionForPublication,
+  validateCfpPolicyCategoryRouting,
+} from "@/lib/cfp";
 import { validateCfpMessageSettings } from "@/lib/cfp/messages";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository, type PersistedCfpFormDefinition } from "@/server/cfp/repositories";
+import { CfpCategoryRepository } from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 
@@ -296,6 +303,88 @@ export async function saveCfpQuestions(
     return {
       status: "success",
       message: `Questions saved as version ${saved.versionNumber}.`,
+      versionNumber: saved.versionNumber,
+    };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+const categoryRoutingRequestSchema = z.object({
+  eventSlug: z.string().trim().min(1),
+  formId: z.string().uuid(),
+  routing: z.string().max(250_000, "The category routing definition is too large."),
+});
+
+const categoryRoutingArraySchema = z.array(
+  z.object({
+    categoryId: z.string().min(1),
+    condition: cfpVisibilityRuleSchema,
+  }),
+);
+
+export interface SaveCfpCategoryRoutingState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly versionNumber?: number;
+  readonly errors?: readonly string[];
+}
+
+export async function saveCfpCategoryRouting(
+  _previousState: SaveCfpCategoryRoutingState,
+  formData: FormData,
+): Promise<SaveCfpCategoryRoutingState> {
+  const request = categoryRoutingRequestSchema.safeParse({
+    eventSlug: value(formData, "eventSlug"),
+    formId: value(formData, "formId"),
+    routing: value(formData, "routing"),
+  });
+  if (!request.success) {
+    return { status: "error", message: "The category routing request is invalid." };
+  }
+
+  let rawRouting: unknown;
+  try {
+    rawRouting = JSON.parse(request.data.routing);
+  } catch {
+    return { status: "error", message: "The category routing definition is not valid JSON." };
+  }
+  const parsedRouting = categoryRoutingArraySchema.safeParse(rawRouting);
+  if (!parsedRouting.success) {
+    return { status: "error", message: "Fix the category routing rules before saving." };
+  }
+
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, request.data.eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, request.data.formId);
+  if (!form) notFound();
+
+  const policies = new CfpPolicyRepository(client);
+  const policy = await policies.getByKey(event.id, form.key);
+  if (!policy) notFound();
+
+  const categories = await new CfpCategoryRepository(client).list(event.id);
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const validationErrors = validateCfpPolicyCategoryRouting(parsedRouting.data, form.definition, categoryIds);
+  if (validationErrors.length > 0) {
+    return { status: "error", message: "Fix the category routing rules before saving.", errors: validationErrors };
+  }
+
+  try {
+    const saved = await policies.createVersion(event.id, policy.id, {
+      ...policy.definition,
+      categoryRouting: parsedRouting.data,
+    });
+    revalidatePath(
+      `/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(request.data.formId)}/setup`,
+    );
+    return {
+      status: "success",
+      message: `Category routing saved as version ${saved.versionNumber}.`,
       versionNumber: saved.versionNumber,
     };
   } catch (error) {

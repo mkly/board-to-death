@@ -7,6 +7,8 @@ import {
   type Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
+import { cfpVisibilityRuleSchema } from "../../lib/cfp/schema.ts";
+import type { CfpVisibilityRule } from "../../lib/cfp/types.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export type CfpRuleCondition = Readonly<Record<string, unknown>>;
@@ -18,7 +20,7 @@ export interface CfpConditionalVisibilityRule {
 
 export interface CfpCategoryRoutingRule {
   readonly categoryId: string;
-  readonly condition: CfpRuleCondition;
+  readonly condition: CfpVisibilityRule;
 }
 
 export interface CfpSubmissionLimits {
@@ -150,10 +152,12 @@ function validateDefinition(input: CfpPolicyDefinition): CfpPolicyDefinition {
     invalid("confirmationClosesAt must not be earlier than submissionClosesAt.");
   }
 
-  const categoryRouting = input.categoryRouting.map((route, index) => ({
-    categoryId: requireText(route.categoryId, `categoryRouting.${index}.categoryId`),
-    condition: jsonObject(route.condition, `categoryRouting.${index}.condition`),
-  }));
+  const categoryRouting = input.categoryRouting.map((route, index) => {
+    const categoryId = requireText(route.categoryId, `categoryRouting.${index}.categoryId`);
+    const parsedCondition = cfpVisibilityRuleSchema.safeParse(route.condition);
+    if (!parsedCondition.success) invalid(`categoryRouting.${index}.condition must be a valid visibility rule.`);
+    return { categoryId, condition: parsedCondition.data };
+  });
   const adminAssignments = input.adminAssignments.map((assignment, index) => ({
     administratorId: requireText(assignment.administratorId, `adminAssignments.${index}.administratorId`),
     role: assignment.role,
@@ -169,6 +173,17 @@ function validateDefinition(input: CfpPolicyDefinition): CfpPolicyDefinition {
     categoryRouting.map(({ categoryId }) => categoryId),
     "categoryRouting categoryId values",
   );
+  {
+    const conditionOwners = new Map<string, string>();
+    categoryRouting.forEach((route, index) => {
+      const conditionKey = JSON.stringify({ logic: route.condition.logic, conditions: route.condition.conditions });
+      const owner = conditionOwners.get(conditionKey);
+      if (owner !== undefined && owner !== route.categoryId) {
+        invalid(`categoryRouting.${index}.condition duplicates another route's condition for a different category.`);
+      }
+      conditionOwners.set(conditionKey, route.categoryId);
+    });
+  }
   uniqueValues(
     adminAssignments.map(({ administratorId }) => administratorId),
     "adminAssignments administratorId values",
@@ -312,7 +327,7 @@ function fromStored(version: StoredVersion): PersistedCfpPolicyDefinition {
       conditionalVisibility: version.conditionalVisibility as unknown as CfpConditionalVisibilityRule[],
       categoryRouting: version.categoryRoutes.map(({ categoryId, condition }) => ({
         categoryId,
-        condition: condition as CfpRuleCondition,
+        condition: condition as unknown as CfpVisibilityRule,
       })),
       adminAssignments: version.adminAssignments.map(
         ({ administratorId, notifyOnNewSubmission, notifyOnSubmissionUpdate, role }) => ({

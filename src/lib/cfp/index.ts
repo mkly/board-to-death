@@ -4,6 +4,11 @@ export {
   validateCfpAnswers,
   visibleCfpQuestionIds,
 } from "./answers.ts";
+export {
+  type CfpPolicyCategoryRoute,
+  resolveCfpPolicyCategoryId,
+  validateCfpPolicyCategoryRouting,
+} from "./category-routing.ts";
 export type { CfpParseError, CfpParseErrorCode } from "./errors.ts";
 export { type CfpParseResult, parseCfpDefinition } from "./parser.ts";
 export {
@@ -11,6 +16,7 @@ export {
   publicCfpHref,
   validateCfpDefinitionForPublication,
 } from "./publication.ts";
+export { cfpVisibilityRuleSchema } from "./schema.ts";
 export {
   CFP_BUILT_IN_QUESTION_TYPES,
   CFP_REQUIRED_SPEAKER_FIELDS,

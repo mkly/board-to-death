@@ -54,7 +54,7 @@ function definition(categoryId: string, ownerId: string, editorId: string): CfpP
     categoryRouting: [
       {
         categoryId,
-        condition: { questionId: "topic", operator: "includes", value: "game-design" },
+        condition: { logic: "all", conditions: [{ questionId: "topic", operator: "in", value: ["game-design"] }] },
       },
     ],
     adminAssignments: [

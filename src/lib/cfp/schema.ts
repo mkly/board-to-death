@@ -11,10 +11,11 @@ const conditionSchema = z.object({
   value: z.unknown().optional(),
 });
 
-const visibilityRuleSchema = z.object({
+export const cfpVisibilityRuleSchema = z.object({
   logic: z.enum(["all", "any"]),
   conditions: z.array(conditionSchema).min(1),
 });
+const visibilityRuleSchema = cfpVisibilityRuleSchema;
 
 const questionOptionSchema = z.object({
   value: z.string().min(1),

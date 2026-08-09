@@ -37,10 +37,13 @@ export interface VisibilitySourceQuestion {
 
 interface CfpVisibilityRuleEditorProps {
   readonly idPrefix: string;
-  readonly questionEditorId: string;
+  readonly questionEditorId?: string;
   readonly rule: CfpVisibilityRule | undefined;
   readonly sourceQuestions: readonly VisibilitySourceQuestion[];
   readonly onChange: (rule: CfpVisibilityRule | undefined) => void;
+  /** When false, the rule is mandatory: the enable/disable toggle is hidden and the
+   * condition editor renders unconditionally. Callers must keep `rule` defined. */
+  readonly toggleable?: boolean;
 }
 
 function findSource(
@@ -60,7 +63,7 @@ function initialValue(source: VisibilitySourceQuestion, operator: CfpConditionOp
   return "";
 }
 
-function initialCondition(source: VisibilitySourceQuestion): CfpCondition {
+export function initialCondition(source: VisibilitySourceQuestion): CfpCondition {
   const operator = conditionOperatorsForQuestion(source.type)[0] ?? "is_empty";
   return { questionId: source.id, operator, value: initialValue(source, operator) };
 }
@@ -196,6 +199,7 @@ export function CfpVisibilityRuleEditor({
   rule,
   sourceQuestions,
   onChange,
+  toggleable = true,
 }: CfpVisibilityRuleEditorProps) {
   const sources = sourceQuestions.filter(
     (source) => source.editorId !== questionEditorId && source.id.trim() !== "" && source.type.trim() !== "",
@@ -215,21 +219,21 @@ export function CfpVisibilityRuleEditor({
 
   return (
     <FieldGroup className="sm:col-span-2">
-      <Field orientation="horizontal" data-disabled={(sources.length === 0 && !rule) || undefined}>
-        <div className="flex flex-col gap-1">
-          <FieldTitle id={`${idPrefix}-visibility-label`}>Conditional visibility</FieldTitle>
-          <FieldDescription>Show this question only when applicant answers match the rule.</FieldDescription>
-        </div>
-        <Switch
-          aria-labelledby={`${idPrefix}-visibility-label`}
-          checked={Boolean(rule)}
-          disabled={sources.length === 0 && !rule}
-          onCheckedChange={enableRule}
-        />
-      </Field>
-      {sources.length === 0 ? (
-        <FieldDescription>Add another question before creating a visibility rule.</FieldDescription>
+      {toggleable ? (
+        <Field orientation="horizontal" data-disabled={(sources.length === 0 && !rule) || undefined}>
+          <div className="flex flex-col gap-1">
+            <FieldTitle id={`${idPrefix}-visibility-label`}>Conditional visibility</FieldTitle>
+            <FieldDescription>Show this question only when applicant answers match the rule.</FieldDescription>
+          </div>
+          <Switch
+            aria-labelledby={`${idPrefix}-visibility-label`}
+            checked={Boolean(rule)}
+            disabled={sources.length === 0 && !rule}
+            onCheckedChange={enableRule}
+          />
+        </Field>
       ) : null}
+      {sources.length === 0 ? <FieldDescription>Add another question before creating a rule.</FieldDescription> : null}
       {rule ? (
         <>
           <Field>
