@@ -5,6 +5,11 @@ import { parsePublicRuntimeConfig } from "./src/config/public-env.ts";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "6mb",
+    },
+  },
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },

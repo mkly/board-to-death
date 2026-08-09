@@ -247,12 +247,23 @@ describe("speaker onboarding persistence", () => {
     const eventId = await createEvent("response-history");
     const speaker = await createSpeaker(eventId);
     await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
+    const otherSpeaker = await createSpeaker(eventId, "other-response-speaker@example.test");
     const definition = await createDefinition(eventId);
     const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
 
     await expectRepositoryError(onboarding.submit(eventId, assignment.id), "invalid-input");
+    await expectRepositoryError(
+      onboarding.submit(eventId, assignment.id, { objectKey: "headshots/forged.png" }, otherSpeaker.id),
+      "not-found",
+    );
+    await expectRepositoryError(
+      onboarding.submit(eventId, assignment.id, { fileName: "missing-key.png" }),
+      "invalid-input",
+    );
     currentTime = new Date("2027-01-02T12:00:00.000Z");
     await onboarding.submit(eventId, assignment.id, { objectKey: "headshots/draft.png" });
+    const duplicate = await onboarding.submit(eventId, assignment.id, { objectKey: "headshots/duplicate.png" });
+    assert.equal(duplicate.submissions.length, 1);
     currentTime = new Date("2027-01-03T12:00:00.000Z");
     const revision = await onboarding.review(
       eventId,
@@ -263,6 +274,7 @@ describe("speaker onboarding persistence", () => {
     assert.equal(revision.completedAt, null);
 
     currentTime = new Date("2027-01-04T12:00:00.000Z");
+    await expectRepositoryError(onboarding.submit(eventId, assignment.id, "not-a-file"), "invalid-input");
     await onboarding.submit(eventId, assignment.id, { objectKey: "headshots/final.png" });
     currentTime = new Date("2027-01-05T12:00:00.000Z");
     const approved = await onboarding.review(eventId, assignment.id, SpeakerTaskAssignmentStatus.APPROVED);

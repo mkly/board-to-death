@@ -244,4 +244,39 @@ export class SpeakerPortalRepository {
       })),
     };
   }
+
+  async getTask(identity: SpeakerPortalIdentity, assignmentId: string) {
+    return this.#database.speakerTaskAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        eventId: identity.eventId,
+        speakerId: identity.speakerId,
+        status: { not: "WITHDRAWN" },
+      },
+      select: {
+        id: true,
+        status: true,
+        assignedAt: true,
+        dueAt: true,
+        submittedAt: true,
+        completedAt: true,
+        definitionVersion: {
+          select: {
+            title: true,
+            description: true,
+            responseRequired: true,
+            responseSchema: true,
+          },
+        },
+        submissions: {
+          orderBy: { attemptNumber: "asc" },
+          select: { attemptNumber: true, response: true, submittedAt: true },
+        },
+        transitions: {
+          orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+          select: { fromStatus: true, toStatus: true, note: true, occurredAt: true },
+        },
+      },
+    });
+  }
 }

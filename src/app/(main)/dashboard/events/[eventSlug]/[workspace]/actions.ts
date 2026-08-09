@@ -60,6 +60,7 @@ async function requireAdminEvent(eventSlug: string) {
 
 function revalidateOnboarding(eventSlug: string): void {
   revalidatePath(`/dashboard/events/${eventSlug}/onboarding`);
+  revalidatePath(`/portal/${eventSlug}`);
 }
 
 export async function assignSpeakerTasks(eventSlug: string, formData: FormData): Promise<void> {
@@ -91,6 +92,29 @@ export async function withdrawSpeakerTask(eventSlug: string, assignmentId: strin
     event.id,
     assignmentId,
     "Withdrawn by an administrator.",
+  );
+  revalidateOnboarding(event.slug);
+}
+
+export async function approveSpeakerTask(eventSlug: string, assignmentId: string): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  await new SpeakerOnboardingRepository(getDatabaseClient()).review(event.id, assignmentId, "APPROVED");
+  revalidateOnboarding(event.slug);
+}
+
+export async function requestSpeakerTaskRevision(
+  eventSlug: string,
+  assignmentId: string,
+  formData: FormData,
+): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  const feedback = fieldValue(formData, "feedback").trim();
+  if (feedback === "") throw new RepositoryError("invalid-input", "Revision feedback is required.");
+  await new SpeakerOnboardingRepository(getDatabaseClient()).review(
+    event.id,
+    assignmentId,
+    "REVISION_REQUESTED",
+    feedback,
   );
   revalidateOnboarding(event.slug);
 }

@@ -1,4 +1,6 @@
-import { BellOff, BellRing, CalendarClock, ClipboardCheck, UserPlus, UserX } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { BellOff, BellRing, CalendarClock, Check, ClipboardCheck, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +12,17 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet 
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
 import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
 
 import {
   activateSpeakerTaskReminderRule,
+  approveSpeakerTask,
   assignSpeakerTasks,
   cancelSpeakerTaskReminderRule,
+  requestSpeakerTaskRevision,
   saveSpeakerTaskReminderRule,
   setSpeakerTaskReminderOptOut,
   updateSpeakerTaskDueDate,
@@ -94,6 +99,8 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
       include: {
         definitionVersion: true,
         speaker: { include: { profileVersions: { orderBy: { versionNumber: "asc" } } } },
+        submissions: { orderBy: { attemptNumber: "asc" } },
+        transitions: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }] },
       },
       orderBy: [{ assignedAt: "desc" }, { id: "asc" }],
     }),
@@ -426,6 +433,7 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                   <TableHead>Speaker</TableHead>
                   <TableHead>Task</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Latest response</TableHead>
                   <TableHead>Due date</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
@@ -447,11 +455,34 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                     assignment.id,
                     !assignment.remindersOptedOut,
                   );
+                  const approveAction = approveSpeakerTask.bind(null, event.slug, assignment.id);
+                  const revisionAction = requestSpeakerTaskRevision.bind(null, event.slug, assignment.id);
+                  const latestSubmission = assignment.submissions.at(-1);
+                  const response = latestSubmission?.response;
+                  const responseObject =
+                    typeof response === "object" && response !== null && !Array.isArray(response) ? response : null;
+                  let responseContent: ReactNode = <span className="text-muted-foreground">No response</span>;
+                  if (typeof response === "string") {
+                    responseContent = <p className="max-w-64 whitespace-pre-wrap text-sm">{response}</p>;
+                  } else if (responseObject?.approved === true) {
+                    responseContent = "Completion confirmed";
+                  } else if (typeof responseObject?.objectKey === "string" && latestSubmission) {
+                    responseContent = (
+                      <Button asChild variant="outline" size="sm">
+                        <a
+                          href={`/dashboard/events/${encodeURIComponent(event.slug)}/onboarding/task-files/${assignment.id}/${latestSubmission.attemptNumber}`}
+                        >
+                          Download {typeof responseObject.fileName === "string" ? responseObject.fileName : "file"}
+                        </a>
+                      </Button>
+                    );
+                  }
                   return (
                     <TableRow key={assignment.id}>
                       <TableCell className="font-medium">{name}</TableCell>
                       <TableCell>{assignment.definitionVersion.title}</TableCell>
                       <TableCell>{taskStatus(assignment.status)}</TableCell>
+                      <TableCell>{responseContent}</TableCell>
                       <TableCell>
                         {terminal ? (
                           terminalDueDate
@@ -478,6 +509,34 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                       <TableCell>
                         {!terminal && (
                           <div className="flex flex-wrap justify-end gap-2">
+                            {assignment.status === "SUBMITTED" ? (
+                              <>
+                                <form action={approveAction}>
+                                  <Button type="submit" size="sm">
+                                    <Check data-icon="inline-start" />
+                                    Approve
+                                  </Button>
+                                </form>
+                                <form action={revisionAction} className="flex min-w-64 flex-col gap-2">
+                                  <Field>
+                                    <FieldLabel htmlFor={`feedback-${assignment.id}`} className="sr-only">
+                                      Revision feedback for {name}
+                                    </FieldLabel>
+                                    <Textarea
+                                      id={`feedback-${assignment.id}`}
+                                      name="feedback"
+                                      placeholder="Explain what needs to change"
+                                      rows={2}
+                                      required
+                                    />
+                                  </Field>
+                                  <Button type="submit" size="sm" variant="outline" className="self-end">
+                                    <RotateCcw data-icon="inline-start" />
+                                    Request revision
+                                  </Button>
+                                </form>
+                              </>
+                            ) : null}
                             <form action={optOutAction}>
                               <Button type="submit" size="sm" variant="outline">
                                 {assignment.remindersOptedOut ? "Resume reminders" : "Pause reminders"}

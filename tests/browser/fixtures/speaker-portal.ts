@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../../../src/generated/prisma/client.ts";
+import { createAuth } from "../../../src/server/auth/auth-factory.ts";
 import {
   createRepresentativeFixtures,
   representativeFixture,
@@ -55,6 +56,78 @@ const outsiderSubmission = await database.cfpSubmission.create({
     participants: { create: { speakerId: outsiderSpeaker.id, sortOrder: 0 } },
   },
 });
+
+const textDefinition = await database.speakerTaskDefinition.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "travel-details",
+    versions: {
+      create: {
+        versionNumber: 1,
+        sortOrder: 1,
+        title: "Share your arrival details",
+        description: "Tell the event team when you expect to arrive.",
+        applicability: {},
+        responseRequired: true,
+        responseSchema: { type: "string", minLength: 5, maxLength: 500 },
+      },
+    },
+  },
+  include: { versions: true },
+});
+const fileDefinition = await database.speakerTaskDefinition.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "slides",
+    versions: {
+      create: {
+        versionNumber: 1,
+        sortOrder: 2,
+        title: "Upload your slides",
+        description: "Upload the current slide deck for review.",
+        applicability: {},
+        responseRequired: true,
+        responseSchema: { type: "object", required: ["objectKey"] },
+      },
+    },
+  },
+  include: { versions: true },
+});
+const textVersion = textDefinition.versions[0];
+const fileVersion = fileDefinition.versions[0];
+if (!textVersion || !fileVersion) throw new Error("Expected speaker task definition versions.");
+const textTask = await database.speakerTaskAssignment.create({
+  data: {
+    eventId: fixture.eventId,
+    definitionId: textDefinition.id,
+    definitionVersionId: textVersion.id,
+    speakerId: fixture.speakerId,
+    assignedAt: new Date("2020-01-01T18:00:00.000Z"),
+    dueAt: new Date("2020-01-10T18:00:00.000Z"),
+    transitions: { create: { toStatus: "PENDING", occurredAt: new Date("2020-01-01T18:00:00.000Z") } },
+  },
+});
+const fileTask = await database.speakerTaskAssignment.create({
+  data: {
+    eventId: fixture.eventId,
+    definitionId: fileDefinition.id,
+    definitionVersionId: fileVersion.id,
+    speakerId: fixture.speakerId,
+    assignedAt: new Date("2027-02-21T18:00:00.000Z"),
+    dueAt: new Date("2027-03-10T18:00:00.000Z"),
+    transitions: { create: { toStatus: "PENDING", occurredAt: new Date("2027-02-21T18:00:00.000Z") } },
+  },
+});
+const outsiderTask = await database.speakerTaskAssignment.create({
+  data: {
+    eventId: fixture.eventId,
+    definitionId: textDefinition.id,
+    definitionVersionId: textVersion.id,
+    speakerId: outsiderSpeaker.id,
+    assignedAt: new Date("2027-02-21T18:00:00.000Z"),
+    transitions: { create: { toStatus: "PENDING", occurredAt: new Date("2027-02-21T18:00:00.000Z") } },
+  },
+});
 await database.speakerResourcePage.create({
   data: {
     eventId: fixture.eventId,
@@ -92,6 +165,28 @@ await database.speakerSession.create({
   },
 });
 
+let deliveredAdminLink = "";
+const adminAuth = createAuth({
+  baseURL,
+  database,
+  isAllowedEmail: (email) => email === "admin@example.test",
+  secret: "quality-gate-better-auth-secret-at-least-32-characters",
+  sendMagicLink: async ({ url }) => {
+    deliveredAdminLink = url;
+  },
+});
+await adminAuth.handler(
+  new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: baseURL },
+    body: JSON.stringify({ email: "admin@example.test", callbackURL: "/dashboard" }),
+  }),
+);
+if (deliveredAdminLink === "") throw new Error("Expected the browser fixture to receive an admin magic link.");
+const verifiedAdmin = await adminAuth.handler(new Request(deliveredAdminLink, { redirect: "manual" }));
+const adminSessionCookie = verifiedAdmin.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
+if (!adminSessionCookie) throw new Error("Expected Better Auth to issue an admin session cookie.");
+
 process.stdout.write(
   JSON.stringify({
     eventSlug: fixture.eventSlug,
@@ -100,6 +195,10 @@ process.stdout.write(
     expiredSessionToken,
     ownSubmissionId: fixture.submissionId,
     outsiderSubmissionId: outsiderSubmission.id,
+    textTaskId: textTask.id,
+    fileTaskId: fileTask.id,
+    outsiderTaskId: outsiderTask.id,
+    adminSessionCookie,
   }),
 );
 await database.$disconnect();
