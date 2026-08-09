@@ -136,16 +136,18 @@ export class EmailTemplateRepository {
         const nextVersion = (current.versions[0]?.version ?? 0) + 1;
         await transaction.communicationTemplate.update({
           where: { id: current.id },
+          data: { name: definition.name },
+        });
+        // The version's foreign key is the compound [templateId, eventId], so both scalars are written
+        // here rather than nested under the update, where only the template id would be known.
+        await transaction.communicationTemplateVersion.create({
           data: {
-            name: definition.name,
-            versions: {
-              create: {
-                version: nextVersion,
-                subjectTemplate: definition.subjectTemplate,
-                htmlTemplate: definition.bodyTemplate,
-                textTemplate: definition.textTemplate,
-              },
-            },
+            templateId: current.id,
+            eventId,
+            version: nextVersion,
+            subjectTemplate: definition.subjectTemplate,
+            htmlTemplate: definition.bodyTemplate,
+            textTemplate: definition.textTemplate,
           },
         });
         return transaction.communicationTemplate.findUniqueOrThrow({
