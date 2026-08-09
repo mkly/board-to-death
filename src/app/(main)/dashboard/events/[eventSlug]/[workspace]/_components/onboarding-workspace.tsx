@@ -478,7 +478,7 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                     );
                   }
                   return (
-                    <TableRow key={assignment.id}>
+                    <TableRow key={assignment.id} id={assignment.id} className="scroll-mt-6">
                       <TableCell className="font-medium">{name}</TableCell>
                       <TableCell>{assignment.definitionVersion.title}</TableCell>
                       <TableCell>{taskStatus(assignment.status)}</TableCell>
