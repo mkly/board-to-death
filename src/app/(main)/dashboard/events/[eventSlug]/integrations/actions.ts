@@ -10,6 +10,18 @@ import { IntegrationRemoteRecordStatus } from "@/generated/prisma/client";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
+import { ApiTokenService } from "@/server/developer-api";
+import {
+  type ApiTokenScope,
+  apiTokenScopes,
+  type WebhookEventType,
+  webhookEventTypes,
+} from "@/server/developer-api/contracts";
+import {
+  disableWebhookEndpoint,
+  processDueWebhookDeliveries,
+  registerWebhookEndpoint,
+} from "@/server/developer-api/webhooks";
 import { RepositoryError } from "@/server/events/repositories";
 import {
   AcceleventsSessionMappingRepository,
@@ -32,6 +44,12 @@ export interface SessionMappingMutationState {
 export interface SyncRunMutationState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
+}
+
+export interface DeveloperAccessActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly secret?: string;
 }
 
 const speakerMappingSchema = z.object({
@@ -82,6 +100,80 @@ export async function saveSpeakerMapping(eventSlug: string, formData: FormData):
 function value(formData: FormData, name: string): string {
   const entry = formData.get(name);
   return typeof entry === "string" ? entry : "";
+}
+
+function checkedValues<T extends string>(formData: FormData, name: string, allowed: readonly T[]): T[] {
+  return formData
+    .getAll(name)
+    .filter((entry): entry is string => typeof entry === "string")
+    .filter((entry): entry is T => allowed.includes(entry as T));
+}
+
+export async function issueApiToken(
+  _previousState: DeveloperAccessActionState,
+  formData: FormData,
+): Promise<DeveloperAccessActionState> {
+  const eventSlug = value(formData, "eventSlug");
+  const name = value(formData, "name").trim();
+  const scopes = checkedValues<ApiTokenScope>(formData, "scopes", apiTokenScopes);
+  if (!name || scopes.length === 0) return { status: "error", message: "Enter a name and choose at least one scope." };
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  const issued = await new ApiTokenService(getDatabaseClient()).issue(event.id, name, scopes);
+  revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+  return { status: "success", message: "Copy this token now. It will not be shown again.", secret: issued.secret };
+}
+
+export async function revokeApiToken(formData: FormData): Promise<void> {
+  const event = await authorizedEvent(value(formData, "eventSlug"));
+  if (!event) return;
+  await new ApiTokenService(getDatabaseClient()).revoke(event.id, value(formData, "tokenId"));
+  revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+}
+
+export async function createWebhookEndpoint(
+  _previousState: DeveloperAccessActionState,
+  formData: FormData,
+): Promise<DeveloperAccessActionState> {
+  const eventSlug = value(formData, "eventSlug");
+  const name = value(formData, "name").trim();
+  const parsedUrl = z.url().safeParse(value(formData, "url"));
+  const events = checkedValues<WebhookEventType>(formData, "events", webhookEventTypes);
+  if (!name || !parsedUrl.success || events.length === 0) {
+    return { status: "error", message: "Enter a valid endpoint name and URL, then choose at least one event." };
+  }
+  const protocol = new URL(parsedUrl.data).protocol;
+  if (protocol !== "https:" && protocol !== "http:") {
+    return { status: "error", message: "Webhook endpoints must use HTTP or HTTPS." };
+  }
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  const endpoint = await registerWebhookEndpoint(getDatabaseClient(), {
+    eventId: event.id,
+    name,
+    url: parsedUrl.data,
+    events,
+  });
+  revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+  return {
+    status: "success",
+    message: "Copy this signing secret now. It will not be shown again.",
+    secret: endpoint.signingSecret,
+  };
+}
+
+export async function disableWebhook(formData: FormData): Promise<void> {
+  const event = await authorizedEvent(value(formData, "eventSlug"));
+  if (!event) return;
+  await disableWebhookEndpoint(getDatabaseClient(), event.id, value(formData, "endpointId"));
+  revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+}
+
+export async function retryDueWebhooks(formData: FormData): Promise<void> {
+  const event = await authorizedEvent(value(formData, "eventSlug"));
+  if (!event) return;
+  await processDueWebhookDeliveries(getDatabaseClient(), { eventId: event.id });
+  revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
 }
 
 function validationErrors(error: z.ZodError): Readonly<Record<string, readonly string[]>> {

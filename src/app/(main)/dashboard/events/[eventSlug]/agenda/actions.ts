@@ -10,6 +10,7 @@ import { AgendaConflictError, type AgendaConflictPolicy, AgendaPlacementReposito
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
+import { emitWebhookEvent } from "@/server/developer-api/webhooks";
 import { RepositoryError } from "@/server/events/repositories";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
 
@@ -175,6 +176,16 @@ export async function saveAgendaPlacement(
             { expectedVersion: parsed.data.expectedVersion, ...details },
             options,
           );
+    await emitWebhookEvent(client, {
+      eventId: event.id,
+      type: "session.scheduled",
+      data: {
+        sessionId: placement.sessionId,
+        placementId: placement.id,
+        startsAt: placement.startsAt.toISOString(),
+        durationMinutes: placement.durationMinutes,
+      },
+    });
     revalidatePath(`/dashboard/events/${event.slug}/agenda`);
     return {
       status: "success",

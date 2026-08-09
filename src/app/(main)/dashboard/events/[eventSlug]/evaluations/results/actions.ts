@@ -13,6 +13,7 @@ import { auth } from "@/server/auth/auth";
 import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
 import { DEFAULT_SPEAKER_INVITATION_LIFETIME_MS, SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
 import { getDatabaseClient } from "@/server/database/client";
+import { emitWebhookEvent } from "@/server/developer-api/webhooks";
 import {
   EvaluationDecisionRepository,
   EvaluationPlanRepository,
@@ -108,13 +109,19 @@ export async function recordEvaluationDecision(
   if (!parsed.success) redirect(destination(eventSlug, roundId, { error: "The decision request was invalid." }));
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
-    await new EvaluationDecisionRepository(getDatabaseClient()).record({
+    const client = getDatabaseClient();
+    await new EvaluationDecisionRepository(client).record({
       eventId: event.id,
       roundId: parsed.data.roundId,
       submissionId: parsed.data.submissionId,
       outcome: parsed.data.outcome,
       expectedDecisionNumber: parsed.data.expectedDecisionNumber,
       actorId,
+    });
+    await emitWebhookEvent(client, {
+      eventId: event.id,
+      type: "submission.status_changed",
+      data: { submissionId: parsed.data.submissionId, status: parsed.data.outcome },
     });
     refresh(event.slug);
   } catch (error) {

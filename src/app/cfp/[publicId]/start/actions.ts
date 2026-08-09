@@ -18,6 +18,7 @@ import {
 } from "@/server/cfp/submissions";
 import { type CfpApplicantRecipient, CfpThankYouRepository, renderCfpApplicantMessage } from "@/server/cfp/thank-you";
 import { getDatabaseClient } from "@/server/database/client";
+import { emitWebhookEvent } from "@/server/developer-api/webhooks";
 import { RepositoryError } from "@/server/events/repositories";
 import { SpeakerAuthService } from "@/server/speaker-auth";
 
@@ -236,6 +237,11 @@ export async function submitPublicCfpForm(
       answers: validation.answers,
       categoryIds,
       participants: speakers.participants,
+    });
+    await emitWebhookEvent(client, {
+      eventId: lookup.event.id,
+      type: "submission.created",
+      data: { submissionId: submission.id, status: submission.status, kind: submission.kind },
     });
     const runtimeConfig = getRuntimeConfig();
     const speakerPortalHref = portalHref(lookup.event.slug);
