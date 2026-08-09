@@ -96,13 +96,28 @@ test("builds, filters, duplicates, exports, deletes, and isolates saved reports"
     expect((await xlsxDownloadPromise).suggestedFilename()).toBe("sessions-with-speaker-details.xlsx");
 
     await page.getByRole("button", { name: "Duplicate" }).click();
-    await expect(page.getByText("Sessions with speaker details copy", { exact: true })).toBeVisible();
+    // The duplicate is listed and becomes the selected report, so its name renders twice.
+    await expect(page.getByText("Sessions with speaker details copy", { exact: true })).toHaveCount(2);
 
+    // Drop the duplicate's filter so the two saved reports no longer share editor state.
     await page.getByRole("button", { name: "Edit" }).click();
     const duplicateDialog = page.getByRole("dialog", { name: "Edit report" });
-    await expect(duplicateDialog.getByLabel("Name")).toHaveValue("Sessions with speaker details copy");
-    await duplicateDialog.getByRole("button", { name: "Close" }).click();
+    await expect(duplicateDialog.getByLabel("Filter 1 value")).toHaveValue("keynote");
+    await duplicateDialog.getByRole("button", { name: "Remove filter" }).click();
+    await duplicateDialog.getByRole("button", { name: "Save report" }).click();
+    await expect(page.getByText("Design lab", { exact: true })).toBeVisible();
 
+    // Selecting another report must reload the editor instead of keeping the previous report's state.
+    await page.getByRole("link", { name: "Sessions with speaker details", exact: true }).click();
+    await expect(page.getByText("Design lab", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit" }).click();
+    const originalDialog = page.getByRole("dialog", { name: "Edit report" });
+    await expect(originalDialog.getByLabel("Filter 1 value")).toHaveValue("keynote");
+    await page.keyboard.press("Escape");
+    await expect(originalDialog).toBeHidden();
+
+    await page.getByRole("link", { name: "Sessions with speaker details copy", exact: true }).click();
+    await expect(page.getByText("Design lab", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Delete report" }).click();
     await expect(page.getByText("Sessions with speaker details copy", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Opening keynote", { exact: true })).toBeVisible();
