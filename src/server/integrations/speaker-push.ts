@@ -267,6 +267,12 @@ export class AcceleventsSpeakerPushService {
       throw new RepositoryError("invalid-input", "The Accelevents connection does not match this event configuration.");
     }
 
+    const replayed = await this.#client.integrationSyncRun.findUnique({
+      where: { configurationId_idempotencyKey: { configurationId: state.id, idempotencyKey } },
+      include: { records: { orderBy: [{ startedAt: "asc" }, { localId: "asc" }] } },
+    });
+    if (replayed) return resultFor(replayed, true);
+
     const speakers = await this.#client.speaker.findMany({
       where: { eventId },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],

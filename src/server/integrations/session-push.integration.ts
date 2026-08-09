@@ -360,6 +360,15 @@ describe("Accelevents session push", () => {
     assert.equal(retryRecord.attemptNumber, 2);
     assert.ok(retryRecord.retryOfRecordId);
 
+    const retryReplay = await service.push({
+      ...input,
+      idempotencyKey: "manual-retry:1:sessions",
+      retryOfRunId: first.runId,
+    });
+    assert.equal(retryReplay.replayed, true);
+    assert.equal(retryReplay.runId, retry.runId);
+    assert.equal(adapter.requests.length, 5);
+
     const unchanged = await service.push({ ...input, idempotencyKey: "manual-retry:2:sessions" });
     assert.equal(byLocalId(unchanged).get(fixture.updateId)?.status, IntegrationSyncRecordStatus.SKIPPED);
     assert.equal(byLocalId(unchanged).get(fixture.createId)?.status, IntegrationSyncRecordStatus.SKIPPED);
