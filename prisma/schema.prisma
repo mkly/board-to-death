@@ -12,15 +12,32 @@ model User {
   name               String
   email              String
   emailVerified      Boolean             @default(false)
+  twoFactorEnabled   Boolean             @default(false)
   image              String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   sessions           Session[]
   accounts           Account[]
+  twoFactors         TwoFactor[]
   cfpSubmissionViews CfpSubmissionView[]
 
   @@unique([email])
   @@map("user")
+}
+
+model TwoFactor {
+  id                      String    @id
+  userId                  String
+  secret                  String
+  backupCodes             String
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0)
+  lockedUntil             DateTime?
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([secret])
+  @@index([userId])
+  @@map("twoFactor")
 }
 
 model Session {
