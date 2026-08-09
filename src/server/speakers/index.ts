@@ -26,6 +26,16 @@ export {
   type UpdateSpeakerProfileInput,
 } from "./repositories.ts";
 export {
+  createSpeakerTaskMatrixCsv,
+  parseSpeakerTaskMatrixFilters,
+  type SpeakerTaskMatrixFilters,
+  SpeakerTaskMatrixRepository,
+  type SpeakerTaskMatrixResult,
+  type SpeakerTaskMatrixRow,
+  type SpeakerTaskMatrixState,
+  speakerTaskMatrixStates,
+} from "./task-matrix.ts";
+export {
   normalizeSpeakerTaskResponse,
   type SpeakerTaskResponseKind,
   speakerTaskResponseKind,
