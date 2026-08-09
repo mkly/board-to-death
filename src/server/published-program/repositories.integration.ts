@@ -167,7 +167,14 @@ describe("published-program lifecycle", () => {
 
   test("keeps immutable publish, republish, unpublish, and restore history", async () => {
     const fixture = await createProgramFixture();
-    const operations = new PublishedProgramOperations(publications, async () => principal(fixture.event.id));
+    const queuedPushes: { eventId: string; publishedVersion: number; idempotencyKey: string }[] = [];
+    const operations = new PublishedProgramOperations(
+      publications,
+      async () => principal(fixture.event.id),
+      async (request) => {
+        queuedPushes.push(request);
+      },
+    );
     const first = await operations.publish(fixture.event.id);
 
     await sessions.update(fixture.event.id, fixture.session.id, { title: "Revised session" });
@@ -180,6 +187,14 @@ describe("published-program lifecycle", () => {
     assert.equal(third.state, PublishedProgramState.UNPUBLISHED);
     assert.equal(third.snapshot, null);
     assert.equal(fourth.state, PublishedProgramState.PUBLISHED);
+    assert.deepEqual(
+      queuedPushes.map(({ eventId, publishedVersion, idempotencyKey }) => [eventId, publishedVersion, idempotencyKey]),
+      [
+        [fixture.event.id, 1, "published-program:1"],
+        [fixture.event.id, 2, "published-program:2"],
+        [fixture.event.id, 4, "published-program:4"],
+      ],
+    );
     assert.deepEqual(
       (await publications.listVersions(fixture.event.id)).map(({ versionNumber, state }) => [versionNumber, state]),
       [

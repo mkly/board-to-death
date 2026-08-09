@@ -40,6 +40,13 @@ export { sessionPreviewCsv } from "./session-preview-csv.ts";
 export type { LoadedSessionPreview, LoadedSessionPreviewCsv } from "./session-preview-loader.ts";
 export { loadSessionPreview, loadSessionPreviewCsv } from "./session-preview-loader.ts";
 export type {
+  ProgramPushResult,
+  PushAcceleventsSessionsInput,
+  SessionPushRecordResult,
+  SessionPushResult,
+} from "./session-push.ts";
+export { AcceleventsProgramPushService, AcceleventsSessionPushService } from "./session-push.ts";
+export type {
   SpeakerFieldMapping,
   SpeakerMappingSource,
   SpeakerPreview,

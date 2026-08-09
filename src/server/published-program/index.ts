@@ -1,3 +1,4 @@
+export type { PublishedProgramPushQueue, PublishedProgramPushRequest } from "./operations.ts";
 export { PublishedProgramOperations } from "./operations.ts";
 export {
   handlePublicProgramOptions,
