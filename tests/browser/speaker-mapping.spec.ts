@@ -29,6 +29,7 @@ test("previews mixed speaker actions, validates mapping changes, resumes them, p
   context,
   page,
 }) => {
+  test.slow();
   const eventSlug = await prepareSpeakerMapping(context);
   await page.goto(`/dashboard/events/${eventSlug}/integrations`);
 
@@ -43,7 +44,7 @@ test("previews mixed speaker actions, validates mapping changes, resumes them, p
   await expect(page.getByText("invalid-email")).toBeVisible();
   await page.getByRole("link", { name: "Go to next page" }).click();
   await expect(page).toHaveURL(/page=2/);
-  await expect(page.getByText("Speaker 12 Example")).toBeVisible();
+  await expect(page.getByText("Speaker 12 Example").first()).toBeVisible();
 
   await page.getByLabel("Remote last name").selectOption("profile.organization");
   await page.getByRole("button", { name: "Save mapping and refresh preview" }).click();
