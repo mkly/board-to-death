@@ -61,3 +61,5 @@ export type {
 } from "./speaker-push.ts";
 export { AcceleventsSpeakerPushService } from "./speaker-push.ts";
 export { AcceleventsSyncRunService } from "./sync-run-control.ts";
+export type { SyncRunRecordSummary, SyncRunResourceType, SyncRunSummary } from "./sync-run-loader.ts";
+export { loadAcceleventsSyncHistory } from "./sync-run-loader.ts";
