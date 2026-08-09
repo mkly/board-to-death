@@ -449,6 +449,7 @@ export function ReportWorkspace({
                 </CardDescription>
                 <CardAction className="flex flex-wrap gap-2">
                   <ReportEditor
+                    key={selected.id}
                     eventSlug={event.slug}
                     report={selected}
                     catalog={catalog}

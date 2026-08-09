@@ -97,6 +97,12 @@ test("builds, filters, duplicates, exports, deletes, and isolates saved reports"
 
     await page.getByRole("button", { name: "Duplicate" }).click();
     await expect(page.getByText("Sessions with speaker details copy", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    const duplicateDialog = page.getByRole("dialog", { name: "Edit report" });
+    await expect(duplicateDialog.getByLabel("Name")).toHaveValue("Sessions with speaker details copy");
+    await duplicateDialog.getByRole("button", { name: "Close" }).click();
+
     await page.getByRole("button", { name: "Delete report" }).click();
     await expect(page.getByText("Sessions with speaker details copy", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Opening keynote", { exact: true })).toBeVisible();
