@@ -200,12 +200,74 @@ describe("CFP form persistence", () => {
         key: "main-cfp",
         title: "Latest title",
         versionNumber: 2,
+        policyId: (
+          await client.cfpPolicy.findUniqueOrThrow({
+            where: { eventId_key: { eventId: event.id, key: "main-cfp" } },
+            select: { id: true },
+          })
+        ).id,
         status: CfpPolicyStatus.DRAFT,
         submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
         responseCount: 1,
         assignedAdministrators: ["Ada Lovelace"],
       },
     ]);
+  });
+
+  test("duplicates the latest definition and policy as a distinct draft without submissions", async () => {
+    const event = await events.create(eventInput);
+    const administrator = await administrators.create({
+      eventId: event.id,
+      externalId: "owner@example.com",
+      displayName: "Owner",
+    });
+    const source = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition("Original") });
+    const sourcePolicy = await policies.create({
+      eventId: event.id,
+      key: "main-cfp",
+      definition: {
+        submissionOpensAt: new Date("2027-01-01T08:00:00.000Z"),
+        submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+        messages: { introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" },
+        conditionalVisibility: [],
+        categoryRouting: [],
+        adminAssignments: [{ administratorId: administrator.id, role: CfpAdminRole.OWNER }],
+      },
+    });
+    await policies.transition(event.id, sourcePolicy.id, CfpPolicyStatus.PUBLISHED, administrator.id);
+    await submissions.createDraft({
+      eventId: event.id,
+      formVersionId: (
+        await client.cfpFormVersion.findFirstOrThrow({ where: { formId: source.formId }, select: { id: true } })
+      ).id,
+      kind: CfpSubmissionKind.ABSTRACT,
+      answers: [],
+    });
+
+    const duplicate = await forms.duplicate(event.id, source.formId, "copied-cfp");
+    const duplicatePolicy = await client.cfpPolicy.findUniqueOrThrow({
+      where: { eventId_key: { eventId: event.id, key: "copied-cfp" } },
+      include: { versions: true },
+    });
+
+    assert.equal(duplicate.key, "copied-cfp");
+    assert.equal(duplicate.versionNumber, 1);
+    assert.equal(duplicate.definition.title, "Copy of Original");
+    assert.notEqual(duplicate.formId, source.formId);
+    assert.equal(duplicate.publicId, duplicatePolicy.publicId);
+    assert.notEqual(duplicate.publicId, sourcePolicy.publicId);
+    assert.equal(duplicatePolicy.status, CfpPolicyStatus.DRAFT);
+    assert.equal(duplicatePolicy.versions.length, 1);
+    assert.equal(await client.cfpSubmission.count({ where: { formVersion: { formId: duplicate.formId } } }), 0);
+    assert.equal(await client.cfpSubmission.count({ where: { formVersion: { formId: source.formId } } }), 1);
+
+    const otherEvent = await events.create({ ...eventInput, name: "Other", slug: "other" });
+    await assert.rejects(
+      forms.duplicate(otherEvent.id, source.formId, "stolen-copy"),
+      (error: unknown) => error instanceof RepositoryError && error.code === "not-found",
+    );
   });
 
   test("rejects malformed type-specific constraints before writing", async () => {

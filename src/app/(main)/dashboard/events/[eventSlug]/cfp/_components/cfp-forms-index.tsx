@@ -2,13 +2,14 @@ import Link from "next/link";
 
 import { ClipboardList, Users } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { CfpFormSummary } from "@/server/cfp/repositories";
 
+import { CfpFormActions } from "./cfp-form-actions";
 import { CreateFormButton } from "./create-form-button";
 
 function statusLabel(status: CfpFormSummary["status"]): string {
@@ -27,9 +28,13 @@ function formSetupHref(eventSlug: string, formId: string): string {
 export function CfpFormsIndex({
   event,
   forms,
+  notice,
+  error,
 }: {
   readonly event: { readonly name: string; readonly slug: string; readonly timezone: string };
   readonly forms: readonly CfpFormSummary[];
+  readonly notice?: string;
+  readonly error?: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -43,6 +48,19 @@ export function CfpFormsIndex({
         </div>
         <CreateFormButton eventSlug={event.slug} />
       </header>
+
+      {notice ? (
+        <Alert>
+          <AlertTitle>CFP updated</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      ) : null}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Unable to update CFP</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -118,9 +136,7 @@ export function CfpFormsIndex({
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={setupHref}>Edit</Link>
-                        </Button>
+                        <CfpFormActions eventSlug={event.slug} form={form} setupHref={setupHref} />
                       </TableCell>
                     </TableRow>
                   );
