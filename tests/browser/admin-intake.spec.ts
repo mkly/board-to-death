@@ -58,7 +58,13 @@ test.describe
 
       await page.getByLabel("Client identifier").fill("manual-browser-abstract");
       await page.getByLabel("Proposal title").fill("Designing safer tables");
+      await expect(page.getByLabel("Summary")).toHaveCount(0);
+      await page.getByLabel("Format").selectOption("workshop");
       await page.getByLabel("Summary").fill("A practical browser-tested abstract.");
+      await page.getByLabel("Format").selectOption("talk");
+      await expect(page.getByLabel("Summary")).toHaveCount(0);
+      await page.getByLabel("Format").selectOption("workshop");
+      await expect(page.getByLabel("Summary")).toHaveValue("A practical browser-tested abstract.");
       await page.getByLabel("Participant to add").click();
       await page.getByRole("option", { name: new RegExp(fixture.speakerEmail) }).click();
       await page.getByRole("button", { name: "Add participant" }).click();
@@ -81,7 +87,7 @@ test.describe
       ].join(",");
       const csv = [
         header,
-        'manual-browser-abstract,abstract,SUBMITTED,main-cfp,,,,,alex@example.test,,"{""title"":""Designing safer tables"",""summary"":""A practical browser-tested abstract.""}"',
+        'manual-browser-abstract,abstract,SUBMITTED,main-cfp,,,,,alex@example.test,,"{""title"":""Designing safer tables"",""format"":""workshop"",""summary"":""A practical browser-tested abstract.""}"',
         "partner-session-1,guaranteed_session,,,Opening keynote,Welcome remarks,30,Main stage,alex@example.test,,",
         "broken-row,abstract,SUBMITTED,missing-form,,,,,missing@example.test,,not-json",
       ].join("\r\n");

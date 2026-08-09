@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 
 import { CheckCircle2Icon, SaveIcon, SendIcon, UploadIcon } from "lucide-react";
 
@@ -12,7 +12,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import type { PortalFormAnswers, PortalFormDefinition } from "@/lib/portal-forms";
+import { type PortalFormAnswers, type PortalFormDefinition, visiblePortalFormFieldIds } from "@/lib/portal-forms";
 import type { SpeakerTaskResponseKind } from "@/server/speakers";
 
 import type { TaskFormState, TaskSubmissionState } from "../actions";
@@ -122,6 +122,8 @@ interface PortalFormResponseProps {
 
 function PortalFormResponse({ action, definition, initialAnswers }: PortalFormResponseProps) {
   const [state, formAction, pending] = useActionState(action, initialTaskFormState);
+  const [answers, setAnswers] = useState<PortalFormAnswers>(initialAnswers);
+  const visibleIds = useMemo(() => visiblePortalFormFieldIds(definition, answers), [answers, definition]);
   const submitted = state.submitted === true;
   let alertTitle = "Check your response";
   if (state.ok) alertTitle = submitted ? definition.confirmation.subject : "Saved";
@@ -143,45 +145,53 @@ function PortalFormResponse({ action, definition, initialAnswers }: PortalFormRe
           </CardHeader>
           <CardContent>
             <FieldGroup>
-              {section.fields.map((field) => {
-                const error = state.errors?.[field.id];
-                const answer = initialAnswers[field.id];
-                if (field.type === "checkbox") {
+              {section.fields
+                .filter(({ id }) => visibleIds.has(id))
+                .map((field) => {
+                  const error = state.errors?.[field.id];
+                  const answer = answers[field.id];
+                  if (field.type === "checkbox") {
+                    return (
+                      <Field key={field.id} orientation="horizontal" data-invalid={Boolean(error)}>
+                        <Checkbox
+                          id={field.id}
+                          name={field.id}
+                          checked={answer === true}
+                          onCheckedChange={(checked) =>
+                            setAnswers((current) => ({ ...current, [field.id]: checked === true }))
+                          }
+                          aria-invalid={Boolean(error)}
+                          disabled={submitted}
+                        />
+                        <div className="flex flex-col gap-1">
+                          <FieldLabel htmlFor={field.id}>{field.label}</FieldLabel>
+                          {field.reusableKey ? (
+                            <FieldDescription>Reused across assigned forms.</FieldDescription>
+                          ) : null}
+                          <FieldError>{error}</FieldError>
+                        </div>
+                      </Field>
+                    );
+                  }
+                  const Control = field.type === "textarea" ? Textarea : Input;
                   return (
-                    <Field key={field.id} orientation="horizontal" data-invalid={Boolean(error)}>
-                      <Checkbox
+                    <Field key={field.id} data-invalid={Boolean(error)}>
+                      <FieldLabel htmlFor={field.id}>{field.label}</FieldLabel>
+                      <Control
                         id={field.id}
                         name={field.id}
-                        defaultChecked={answer === true}
+                        type={field.type === "email" ? "email" : undefined}
+                        value={typeof answer === "string" ? answer : ""}
+                        onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))}
+                        required={field.required}
                         aria-invalid={Boolean(error)}
                         disabled={submitted}
                       />
-                      <div className="flex flex-col gap-1">
-                        <FieldLabel htmlFor={field.id}>{field.label}</FieldLabel>
-                        {field.reusableKey ? <FieldDescription>Reused across assigned forms.</FieldDescription> : null}
-                        <FieldError>{error}</FieldError>
-                      </div>
+                      {field.reusableKey ? <FieldDescription>Reused across assigned forms.</FieldDescription> : null}
+                      <FieldError>{error}</FieldError>
                     </Field>
                   );
-                }
-                const Control = field.type === "textarea" ? Textarea : Input;
-                return (
-                  <Field key={field.id} data-invalid={Boolean(error)}>
-                    <FieldLabel htmlFor={field.id}>{field.label}</FieldLabel>
-                    <Control
-                      id={field.id}
-                      name={field.id}
-                      type={field.type === "email" ? "email" : undefined}
-                      defaultValue={typeof answer === "string" ? answer : ""}
-                      required={field.required}
-                      aria-invalid={Boolean(error)}
-                      disabled={submitted}
-                    />
-                    {field.reusableKey ? <FieldDescription>Reused across assigned forms.</FieldDescription> : null}
-                    <FieldError>{error}</FieldError>
-                  </Field>
-                );
-              })}
+                })}
             </FieldGroup>
           </CardContent>
         </Card>

@@ -20,6 +20,7 @@ interface SpeakerPortalFixture {
   readonly outsiderSubmissionId: string;
   readonly textTaskId: string;
   readonly fileTaskId: string;
+  readonly formTaskId: string;
   readonly outsiderTaskId: string;
   readonly rehearsalVersionId: string;
   readonly adminSessionCookie: string;
@@ -408,4 +409,28 @@ test("submits text and file tasks, preserves revisions, and enforces speaker own
 
   const denied = await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.outsiderTaskId}`);
   expect(denied?.status()).toBe(404);
+});
+
+test("shows conditional task fields, restores their values, and omits hidden answers", async ({ page }) => {
+  const fixture = await preparePortal();
+  await page.goto(fixture.populatedAuthHref);
+  await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.formTaskId}`);
+
+  await expect(page.getByRole("heading", { name: "Request travel assistance" })).toBeVisible();
+  await expect(page.getByLabel("Travel details")).toHaveCount(0);
+  await page.getByLabel("I need travel help").check();
+  await page.getByLabel("Travel details").fill("Please arrange an accessible airport transfer.");
+  await page.getByLabel("I need travel help").uncheck();
+  await expect(page.getByLabel("Travel details")).toHaveCount(0);
+  await page.getByLabel("I need travel help").check();
+  await expect(page.getByLabel("Travel details")).toHaveValue("Please arrange an accessible airport transfer.");
+  await page.getByLabel("I need travel help").uncheck();
+  await page.getByRole("button", { name: "Submit response" }).click();
+  await expect(page.getByText("Awaiting event-team review")).toBeVisible();
+
+  const submissions = await database.query<{ response: Record<string, unknown> }>(
+    `SELECT response FROM speaker_task_submissions WHERE "assignmentId" = $1 ORDER BY "attemptNumber" DESC LIMIT 1`,
+    [fixture.formTaskId],
+  );
+  expect(submissions.rows[0]?.response).toEqual({ "needs-help": false });
 });

@@ -76,13 +76,21 @@ const RESPONSE_LABELS: Record<TaskResponseType, string> = {
 };
 
 function formDefinitionValue(definition?: TaskDefinitionView): string {
+  const fieldLabels = new Map(
+    (definition?.sections ?? []).flatMap(({ fields }) => fields.map(({ id, label }) => [id, label] as const)),
+  );
   return (definition?.sections ?? [])
     .flatMap((section) => [
       `[${section.title}${section.instructions ? ` :: ${section.instructions}` : ""}]`,
-      ...section.fields.map(
-        (field) =>
-          `${field.label} | ${field.type} | ${field.required ? "required" : "optional"} | ${field.reusableKey ?? ""}`,
-      ),
+      ...section.fields.map((field) => {
+        const condition = field.visibleWhen;
+        let conditionValue = condition?.equals;
+        if (typeof conditionValue === "boolean") conditionValue = conditionValue ? "checked" : "unchecked";
+        const visibility = condition
+          ? `when ${fieldLabels.get(condition.fieldId) ?? condition.fieldId} = ${conditionValue}`
+          : "";
+        return `${field.label} | ${field.type} | ${field.required ? "required" : "optional"} | ${field.reusableKey ?? ""} | ${visibility}`;
+      }),
     ])
     .join("\n");
 }
@@ -200,7 +208,8 @@ function DefinitionForm({
               />
               <FieldDescription>
                 Start sections with [Title :: optional instructions]. Add fields as Label | text, textarea, email, or
-                checkbox | required or optional | optional reusable key.
+                checkbox | required or optional | optional reusable key | optional condition. Conditions use an earlier
+                field label, for example: when Attendance = Online or when Consent = checked.
               </FieldDescription>
               <FieldError>{firstError(errors, "formDefinition")}</FieldError>
             </Field>
@@ -362,7 +371,7 @@ export function OnboardingTasksWorkspace({ eventOptions, initialSnapshot }: Onbo
                 New task
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Create onboarding task</DialogTitle>
                 <DialogDescription>Define what speakers need to do and when it applies.</DialogDescription>
@@ -524,7 +533,7 @@ export function OnboardingTasksWorkspace({ eventOptions, initialSnapshot }: Onbo
           setFieldErrors(undefined);
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit onboarding task</DialogTitle>
             <DialogDescription>Saving creates a new version for future assignments.</DialogDescription>
