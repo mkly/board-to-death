@@ -19,3 +19,11 @@ export type {
   SaveAcceleventsConfigurationInput,
 } from "./configuration.ts";
 export { AcceleventsConfigurationRepository, acceleventsAuditDetails } from "./configuration.ts";
+export type {
+  SpeakerFieldMapping,
+  SpeakerMappingSource,
+  SpeakerPreview,
+  SpeakerPreviewAction,
+  SpeakerPreviewItem,
+} from "./speaker-mapping.ts";
+export { SpeakerMappingRepository, speakerMappingSources } from "./speaker-mapping.ts";
