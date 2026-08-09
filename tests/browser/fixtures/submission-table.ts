@@ -9,11 +9,10 @@ import {
   PrismaClient,
 } from "../../../src/generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../../src/lib/cfp/index.ts";
+import { createAuth } from "../../../src/server/auth/auth-factory.ts";
 import { CfpFormRepository } from "../../../src/server/cfp/repositories.ts";
-import { createHmac, randomUUID } from "node:crypto";
 
-// Run as native ESM so Prisma's generated client can use import.meta.
-
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 const databaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
@@ -188,22 +187,30 @@ async function seed() {
 }
 
 async function signIn() {
-  const user = await database.user.upsert({
-    where: { email: adminEmail },
-    create: { id: randomUUID(), name: "Browser Admin", email: adminEmail, emailVerified: true },
-    update: { name: "Browser Admin", emailVerified: true },
-  });
-  const token = randomUUID();
-  await database.session.create({
-    data: {
-      id: randomUUID(),
-      token,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  const links: string[] = [];
+  const auth = createAuth({
+    baseURL,
+    database,
+    isAllowedEmail: (email) => email.toLowerCase() === adminEmail,
+    secret: authSecret,
+    sendMagicLink: async ({ url }) => {
+      links.push(url);
     },
   });
-  const signature = createHmac("sha256", authSecret).update(token).digest("base64");
-  return { value: encodeURIComponent(`${token}.${signature}`) };
+  const requested = await auth.handler(
+    new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseURL },
+      body: JSON.stringify({ email: adminEmail, callbackURL: "/dashboard" }),
+    }),
+  );
+  if (requested.status !== 200) throw new Error(`Magic-link sign-in returned ${requested.status}.`);
+  const link = links[0];
+  if (!link) throw new Error("Expected the submission-table administrator magic link to be delivered.");
+  const verified = await auth.handler(new Request(link, { redirect: "manual" }));
+  const value = (verified.headers.get("set-cookie") ?? "").match(/better-auth\.session_token=([^;]+)/)?.[1];
+  if (!value) throw new Error("Expected Better Auth to create a submission-table browser session cookie.");
+  return { value };
 }
 
 async function cleanup() {

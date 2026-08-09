@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { EventType, PrismaClient } from "../../generated/prisma/client.ts";
+import { parseSubmissionView } from "../../lib/cfp/submission-table.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -105,16 +106,42 @@ describe("CFP submission view persistence", () => {
     assert.deepEqual(otherAdmin.filters, secondAdminView.filters);
     assert.deepEqual(otherAdmin.columns, secondAdminView.columns);
 
+    // The submissions page and export route both resolve a stored row through
+    // parseSubmissionView, so assert the view each admin actually renders.
+    assert.deepEqual(parseSubmissionView(updated), {
+      columns: firstView.columns,
+      filters: { status: "REJECTED" },
+      sorting: firstView.sorting,
+    });
+    assert.deepEqual(parseSubmissionView(otherEvent), secondEventView);
+    assert.deepEqual(parseSubmissionView(otherAdmin), secondAdminView);
+
     await client.cfpSubmissionView.delete({
       where: { eventId_userId: { eventId: firstEvent.id, userId: firstAdmin.id } },
     });
 
-    assert.equal(
-      await client.cfpSubmissionView.findUnique({
-        where: { eventId_userId: { eventId: firstEvent.id, userId: firstAdmin.id } },
-      }),
-      null,
-    );
+    const afterReset = await client.cfpSubmissionView.findUnique({
+      where: { eventId_userId: { eventId: firstEvent.id, userId: firstAdmin.id } },
+    });
+    assert.equal(afterReset, null);
     assert.equal(await client.cfpSubmissionView.count(), 2);
+
+    // Resetting one admin's view leaves the other event and the other admin untouched.
+    assert.deepEqual(
+      parseSubmissionView(
+        await client.cfpSubmissionView.findUniqueOrThrow({
+          where: { eventId_userId: { eventId: secondEvent.id, userId: firstAdmin.id } },
+        }),
+      ),
+      secondEventView,
+    );
+    assert.deepEqual(
+      parseSubmissionView(
+        await client.cfpSubmissionView.findUniqueOrThrow({
+          where: { eventId_userId: { eventId: firstEvent.id, userId: secondAdmin.id } },
+        }),
+      ),
+      secondAdminView,
+    );
   });
 });

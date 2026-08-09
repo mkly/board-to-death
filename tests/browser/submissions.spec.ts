@@ -2,11 +2,12 @@ import { expect, test } from "@playwright/test";
 import ExcelJS from "exceljs";
 
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const executeFile = promisify(execFile);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
-const fixtureScript = "tests/browser/support/submission-fixtures.mts";
+const fixtureScript = path.join(process.cwd(), "tests/browser/fixtures/submission-table.ts");
 
 interface SeededFixtures {
   readonly emptyEvent: { readonly id: string; readonly slug: string };
@@ -16,9 +17,7 @@ interface SeededFixtures {
 let fixtures: SeededFixtures;
 
 async function runFixture<T>(command: "seed" | "sign-in" | "cleanup"): Promise<T> {
-  const { stdout } = await executeFile(process.execPath, ["--experimental-strip-types", fixtureScript, command], {
-    env: process.env,
-  });
+  const { stdout } = await executeFile(process.execPath, [fixtureScript, command], { env: process.env });
   const output = stdout.trim().split("\n").at(-1);
   if (!output) throw new Error(`Submission fixture command ${command} produced no result.`);
   return JSON.parse(output) as T;
@@ -75,7 +74,11 @@ test.describe
       await page.reload();
       await expect(page.getByRole("columnheader", { name: "Audience" })).toBeVisible();
       await page.getByRole("button", { name: "Columns" }).click();
-      await page.getByRole("button", { name: "Reset saved view" }).click();
+      const resetView = page.getByRole("button", { name: "Reset saved view" });
+      await resetView.click();
+      // The reset button only renders while a saved view exists, so its removal
+      // proves the server action landed before the page is reloaded.
+      await expect(resetView).toHaveCount(0);
       await page.reload();
       await expect(page.getByRole("columnheader", { name: "Audience" })).toHaveCount(0);
     });
@@ -126,5 +129,16 @@ test.describe
       expect(worksheet?.getRow(1).values).toEqual([undefined, "Submission", "Applicant", "Audience"]);
       expect(worksheet?.getRow(2).values).toEqual([undefined, "Board Game Design CFP", "Lex Formula", "'=2+2"]);
       expect(worksheet?.rowCount).toBe(2);
+
+      // Without any filter the export still stops at the event boundary, so the
+      // other event's admin-visible submission never reaches this workbook.
+      const unfilteredResponse = await page.request.get(
+        `/dashboard/events/${fixtures.largeEvent.slug}/submissions/export?format=csv&column=formTitle&column=applicant`,
+      );
+      expect(unfilteredResponse.ok()).toBe(true);
+      const unfiltered = await unfilteredResponse.text();
+      expect(unfiltered.trim().split("\r\n")).toHaveLength(26);
+      expect(unfiltered).not.toContain("Secret Other Event");
+      expect(unfiltered).not.toContain("Never export this");
     });
   });
