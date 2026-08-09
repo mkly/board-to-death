@@ -6,7 +6,7 @@ import type { RepositoryError } from "../events/repositories.ts";
 import { EmailTemplateRepository } from "./templates.ts";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://invalid:invalid@localhost:5432/invalid";
-const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
+const describeWithDatabase = process.env.DATABASE_URL?.includes("_test") ? describe : describe.skip;
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const templates = new EmailTemplateRepository(client);
