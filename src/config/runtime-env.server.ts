@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAbsolute } from "node:path";
 
 import {
   type Environment,
@@ -19,6 +20,7 @@ const SERVER_KEYS = [
   "AUTH_ALLOWED_EMAILS",
   "AUTH_MAGIC_LINK_WEBHOOK_URL",
   "AUTH_MAGIC_LINK_WEBHOOK_TOKEN",
+  "FILE_STORAGE_PATH",
 ] as const;
 const REQUIRED_PRODUCTION_SERVER_KEYS = SERVER_KEYS.filter((key) => key !== "AUTH_MAGIC_LINK_WEBHOOK_TOKEN");
 
@@ -32,6 +34,7 @@ const DEFAULTS: Record<Exclude<RuntimeMode, "production">, ServerRuntimeValues> 
     BETTER_AUTH_SECRET: "local-development-better-auth-secret",
     BETTER_AUTH_URL: "http://localhost:3000",
     AUTH_ALLOWED_EMAILS: "admin@example.com",
+    FILE_STORAGE_PATH: "./.data/files",
   },
   test: {
     AUTH_SECRET: "test-only-auth-secret-not-for-production",
@@ -39,6 +42,7 @@ const DEFAULTS: Record<Exclude<RuntimeMode, "production">, ServerRuntimeValues> 
     BETTER_AUTH_SECRET: "test-only-better-auth-secret-not-for-production",
     BETTER_AUTH_URL: "http://localhost:3000",
     AUTH_ALLOWED_EMAILS: "admin@example.test",
+    FILE_STORAGE_PATH: "./.data/test-files",
   },
 };
 
@@ -73,6 +77,7 @@ const serverSchema = z.object({
     })
     .optional(),
   AUTH_MAGIC_LINK_WEBHOOK_TOKEN: z.string().optional(),
+  FILE_STORAGE_PATH: z.string().min(1, "must not be empty"),
 });
 
 export type ServerRuntimeConfig = z.infer<typeof serverSchema>;
@@ -98,10 +103,15 @@ function getServerValues(environment: Environment, mode: RuntimeMode): ServerRun
 }
 
 export function parseServerRuntimeConfig(environment: Environment): ServerRuntimeConfig {
-  const result = serverSchema.safeParse(getServerValues(environment, getRuntimeMode(environment)));
+  const mode = getRuntimeMode(environment);
+  const result = serverSchema.safeParse(getServerValues(environment, mode));
 
   if (!result.success) {
     throw new RuntimeConfigError(formatIssues(result.error));
+  }
+
+  if (mode === "production" && !isAbsolute(result.data.FILE_STORAGE_PATH)) {
+    throw new RuntimeConfigError(["FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production"]);
   }
 
   return result.data;

@@ -158,6 +158,11 @@ required compensating SQL, apply it with `prisma db execute`, and mark the faile
 `prisma migrate resolve --rolled-back MIGRATION_NAME` before redeploying. Do not edit or mark a successfully applied
 migration as rolled back; revert the Prisma schema and create a new forward migration instead.
 
+### Production operations
+
+See [Production operations](docs/operations.md) for runtime configuration, mounted secrets, migration and startup
+commands, health checks, graceful shutdown, persistent storage, backup, and recovery guidance.
+
 ### Formatting and Linting
 
 Format, lint, and organize imports

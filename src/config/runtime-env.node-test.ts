@@ -13,6 +13,7 @@ const productionEnvironment = {
   BETTER_AUTH_SECRET: "a-production-better-auth-secret-with-enough-entropy",
   BETTER_AUTH_URL: "https://events.example.com",
   DATABASE_URL: "postgresql://app:password@database.example.com:5432/board_to_death",
+  FILE_STORAGE_PATH: "/var/lib/board-to-death/files",
   NEXT_PUBLIC_APP_URL: "https://events.example.com",
   NODE_ENV: "production",
 } as const;
@@ -28,6 +29,7 @@ const productionProcessEnvironment = Object.fromEntries(
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "DATABASE_URL",
+        "FILE_STORAGE_PATH",
         "NEXT_PUBLIC_APP_URL",
         "NEXT_RUNTIME",
       ].includes(key),
@@ -68,6 +70,7 @@ test("production requires every configured server and public value", () => {
         "BETTER_AUTH_URL is required when NODE_ENV=production",
         "AUTH_ALLOWED_EMAILS is required when NODE_ENV=production",
         "AUTH_MAGIC_LINK_WEBHOOK_URL is required when NODE_ENV=production",
+        "FILE_STORAGE_PATH is required when NODE_ENV=production",
         "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
       ]);
       return true;
@@ -149,6 +152,18 @@ test("malformed URLs produce keyed runtime configuration errors in every mode", 
   }
 });
 
+test("production requires an absolute persistent file-storage path", () => {
+  assert.throws(
+    () => parseServerRuntimeConfig({ ...productionEnvironment, FILE_STORAGE_PATH: "./ephemeral-files" }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, ["FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production"]);
+      assert.doesNotMatch(error.message, /ephemeral-files/);
+      return true;
+    },
+  );
+});
+
 test("the public parser returns only its explicit allowlist", () => {
   const publicConfig = parsePublicRuntimeConfig(productionEnvironment);
 
@@ -159,6 +174,7 @@ test("the public parser returns only its explicit allowlist", () => {
   assert.equal("BETTER_AUTH_SECRET" in publicConfig, false);
   assert.equal("AUTH_ALLOWED_EMAILS" in publicConfig, false);
   assert.equal("DATABASE_URL" in publicConfig, false);
+  assert.equal("FILE_STORAGE_PATH" in publicConfig, false);
 });
 
 test("a generic production build falls back when NEXT_PUBLIC_APP_URL is unset", () => {
@@ -207,6 +223,7 @@ test("instrumentation exits production startup with key-only runtime configurati
     BETTER_AUTH_SECRET: productionEnvironment.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: productionEnvironment.BETTER_AUTH_URL,
     DATABASE_URL: databaseUrl,
+    FILE_STORAGE_PATH: productionEnvironment.FILE_STORAGE_PATH,
     NEXT_PUBLIC_APP_URL: productionEnvironment.NEXT_PUBLIC_APP_URL,
     NEXT_RUNTIME: "nodejs",
     NODE_ENV: "production",
@@ -237,6 +254,7 @@ test("the client entry point never references server-only keys", async () => {
   const publicModule = await readFile(new URL("./public-env.ts", import.meta.url), "utf8");
 
   assert.doesNotMatch(clientModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
-  assert.doesNotMatch(publicModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
+  assert.doesNotMatch(clientModule, /FILE_STORAGE_PATH/);
+  assert.doesNotMatch(publicModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL|FILE_STORAGE_PATH/);
   assert.match(clientModule, /process\.env\.NEXT_PUBLIC_APP_URL/);
 });
