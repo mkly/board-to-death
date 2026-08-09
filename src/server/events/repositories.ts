@@ -126,6 +126,7 @@ function validateEvent(input: CreateEventInput): CreateEventInput {
   }
 
   return {
+    orgId: input.orgId,
     name: requireText(input.name, "name"),
     slug,
     type: input.type,
