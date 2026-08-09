@@ -59,3 +59,27 @@ test("assigns an accepted-speaker cohort, deduplicates it, changes a due date, a
     .click();
   await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toContainText("Withdrawn");
 });
+
+test("authors a task form condition against an earlier field", async ({ context, page }) => {
+  await prepareOnboarding(context);
+  await page.goto("/dashboard/onboarding-tasks");
+
+  await page.getByRole("button", { name: "New task" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create onboarding task" });
+  await dialog.getByLabel("Task title").fill("Collect travel needs");
+  await dialog.getByLabel("Required response").click();
+  await page.getByRole("option", { name: "Response form" }).click();
+  await dialog
+    .getByLabel("Sections and fields")
+    .fill(
+      "[Travel]\nI need travel help | checkbox | optional | needs-travel-help\nTravel details | textarea | required | | when I need travel help = checked",
+    );
+  await dialog.getByRole("button", { name: "Create task" }).click();
+
+  const task = page.getByText("Collect travel needs").locator("xpath=ancestor::*[@data-slot='card'][1]");
+  await expect(task).toContainText("Response form");
+  await task.getByRole("button", { name: "Edit" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Edit onboarding task" }).getByLabel("Sections and fields"),
+  ).toHaveValue(/when I need travel help = checked/);
+});

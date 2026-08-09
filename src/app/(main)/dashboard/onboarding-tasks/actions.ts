@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
-import { type PortalFormSection, portalFormFieldTypes } from "@/lib/portal-forms";
+import { type PortalFormField, type PortalFormSection, portalFormFieldTypes } from "@/lib/portal-forms";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database";
 import { RepositoryError } from "@/server/events";
@@ -101,8 +101,9 @@ function formSections(source: string): PortalFormSection[] {
   let current: {
     title: string;
     instructions: string | null;
-    fields: PortalFormSection["fields"] extends readonly (infer T)[] ? T[] : never;
+    fields: PortalFormField[];
   } | null = null;
+  const priorFields: PortalFormField[] = [];
   for (const [index, rawLine] of source.split("\n").entries()) {
     const line = rawLine.trim();
     if (line === "") continue;
@@ -117,19 +118,47 @@ function formSections(source: string): PortalFormSection[] {
       continue;
     }
     if (!current) throw new FormDefinitionError(`Add a [Section title] before the field on line ${index + 1}.`);
-    const [label, rawType = "text", requiredFlag = "", reusableKey = ""] = line.split("|").map((part) => part.trim());
+    const [label, rawType = "text", requiredFlag = "", reusableKey = "", rawVisibility = ""] = line
+      .split("|")
+      .map((part) => part.trim());
     const type = rawType.toLowerCase();
     if (!label) throw new FormDefinitionError(`Field on line ${index + 1} needs a label.`);
     if (!portalFormFieldTypes.some((candidate) => candidate === type)) {
       throw new FormDefinitionError(`Field on line ${index + 1} has an unsupported type.`);
     }
-    current.fields.push({
+    let visibleWhen: PortalFormField["visibleWhen"] = null;
+    if (rawVisibility !== "") {
+      const match = /^when\s+(.+?)\s*=\s*(.+)$/i.exec(rawVisibility);
+      if (!match) {
+        throw new FormDefinitionError(`Field on line ${index + 1} needs a condition like when Attendance = Online.`);
+      }
+      const sourceLabel = match[1]?.trim().toLocaleLowerCase();
+      const candidates = priorFields.filter(({ label: priorLabel }) => priorLabel.toLocaleLowerCase() === sourceLabel);
+      const sourceField = candidates[0];
+      if (candidates.length !== 1 || !sourceField) {
+        throw new FormDefinitionError(`Field on line ${index + 1} must reference one uniquely named earlier field.`);
+      }
+      const comparison = match[2]?.trim() ?? "";
+      if (sourceField.type === "checkbox") {
+        const normalized = comparison.toLocaleLowerCase();
+        if (!["checked", "true", "unchecked", "false"].includes(normalized)) {
+          throw new FormDefinitionError(`Checkbox condition on line ${index + 1} must use checked or unchecked.`);
+        }
+        visibleWhen = { fieldId: sourceField.id, equals: normalized === "checked" || normalized === "true" };
+      } else {
+        visibleWhen = { fieldId: sourceField.id, equals: comparison };
+      }
+    }
+    const field: PortalFormField = {
       id: `field-${sections.length}-${current.fields.length + 1}`,
       label,
       type: type as (typeof portalFormFieldTypes)[number],
       required: requiredFlag.toLowerCase() === "required",
       reusableKey: reusableKey || null,
-    });
+      visibleWhen,
+    };
+    current.fields.push(field);
+    priorFields.push(field);
   }
   if (sections.length === 0 || sections.some(({ fields }) => fields.length === 0)) {
     throw new FormDefinitionError("Every response form needs at least one section and every section needs a field.");

@@ -27,7 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { CfpFormDefinition, CfpQuestion } from "@/lib/cfp";
+import { type CfpFormDefinition, type CfpQuestion, visibleCfpQuestionIds } from "@/lib/cfp";
 
 import {
   applyAdminIntakeCsv,
@@ -79,12 +79,35 @@ function QuestionLabel({ question }: { readonly question: CfpQuestion }) {
   );
 }
 
-function QuestionField({ question, error }: { readonly question: CfpQuestion; readonly error?: string }) {
+type IntakeAnswer = boolean | string | readonly string[];
+
+function selectValue(question: CfpQuestion, answer: IntakeAnswer | undefined): string | readonly string[] {
+  if (question.type === "multi_select") return Array.isArray(answer) ? answer : [];
+  return typeof answer === "string" ? answer : "";
+}
+
+function QuestionField({
+  question,
+  error,
+  answer,
+  onChange,
+}: {
+  readonly question: CfpQuestion;
+  readonly error?: string;
+  readonly answer: IntakeAnswer | undefined;
+  readonly onChange: (value: IntakeAnswer) => void;
+}) {
   const id = `answer.${question.id}`;
   if (question.type === "checkbox") {
     return (
       <Field data-invalid={Boolean(error) || undefined} orientation="horizontal">
-        <Checkbox aria-invalid={Boolean(error) || undefined} id={id} name={id} />
+        <Checkbox
+          aria-invalid={Boolean(error) || undefined}
+          checked={answer === true}
+          id={id}
+          name={id}
+          onCheckedChange={(checked) => onChange(checked === true)}
+        />
         <FieldContent>
           <FieldLabel htmlFor={id}>
             <QuestionLabel question={question} />
@@ -104,9 +127,11 @@ function QuestionField({ question, error }: { readonly question: CfpQuestion; re
       min={question.constraints?.min}
       minLength={question.constraints?.minLength}
       name={id}
+      onChange={(event) => onChange(event.target.value)}
       pattern={question.constraints?.pattern}
       required={question.required}
       type={question.type === "short_text" ? "text" : question.type}
+      value={typeof answer === "string" ? answer : ""}
     />
   );
   if (question.type === "long_text") {
@@ -117,7 +142,9 @@ function QuestionField({ question, error }: { readonly question: CfpQuestion; re
         maxLength={question.constraints?.maxLength}
         minLength={question.constraints?.minLength}
         name={id}
+        onChange={(event) => onChange(event.target.value)}
         required={question.required}
+        value={typeof answer === "string" ? answer : ""}
       />
     );
   } else if (question.type === "select" || question.type === "multi_select") {
@@ -127,7 +154,15 @@ function QuestionField({ question, error }: { readonly question: CfpQuestion; re
         id={id}
         multiple={question.type === "multi_select"}
         name={id}
+        onChange={(event) =>
+          onChange(
+            question.type === "multi_select"
+              ? Array.from(event.target.selectedOptions, ({ value }) => value)
+              : event.target.value,
+          )
+        }
         required={question.required}
+        value={selectValue(question, answer)}
       >
         {question.type === "select" ? <NativeSelectOption value="">Select an option</NativeSelectOption> : null}
         {(question.constraints?.options ?? []).map((option) => (
@@ -154,7 +189,12 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
   const [state, formAction, pending] = useActionState(createAdminIntake, INITIAL_MANUAL_STATE);
   const [kind, setKind] = useState<"abstract" | "guaranteed_session">("abstract");
   const [formVersionId, setFormVersionId] = useState(forms[0]?.id ?? "");
+  const [answers, setAnswers] = useState<Readonly<Record<string, IntakeAnswer>>>({});
   const selectedForm = forms.find(({ id }) => id === formVersionId);
+  const visibleIds = useMemo(
+    () => (selectedForm ? visibleCfpQuestionIds(selectedForm.definition, answers) : new Set<string>()),
+    [answers, selectedForm],
+  );
 
   return (
     <form action={formAction}>
@@ -217,7 +257,14 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Field data-invalid={Boolean(fieldError(state, "formVersionId")) || undefined}>
                     <FieldLabel htmlFor="intake-form">CFP form</FieldLabel>
-                    <Select name="formVersionId" onValueChange={setFormVersionId} value={formVersionId}>
+                    <Select
+                      name="formVersionId"
+                      onValueChange={(value) => {
+                        setFormVersionId(value);
+                        setAnswers({});
+                      }}
+                      value={formVersionId}
+                    >
                       <SelectTrigger id="intake-form">
                         <SelectValue placeholder="Choose a form" />
                       </SelectTrigger>
@@ -252,17 +299,27 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
                     <FieldError>{fieldError(state, "submissionStatus")}</FieldError>
                   </Field>
                 </div>
-                {selectedForm?.definition.sections.map((section) => (
-                  <FieldSet key={section.id}>
-                    <FieldLegend>{section.title}</FieldLegend>
-                    {section.description ? <FieldDescription>{section.description}</FieldDescription> : null}
-                    <FieldGroup>
-                      {section.questions.map((question) => (
-                        <QuestionField error={fieldError(state, question.id)} key={question.id} question={question} />
-                      ))}
-                    </FieldGroup>
-                  </FieldSet>
-                ))}
+                {selectedForm?.definition.sections.map((section) => {
+                  const questions = section.questions.filter(({ id }) => visibleIds.has(id));
+                  if (questions.length === 0) return null;
+                  return (
+                    <FieldSet key={section.id}>
+                      <FieldLegend>{section.title}</FieldLegend>
+                      {section.description ? <FieldDescription>{section.description}</FieldDescription> : null}
+                      <FieldGroup>
+                        {questions.map((question) => (
+                          <QuestionField
+                            answer={answers[question.id]}
+                            error={fieldError(state, question.id)}
+                            key={question.id}
+                            onChange={(answer) => setAnswers((current) => ({ ...current, [question.id]: answer }))}
+                            question={question}
+                          />
+                        ))}
+                      </FieldGroup>
+                    </FieldSet>
+                  );
+                })}
                 {categories.length > 0 ? (
                   <FieldSet>
                     <FieldLegend variant="label">Categories</FieldLegend>
