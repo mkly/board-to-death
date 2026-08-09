@@ -485,12 +485,13 @@ export class SpeakerOnboardingRepository {
     eventId: string,
     assignmentId: string,
     response: Prisma.InputJsonValue,
+    speakerId?: string,
   ): Promise<PersistedSpeakerTaskAssignment> {
     const occurredAt = this.now();
     try {
       await this.client.$transaction(async (transaction) => {
         const assignment = await transaction.speakerTaskAssignment.findFirst({
-          where: { eventId, id: assignmentId },
+          where: { eventId, id: assignmentId, ...(speakerId ? { speakerId } : {}) },
           include: {
             submissions: { orderBy: { attemptNumber: "desc" }, take: 1 },
             transitions: { where: { toStatus: "SUBMITTED" }, select: { id: true } },

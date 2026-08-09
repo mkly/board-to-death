@@ -144,7 +144,7 @@ export async function saveTaskResponse(
       await onboarding.submit(viewer.eventId, assignmentId, answers as Prisma.InputJsonValue, viewer.speakerId);
       await portal.queueTaskConfirmation(viewer, assignmentId);
     } else {
-      await onboarding.saveDraft(viewer.eventId, assignmentId, answers as Prisma.InputJsonValue);
+      await onboarding.saveDraft(viewer.eventId, assignmentId, answers as Prisma.InputJsonValue, viewer.speakerId);
     }
     revalidatePath(portalHref(eventSlug));
     revalidatePath(portalHref(eventSlug, `/tasks/${assignmentId}`));

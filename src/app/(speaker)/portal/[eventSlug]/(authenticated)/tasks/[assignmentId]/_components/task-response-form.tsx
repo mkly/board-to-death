@@ -190,7 +190,14 @@ function PortalFormResponse({ action, definition, initialAnswers }: PortalFormRe
       ))}
       <Card>
         <CardFooter className="justify-end gap-2">
-          <Button type="submit" name="intent" value="draft" variant="outline" disabled={pending || submitted}>
+          <Button
+            type="submit"
+            name="intent"
+            value="draft"
+            variant="outline"
+            formNoValidate
+            disabled={pending || submitted}
+          >
             {pending ? <Spinner data-icon="inline-start" /> : <SaveIcon data-icon="inline-start" />}
             Save draft
           </Button>
