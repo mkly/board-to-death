@@ -25,7 +25,6 @@ export interface LoadedSessionPreview {
   readonly mappingVersion: number | null;
   readonly preview: SessionPreviewResult | null;
   readonly publishedVersion: number | null;
-  readonly csvRecords: ReturnType<typeof buildSessionOutboundRecords>;
 }
 
 export interface LoadedSessionPreviewCsv {
@@ -77,7 +76,6 @@ export async function loadSessionPreview(
       mappingVersion: storedMapping?.versionNumber ?? null,
       preview: null,
       publishedVersion: published?.versionNumber ?? null,
-      csvRecords: [],
     };
   }
 
@@ -111,7 +109,6 @@ export async function loadSessionPreview(
         speakerRemoteIds: [],
       })),
     });
-  const csvRecords = buildSessionOutboundRecords(eventId, published.snapshot, mapping, remoteRecords);
   const preview = await previewAcceleventsSessions({
     eventId,
     remoteEventId: configuration.remoteEventId,
@@ -128,6 +125,5 @@ export async function loadSessionPreview(
     mappingVersion: storedMapping?.versionNumber ?? null,
     preview,
     publishedVersion: published.versionNumber,
-    csvRecords,
   };
 }
