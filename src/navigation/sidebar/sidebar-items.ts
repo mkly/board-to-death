@@ -14,6 +14,7 @@ import {
   Settings,
   Sparkles,
   UserRoundCheck,
+  UserSearch,
   Users,
 } from "lucide-react";
 
@@ -62,6 +63,7 @@ const workspaces = [
   { id: "submissions", title: "Submissions", icon: FileText },
   { id: "sessions", title: "Sessions", icon: Presentation },
   { id: "speakers", title: "Speakers", icon: Users },
+  { id: "speaker-sourcing", title: "Speaker sourcing", icon: UserSearch },
   { id: "contacts", title: "Contacts", icon: ContactRound },
   { id: "onboarding", title: "Onboarding", icon: UserRoundCheck },
   { id: "file-requests", title: "File requests", icon: FileUp },
