@@ -203,15 +203,15 @@ test("shows the populated speaker portal and keeps another speaker's submission 
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}`);
   await expect(page.getByRole("heading", { name: "Welcome, Ada" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Home");
-  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Submissions");
-  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Profile");
-  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Tasks");
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("My submissions");
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("My profile");
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Onboarding tasks");
   await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Resources");
   await expect(page.getByText("Designing asymmetric systems players can learn")).toBeVisible();
   await expect(page.getByText("Review your public profile")).toBeVisible();
   await expect(page.getByText("Speaker arrival guide")).toBeVisible();
 
-  await page.getByRole("link", { name: "Submissions" }).click();
+  await page.getByRole("link", { name: "My submissions" }).click();
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/submissions`);
   await expect(page.getByRole("heading", { name: "My submissions" })).toBeVisible();
   await page.goto(`/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}`);
@@ -348,7 +348,7 @@ test("shows a useful resource empty state for an event without publications", as
 test("validates, saves, and reloads only speaker-editable profile fields", async ({ page }) => {
   const fixture = await preparePortal();
   await page.goto(fixture.populatedAuthHref);
-  await expect(page.getByRole("link", { name: "Profile" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "My profile" })).toHaveAttribute(
     "href",
     `/portal/${fixture.eventSlug}/profile`,
   );
