@@ -111,6 +111,25 @@ describe("CFP policy persistence", () => {
     assert.match(created.publicId, /^[0-9a-f-]{36}$/);
     assert.deepEqual((await policies.get(event.id, created.id, 1))?.definition, firstDefinition);
     assert.deepEqual((await policies.get(event.id, created.id))?.definition, secondDefinition);
+    assert.deepEqual((await policies.getByKey(event.id, "main-cfp"))?.definition, secondDefinition);
+  });
+
+  test("reuses an event administrator identity while refreshing its display name", async () => {
+    const event = await events.create(eventInput);
+    const first = await administrators.ensure({
+      eventId: event.id,
+      externalId: "OWNER@EXAMPLE.COM",
+      displayName: "Original owner",
+    });
+    const second = await administrators.ensure({
+      eventId: event.id,
+      externalId: "owner@example.com",
+      displayName: "Current owner",
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(second.externalId, "owner@example.com");
+    assert.equal(second.displayName, "Current owner");
   });
 
   test("allows only the explicit publication lifecycle and keeps public identifiers immutable", async () => {
