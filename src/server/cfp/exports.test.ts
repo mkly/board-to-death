@@ -39,6 +39,18 @@ describe("submission exports", () => {
     expect(csv).toContain('"\'+1000"');
   });
 
+  it("neutralizes a custom question label that begins with a formula character", () => {
+    const bytes = createSubmissionCsv({
+      columns: ["answer:budget"],
+      customLabels: { budget: "=SUM(A1:A9)" },
+      items: [submission({ answers: { budget: "1000" } })],
+    });
+    const csv = new TextDecoder().decode(bytes);
+    const [header] = csv.split("\r\n");
+
+    expect(header).toBe('"\'=SUM(A1:A9)"');
+  });
+
   it("writes the selected columns and formula-neutralized values to an Excel workbook", async () => {
     const bytes = await createSubmissionXlsx({
       columns: ["formTitle", "applicant", "answer:budget"],
