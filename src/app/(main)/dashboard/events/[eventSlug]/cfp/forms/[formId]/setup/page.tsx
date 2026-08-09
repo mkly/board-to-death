@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
 import { Button } from "@/components/ui/button";
+import { DEFAULT_REMINDER_DAYS, DEFAULT_REMINDER_SEND_AT_MINUTE, reminderTimeFromMinute } from "@/lib/cfp/messages";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
@@ -43,10 +44,14 @@ export default async function CfpFormSetupPage({
     redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "cfp") : "/dashboard");
   }
 
-  const database = getDatabaseClient();
-  const form = await new CfpFormRepository(database).get(event.id, formId);
+  const client = getDatabaseClient();
+  const [form, eventDetails] = await Promise.all([
+    new CfpFormRepository(client).get(event.id, formId),
+    client.event.findUnique({ where: { id: event.id }, select: { location: true } }),
+  ]);
   if (!form) notFound();
-  const policy = await new CfpPolicyRepository(database).getByKey(event.id, form.key);
+  const policy = await new CfpPolicyRepository(client).getByKey(event.id, form.key);
+  const reminder = policy?.definition.messages.reminder;
   const initialSettings = policy
     ? {
         submissionOpensAt: localDateTime(policy.definition.submissionOpensAt, event.timezone),
@@ -81,7 +86,28 @@ export default async function CfpFormSetupPage({
           draft version.
         </p>
       </header>
-      <CfpSetupWorkspace definition={form.definition} eventSlug={event.slug} formId={form.formId} />
+      <CfpSetupWorkspace
+        definition={form.definition}
+        event={{
+          name: event.name,
+          slug: event.slug,
+          startsAt: event.startsAt.toLocaleDateString("en-US", { dateStyle: "long", timeZone: event.timezone }),
+          location: eventDetails?.location ?? null,
+        }}
+        eventSlug={event.slug}
+        formId={form.formId}
+        initialMessageSettings={{
+          remindersEnabled: reminder?.enabled ?? false,
+          reminderDaysBeforeClose: reminder?.daysBeforeClose ?? DEFAULT_REMINDER_DAYS,
+          reminderSendAt: reminderTimeFromMinute(reminder?.sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE),
+          submissionConfirmation:
+            policy?.definition.messages.submissionConfirmation ??
+            "We received your proposal for **{{event.name}}**. A confirmation was sent to {{recipient.email}}.",
+          thankYou:
+            policy?.definition.messages.thankYou ??
+            "Thank you, {{recipient.name}}, for sharing your proposal with **{{event.name}}**.",
+        }}
+      />
       <CfpPolicySettings
         eventSlug={event.slug}
         formId={form.formId}

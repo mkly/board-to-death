@@ -30,6 +30,12 @@ export interface CfpPolicyMessages {
   readonly introduction: string;
   readonly submissionConfirmation: string;
   readonly closed: string;
+  readonly thankYou?: string;
+  readonly reminder?: {
+    readonly enabled: boolean;
+    readonly daysBeforeClose: number;
+    readonly sendAtMinute: number;
+  };
 }
 
 export interface CfpPolicyAdminAssignmentInput {
@@ -190,6 +196,26 @@ function validateDefinition(input: CfpPolicyDefinition): CfpPolicyDefinition {
       introduction: requireText(input.messages.introduction, "messages.introduction"),
       submissionConfirmation: requireText(input.messages.submissionConfirmation, "messages.submissionConfirmation"),
       closed: requireText(input.messages.closed, "messages.closed"),
+      ...(input.messages.thankYou === undefined
+        ? {}
+        : { thankYou: requireText(input.messages.thankYou, "messages.thankYou") }),
+      ...(input.messages.reminder === undefined
+        ? {}
+        : {
+            reminder: {
+              enabled: input.messages.reminder.enabled,
+              daysBeforeClose: positiveInteger(
+                input.messages.reminder.daysBeforeClose,
+                "messages.reminder.daysBeforeClose",
+              ),
+              sendAtMinute:
+                Number.isSafeInteger(input.messages.reminder.sendAtMinute) &&
+                input.messages.reminder.sendAtMinute >= 0 &&
+                input.messages.reminder.sendAtMinute < 1_440
+                  ? input.messages.reminder.sendAtMinute
+                  : invalid("messages.reminder.sendAtMinute must be a minute from 0 through 1439."),
+            },
+          }),
     },
     conditionalVisibility,
     categoryRouting,

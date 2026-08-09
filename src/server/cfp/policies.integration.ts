@@ -42,6 +42,8 @@ function definition(categoryId: string, ownerId: string, editorId: string): CfpP
       introduction: "Bring us your most memorable tabletop design lessons.",
       submissionConfirmation: "Your proposal is safely on the table.",
       closed: "The call for proposals is closed.",
+      thankYou: "Thank you for sharing your proposal.",
+      reminder: { enabled: true, daysBeforeClose: 3, sendAtMinute: 570 },
     },
     conditionalVisibility: [
       {
