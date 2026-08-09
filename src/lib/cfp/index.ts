@@ -14,6 +14,7 @@ export { type CfpParseResult, parseCfpDefinition } from "./parser.ts";
 export {
   type CfpPublicationIssue,
   publicCfpHref,
+  publicCfpStartHref,
   validateCfpDefinitionForPublication,
 } from "./publication.ts";
 export { cfpVisibilityRuleSchema } from "./schema.ts";

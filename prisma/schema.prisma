@@ -317,6 +317,7 @@ model CfpFormVersion {
   submissions     CfpSubmission[]
   revisions       CfpSubmissionRevision[]
   publishedByPolicies CfpPolicy[]
+  submissionDrafts CfpSubmissionDraft[]
 
   @@unique([formId, versionNumber])
   @@index([formId])
@@ -371,6 +372,7 @@ model CfpPolicy {
   versions    CfpPolicyVersion[]
   transitions CfpPolicyTransition[]
   publishedFormVersion CfpFormVersion? @relation(fields: [publishedFormVersionId], references: [id], onDelete: SetNull)
+  submissionDrafts CfpSubmissionDraft[]
 
   @@unique([eventId, key])
   @@unique([eventId, id])
@@ -491,6 +493,25 @@ model CfpSubmissionView {
   @@unique([eventId, userId])
   @@index([userId])
   @@map("cfp_submission_views")
+}
+
+model CfpSubmissionDraft {
+  id            String         @id @default(uuid()) @db.Uuid
+  eventId       String         @db.Uuid
+  policyId      String         @db.Uuid
+  formVersionId String         @db.Uuid
+  tokenHash     String         @unique
+  answers       Json
+  participants  Json
+  categoryKeys  Json
+  expiresAt     DateTime       @db.Timestamptz(3)
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
+  policy        CfpPolicy      @relation(fields: [eventId, policyId], references: [eventId, id], onDelete: Cascade)
+  formVersion   CfpFormVersion @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+
+  @@index([policyId, expiresAt])
+  @@map("cfp_submission_drafts")
 }
 
 model Speaker {

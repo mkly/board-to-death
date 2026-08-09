@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, startTransition, useActionState, useMemo, useState } from "react";
+import { type FormEvent, startTransition, useActionState, useEffect, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,21 +11,34 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import type { CfpDraftPolicy } from "@/generated/prisma/client";
 import type { CfpFormDefinition, CfpQuestion } from "@/lib/cfp";
-import { visibleCfpQuestionIds } from "@/lib/cfp";
+import { publicCfpStartHref, visibleCfpQuestionIds } from "@/lib/cfp";
 
-import { type PublicCfpFormActionState, submitPublicCfpForm } from "../actions";
+import {
+  type PublicCfpFormActionState,
+  type SaveCfpDraftActionState,
+  saveCfpDraft,
+  submitPublicCfpForm,
+} from "../actions";
 import { PublicCfpSpeakers } from "./public-cfp-speakers";
 
 interface PublicCfpFormProps {
   readonly publicId: string;
   readonly definition: CfpFormDefinition;
   readonly submissionKey: string;
+  readonly draftPolicy: CfpDraftPolicy;
+  readonly draftToken?: string;
+  readonly draftError?: string | null;
+  readonly formVersionChanged?: boolean;
+  readonly initialAnswers?: Readonly<Record<string, unknown>>;
+  readonly initialParticipants?: readonly Record<string, string>[];
 }
 
 type ClientAnswer = boolean | string | readonly string[];
 
 const INITIAL_STATE: PublicCfpFormActionState = { status: "idle" };
+const INITIAL_DRAFT_STATE: SaveCfpDraftActionState = { status: "idle" };
 
 function QuestionLabel({ question }: { readonly question: CfpQuestion }) {
   return (
@@ -47,11 +60,33 @@ function errorsFor(state: PublicCfpFormActionState, questionId: string) {
   return state.errors?.[questionId]?.map((message) => ({ message }));
 }
 
-export function PublicCfpForm({ publicId, definition, submissionKey }: PublicCfpFormProps) {
+export function PublicCfpForm({
+  publicId,
+  definition,
+  submissionKey,
+  draftPolicy,
+  draftToken,
+  draftError,
+  formVersionChanged,
+  initialAnswers,
+  initialParticipants,
+}: PublicCfpFormProps) {
   const action = submitPublicCfpForm.bind(null, publicId);
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
-  const [answers, setAnswers] = useState<Readonly<Record<string, ClientAnswer>>>({});
+  const draftSaveAction = saveCfpDraft.bind(null, publicId);
+  const [draftState, draftFormAction, draftPending] = useActionState(draftSaveAction, INITIAL_DRAFT_STATE);
+  const [answers, setAnswers] = useState<Readonly<Record<string, ClientAnswer>>>(
+    () => (initialAnswers as Readonly<Record<string, ClientAnswer>> | undefined) ?? {},
+  );
+  const [currentDraftToken, setCurrentDraftToken] = useState<string | undefined>(draftToken);
   const visibleIds = useMemo(() => visibleCfpQuestionIds(definition, answers), [answers, definition]);
+  const draftsEnabled = draftPolicy !== "DISABLED";
+
+  useEffect(() => {
+    if (draftState.status === "success" && draftState.token) {
+      setCurrentDraftToken(draftState.token);
+    }
+  }, [draftState]);
 
   function setAnswer(questionId: string, value: ClientAnswer): void {
     setAnswers((current) => ({ ...current, [questionId]: value }));
@@ -60,7 +95,9 @@ export function PublicCfpForm({ publicId, definition, submissionKey }: PublicCfp
   function submitForm(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    startTransition(() => formAction(formData));
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const isDraftSave = submitter?.value === "save-draft";
+    startTransition(() => (isDraftSave ? draftFormAction(formData) : formAction(formData)));
   }
 
   function questionControl(question: CfpQuestion) {
@@ -163,6 +200,25 @@ export function PublicCfpForm({ publicId, definition, submissionKey }: PublicCfp
   return (
     <form action={formAction} className="flex flex-col gap-4" onSubmit={submitForm}>
       <input name="submissionKey" type="hidden" value={submissionKey} />
+      <input name="draftToken" readOnly type="hidden" value={currentDraftToken ?? ""} />
+
+      {draftError ? (
+        <Alert>
+          <AlertTitle>Draft link unavailable</AlertTitle>
+          <AlertDescription>{draftError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {formVersionChanged ? (
+        <Alert>
+          <AlertTitle>This form has changed</AlertTitle>
+          <AlertDescription>
+            The form was updated since you last saved. Review your responses before submitting — some questions may have
+            changed.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {state.status === "error" && state.message ? (
         <Alert variant="destructive">
           <AlertTitle>We could not submit your proposal</AlertTitle>
@@ -170,7 +226,26 @@ export function PublicCfpForm({ publicId, definition, submissionKey }: PublicCfp
         </Alert>
       ) : null}
 
-      <PublicCfpSpeakers definition={definition} state={state} />
+      {draftState.status === "error" && draftState.message ? (
+        <Alert variant="destructive">
+          <AlertTitle>We could not save your draft</AlertTitle>
+          <AlertDescription>{draftState.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {draftState.status === "success" && draftState.token ? (
+        <Alert>
+          <AlertTitle>Draft saved</AlertTitle>
+          <AlertDescription>
+            Resume this response later with this link:{" "}
+            <a className="underline" href={publicCfpStartHref(publicId, draftState.token)}>
+              {publicCfpStartHref(publicId, draftState.token)}
+            </a>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <PublicCfpSpeakers definition={definition} initialParticipants={initialParticipants} state={state} />
 
       {definition.sections.map((section) => {
         const questions = section.questions.filter(({ id }) => visibleIds.has(id));
@@ -245,10 +320,26 @@ export function PublicCfpForm({ publicId, definition, submissionKey }: PublicCfp
         </Card>
       ) : null}
 
-      <Button className="self-start" disabled={pending} size="lg" type="submit">
-        {pending ? <Spinner data-icon="inline-start" /> : null}
-        {pending ? "Submitting proposal…" : "Submit proposal"}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button className="self-start" disabled={pending || draftPending} size="lg" type="submit">
+          {pending ? <Spinner data-icon="inline-start" /> : null}
+          {pending ? "Submitting proposal…" : "Submit proposal"}
+        </Button>
+        {draftsEnabled ? (
+          <Button
+            className="self-start"
+            disabled={pending || draftPending}
+            formNoValidate
+            size="lg"
+            type="submit"
+            value="save-draft"
+            variant="outline"
+          >
+            {draftPending ? <Spinner data-icon="inline-start" /> : null}
+            {draftPending ? "Saving draft…" : "Save draft for later"}
+          </Button>
+        ) : null}
+      </div>
     </form>
   );
 }

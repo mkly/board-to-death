@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { CfpDraftPolicy } from "@/generated/prisma/client";
 import { publicCfpHref } from "@/lib/cfp";
+import { CfpDraftRepository } from "@/server/cfp/drafts";
 import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -11,6 +13,7 @@ import { randomUUID } from "node:crypto";
 
 interface PublicCfpStartPageProps {
   readonly params: Promise<{ readonly publicId: string }>;
+  readonly searchParams: Promise<{ readonly draft?: string }>;
 }
 
 // This route has a dynamic segment but no generateStaticParams and no dynamic
@@ -22,11 +25,35 @@ interface PublicCfpStartPageProps {
 // request has to render its own key.
 export const dynamic = "force-dynamic";
 
-export default async function PublicCfpStartPage({ params }: PublicCfpStartPageProps) {
+export default async function PublicCfpStartPage({ params, searchParams }: PublicCfpStartPageProps) {
   const { publicId } = await params;
-  const lookup = await new CfpPublicAccessRepository(getDatabaseClient()).findByPublicId(publicId);
+  const { draft: draftToken } = await searchParams;
+  const client = getDatabaseClient();
+  const lookup = await new CfpPublicAccessRepository(client).findByPublicId(publicId);
   if (lookup.status === "unknown") notFound();
   if (lookup.status !== "open") redirect(publicCfpHref(publicId));
+
+  let initialAnswers: Record<string, unknown> | undefined;
+  let initialParticipants: readonly Record<string, string>[] | undefined;
+  let formVersionChanged = false;
+  let draftError: string | null = null;
+
+  if (draftToken && lookup.draftPolicy !== CfpDraftPolicy.DISABLED) {
+    try {
+      const draft = await new CfpDraftRepository({ database: client }).resume({
+        eventId: lookup.event.id,
+        policyId: lookup.policyId,
+        draftPolicy: lookup.draftPolicy,
+        token: draftToken,
+        currentFormVersionId: lookup.form.versionId,
+      });
+      initialAnswers = draft.answers;
+      initialParticipants = draft.participants as readonly Record<string, string>[];
+      formVersionChanged = draft.formVersionChanged;
+    } catch {
+      draftError = "This draft link is invalid or has expired. Starting a new response.";
+    }
+  }
 
   return (
     <main className="flex min-h-screen justify-center bg-muted/30 p-4 sm:p-8">
@@ -42,7 +69,17 @@ export default async function PublicCfpStartPage({ params }: PublicCfpStartPageP
           </p>
         </header>
 
-        <PublicCfpForm definition={lookup.form.definition} publicId={publicId} submissionKey={randomUUID()} />
+        <PublicCfpForm
+          definition={lookup.form.definition}
+          draftError={draftError}
+          draftPolicy={lookup.draftPolicy}
+          draftToken={draftToken && !draftError ? draftToken : undefined}
+          formVersionChanged={formVersionChanged}
+          initialAnswers={initialAnswers}
+          initialParticipants={initialParticipants}
+          publicId={publicId}
+          submissionKey={randomUUID()}
+        />
 
         <Button asChild className="self-start" variant="ghost">
           <Link href={publicCfpHref(publicId)}>Back to CFP details</Link>
