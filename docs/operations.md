@@ -200,10 +200,12 @@ To bring up a real instance from an image built or promoted by `./scripts/bootst
      path=/var/lib/board-to-death
    ```
 
-2. **(Per release) Copy a release checkout into the container and install production dependencies.** Copy a tagged
-   release tree, not a working checkout with uncommitted changes.
+2. **(Per release) Copy a release checkout into the container and install dependencies.** Copy a tagged
+   release tree, not a working checkout with uncommitted changes. Install the full dependency tree, not
+   `--omit=dev`: the build in step 4 needs the development dependencies.
 
    ```sh
+   incus exec my-app-instance -- mkdir -p /opt/board-to-death
    git ls-files -z | tar --create --file=- --directory=. --null --files-from=- \
      | incus exec my-app-instance -- tar --extract --file=- --directory=/opt/board-to-death
    incus exec my-app-instance -- sh -c 'cd /opt/board-to-death && npm ci'
@@ -293,15 +295,17 @@ message per problem rather than a partial start. Common messages and their fix:
 
 | Message | Fix |
 | --- | --- |
-| `<KEY> is required when NODE_ENV=production` | Set the named variable — `AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, or `FILE_STORAGE_PATH`. |
+| `<KEY> is required when NODE_ENV=production` | Set the named variable — `AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, `FILE_STORAGE_PATH`, or `NEXT_PUBLIC_APP_URL`. |
 | `must contain at least 32 characters` | `AUTH_SECRET` or `BETTER_AUTH_SECRET` is too short; generate a longer one, for example `openssl rand -hex 32`. |
 | `must use the postgres or postgresql protocol` | `DATABASE_URL` has the wrong URL scheme. |
 | `must use the http or https protocol` | `BETTER_AUTH_URL` (or `AUTH_MAGIC_LINK_WEBHOOK_URL`) has the wrong URL scheme. |
-| `AUTH_MAGIC_LINK_WEBHOOK_URL or both RESEND_API_KEY and RESEND_FROM_EMAIL are required when NODE_ENV=production` | Set the webhook URL, or set both Resend variables together — setting only one of the pair fails too, naming the one still missing. |
+| `AUTH_MAGIC_LINK_WEBHOOK_URL or both RESEND_API_KEY and RESEND_FROM_EMAIL are required when NODE_ENV=production` | Neither delivery route is configured. Set the webhook URL, or set both Resend variables together. |
+| `RESEND_API_KEY is required when Resend delivery is configured` (or `RESEND_FROM_EMAIL`) | Only one half of the Resend pair is set; supply the one named, or unset both and use the webhook URL. |
 | `FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production` | Use an absolute path such as `/var/lib/board-to-death/files`, not a relative one. |
 
-The parser reports every failing check at once, so fix everything listed and rerun once rather than iterating message
-by message.
+The parser groups its checks rather than reporting all of them at once: it lists every missing required variable
+together, then every malformed value together, then the delivery and storage-path checks. Fix everything a run
+lists, then rerun — a clean pass can still surface a later group's message.
 
 **`FILE_STORAGE_PATH could not be prepared for read/write access.`** The service account cannot create or write the
 configured directory. Confirm the parent directory — typically the mounted persistent volume — exists, is owned by
