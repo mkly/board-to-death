@@ -242,19 +242,21 @@ export function PortalDashboard({ dashboard }: { readonly dashboard: SpeakerPort
             ) : (
               <ul className="flex flex-col gap-3">
                 {tasks.map((task) => (
-                  <li
-                    key={task.id}
-                    className="flex flex-col justify-between gap-3 rounded-lg border p-4 sm:flex-row sm:items-center"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium">{task.definitionVersion.title}</p>
-                      <p className="text-muted-foreground text-sm">
-                        {task.dueAt ? `Due ${formatDate(task.dueAt, event.timezone)}` : "No due date"}
-                      </p>
+                  <li key={task.id} className="rounded-lg border p-4">
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0">
+                        <p className="font-medium">{task.definitionVersion.title}</p>
+                        <p className="text-muted-foreground text-sm">
+                          {task.dueAt ? `Due ${formatDate(task.dueAt, event.timezone)}` : "No due date"}
+                        </p>
+                      </div>
+                      <Badge variant={task.status === "APPROVED" ? "default" : "secondary"}>
+                        {taskStatusLabels[task.status]}
+                      </Badge>
                     </div>
-                    <Badge variant={task.status === "APPROVED" ? "default" : "secondary"}>
-                      {taskStatusLabels[task.status]}
-                    </Badge>
+                    <Button asChild variant="outline" size="sm" className="mt-3 w-fit">
+                      <Link href={portalHref(event.slug, `/tasks/${task.id}`)}>View task</Link>
+                    </Button>
                   </li>
                 ))}
               </ul>

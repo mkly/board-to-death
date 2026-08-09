@@ -25,3 +25,8 @@ export {
   SpeakerRepository,
   type UpdateSpeakerProfileInput,
 } from "./repositories.ts";
+export {
+  normalizeSpeakerTaskResponse,
+  type SpeakerTaskResponseKind,
+  speakerTaskResponseKind,
+} from "./task-responses.ts";

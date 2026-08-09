@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient, type SpeakerTaskAssignmentStatus } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { normalizeSpeakerTaskResponse } from "./task-responses.ts";
 
 export interface SpeakerTaskDefinitionInput {
   readonly sortOrder: number;
@@ -425,36 +426,40 @@ export class SpeakerOnboardingRepository {
     eventId: string,
     assignmentId: string,
     response?: Prisma.InputJsonValue,
+    speakerId?: string,
   ): Promise<PersistedSpeakerTaskAssignment> {
     const occurredAt = this.now();
     try {
       await this.client.$transaction(async (transaction) => {
         const assignment = await transaction.speakerTaskAssignment.findFirst({
-          where: { eventId, id: assignmentId },
+          where: { eventId, id: assignmentId, ...(speakerId ? { speakerId } : {}) },
           include: { definitionVersion: true, submissions: { orderBy: { attemptNumber: "desc" }, take: 1 } },
         });
         if (!assignment) throw new RepositoryError("not-found", "The event-owned task assignment was not found.");
+        if (assignment.status === "SUBMITTED") return;
         if (assignment.status !== "PENDING" && assignment.status !== "REVISION_REQUESTED") {
           invalid("Only pending or revision-requested assignments can be submitted.");
         }
-        if (assignment.definitionVersion.responseRequired && response === undefined) {
-          invalid("This task requires a response.");
-        }
+        const normalizedResponse = normalizeSpeakerTaskResponse(
+          assignment.definitionVersion.responseRequired,
+          assignment.definitionVersion.responseSchema,
+          response,
+        );
+        const claimed = await transaction.speakerTaskAssignment.updateMany({
+          where: { id: assignmentId, status: assignment.status },
+          data: { status: "SUBMITTED", submittedAt: occurredAt },
+        });
+        if (claimed.count === 0) return;
         await transaction.speakerTaskSubmission.create({
           data: {
             assignmentId,
             attemptNumber: (assignment.submissions[0]?.attemptNumber ?? 0) + 1,
-            response,
+            response: normalizedResponse,
             submittedAt: occurredAt,
           },
         });
-        await transaction.speakerTaskAssignment.update({
-          where: { id: assignmentId },
-          data: {
-            status: "SUBMITTED",
-            submittedAt: occurredAt,
-            transitions: { create: { fromStatus: assignment.status, toStatus: "SUBMITTED", occurredAt } },
-          },
+        await transaction.speakerTaskAssignmentTransition.create({
+          data: { assignmentId, fromStatus: assignment.status, toStatus: "SUBMITTED", occurredAt },
         });
       });
       return await this.requireAssignment(eventId, assignmentId);

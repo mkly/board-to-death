@@ -16,6 +16,10 @@ interface SpeakerPortalFixture {
   readonly expiredSessionToken: string;
   readonly ownSubmissionId: string;
   readonly outsiderSubmissionId: string;
+  readonly textTaskId: string;
+  readonly fileTaskId: string;
+  readonly outsiderTaskId: string;
+  readonly adminSessionCookie: string;
 }
 
 async function preparePortal(): Promise<SpeakerPortalFixture> {
@@ -76,4 +80,52 @@ test("redirects an expired speaker session to the event sign-in screen", async (
 
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/sign-in?expired=1`);
   await expect(page.getByText("Your speaker session has expired.")).toBeVisible();
+});
+
+test("submits text and file tasks, preserves revisions, and enforces speaker ownership", async ({ context, page }) => {
+  test.setTimeout(120_000);
+  const fixture = await preparePortal();
+  await page.goto(fixture.populatedAuthHref);
+
+  await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.textTaskId}`);
+  await expect(page.getByRole("heading", { name: "Share your arrival details" })).toBeVisible();
+  await expect(page.getByText("Overdue", { exact: true })).toBeVisible();
+  await page.getByLabel("Your response").fill("I will arrive on Thursday afternoon.");
+  await page.getByRole("button", { name: "Submit task" }).click();
+  await expect(page.getByText("Awaiting event-team review")).toBeVisible();
+
+  await context.addCookies([{ name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL }]);
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/onboarding`);
+  const textRow = page.getByRole("row", { name: /Ada Lovelace Share your arrival details/ });
+  await expect(textRow).toContainText("I will arrive on Thursday afternoon.");
+  await textRow.getByLabel(/Revision feedback/).fill("Please include your flight arrival time.");
+  await textRow.getByRole("button", { name: "Request revision" }).click();
+  await expect(textRow).toContainText("Revision requested");
+
+  await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.textTaskId}`);
+  await expect(page.getByText("Please include your flight arrival time.")).toBeVisible();
+  await expect(page.getByText("Attempt 1")).toBeVisible();
+  await page.getByLabel("Your response").fill("My flight arrives Thursday at 2:30 PM.");
+  await page.getByRole("button", { name: "Submit task" }).click();
+  await expect(page.getByText("Awaiting event-team review")).toBeVisible();
+
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/onboarding`);
+  await page
+    .getByRole("row", { name: /Ada Lovelace Share your arrival details/ })
+    .getByRole("button", { name: "Approve" })
+    .click();
+  await expect(page.getByRole("row", { name: /Ada Lovelace Share your arrival details/ })).toContainText("Approved");
+
+  await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.fileTaskId}`);
+  await page.getByLabel("Response file").setInputFiles({
+    name: "slides.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Speaker slides for review"),
+  });
+  await page.getByRole("button", { name: "Submit task" }).click();
+  await expect(page.getByText("Awaiting event-team review")).toBeVisible();
+  await expect(page.getByRole("link", { name: "slides.txt" })).toBeVisible();
+
+  const denied = await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.outsiderTaskId}`);
+  expect(denied?.status()).toBe(404);
 });
