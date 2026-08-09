@@ -4,7 +4,7 @@ import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/clien
 import { defaultSubmissionColumns, parseSubmissionView } from "@/lib/cfp/submission-table";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
-import { createSubmissionCsv, createSubmissionFileBundle, createSubmissionXlsx } from "@/server/cfp/exports";
+import { createSubmissionCsv, createSubmissionXlsx } from "@/server/cfp/exports";
 import { CfpSubmissionRepository, type CfpSubmissionSortKey } from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: ExportRouteContext): Pro
   if (!event) return new Response("Not found", { status: 404 });
 
   const url = new URL(request.url);
-  const format = enumValue(["csv", "xlsx", "files"] as const, url.searchParams.get("format"));
+  const format = enumValue(["csv", "xlsx"] as const, url.searchParams.get("format"));
   if (!format) return new Response("Unsupported export format", { status: 400 });
 
   const savedView = await client.cfpSubmissionView.findUnique({
@@ -76,19 +76,10 @@ export async function GET(request: Request, { params }: ExportRouteContext): Pro
       },
     });
   }
-  if (format === "xlsx") {
-    return new Response(responseBody(await createSubmissionXlsx(table)), {
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${baseName}.xlsx"`,
-        "Cache-Control": "private, no-store",
-      },
-    });
-  }
-  return new Response(responseBody(await createSubmissionFileBundle(result.items, [])), {
+  return new Response(responseBody(await createSubmissionXlsx(table)), {
     headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${baseName}-files.zip"`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${baseName}.xlsx"`,
       "Cache-Control": "private, no-store",
     },
   });

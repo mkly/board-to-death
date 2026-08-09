@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const actionMocks = vi.hoisted(() => ({
@@ -113,6 +113,10 @@ describe("SubmissionsWorkspace", () => {
     expect(previous.getAttribute("href")).toContain("category=category-1");
     expect(screen.getByRole("link", { name: "Page 2 of 2" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("button", { name: "Columns" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Export" })).toBeTruthy();
+    const exportButton = screen.getByRole("button", { name: "Export" });
+    fireEvent.pointerDown(exportButton, { button: 0, ctrlKey: false });
+    expect(screen.getByRole("menuitem", { name: "CSV spreadsheet" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Excel workbook" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Attachment bundle" })).toBeNull();
   });
 });

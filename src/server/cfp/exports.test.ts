@@ -60,6 +60,12 @@ describe("submission exports", () => {
           contentType: "application/pdf",
           bytes: new Uint8Array([3]),
         },
+        {
+          submissionId: "outside-filtered-results",
+          fileName: "omitted.pdf",
+          contentType: "application/pdf",
+          bytes: new Uint8Array([4]),
+        },
       ],
     );
     const zip = await JSZip.loadAsync(bytes);
@@ -68,6 +74,7 @@ describe("submission exports", () => {
     expect(paths).toContain("submission-1/slides.pdf");
     expect(paths).toContain("submission-1/2-slides.pdf");
     expect(paths.some((path) => path.includes("secret"))).toBe(false);
+    expect(paths.some((path) => path.includes("omitted"))).toBe(false);
     const manifestFile = zip.file("manifest.json");
     expect(manifestFile).not.toBeNull();
     if (!manifestFile) throw new Error("The attachment manifest is missing.");

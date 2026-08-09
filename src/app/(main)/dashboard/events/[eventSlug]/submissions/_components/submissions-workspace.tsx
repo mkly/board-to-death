@@ -40,7 +40,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/client";
 import {
   columnLabel,
   defaultSubmissionColumns,
@@ -67,6 +66,19 @@ interface SubmissionsWorkspaceProps {
 }
 
 type BadgeVariant = NonNullable<Parameters<typeof badgeVariants>[0]>["variant"];
+type CfpSubmissionKind = NonNullable<CfpSubmissionListQuery["kind"]>;
+type CfpSubmissionStatus = NonNullable<CfpSubmissionListQuery["status"]>;
+
+const submissionKinds = ["ABSTRACT", "GUARANTEED_SESSION"] as const satisfies readonly CfpSubmissionKind[];
+const submissionStatuses = [
+  "DRAFT",
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "WAITLISTED",
+  "ACCEPTED",
+  "REJECTED",
+  "CONFIRMED",
+] as const satisfies readonly CfpSubmissionStatus[];
 
 const statusLabels: Readonly<Record<CfpSubmissionStatus, string>> = {
   DRAFT: "Draft",
@@ -115,7 +127,7 @@ function exportHref(
   eventSlug: string,
   filters: CfpSubmissionListQuery,
   columns: readonly SubmissionColumnId[],
-  format: "csv" | "xlsx" | "files",
+  format: "csv" | "xlsx",
 ): string {
   const params = filterParams(filters);
   params.set("format", format);
@@ -176,7 +188,7 @@ function FilterBar({
           </FieldLabel>
           <NativeSelect id="submission-status" name="status" defaultValue={filters.status ?? ""} className="w-full">
             <NativeSelectOption value="">All statuses</NativeSelectOption>
-            {Object.values(CfpSubmissionStatus).map((status) => (
+            {submissionStatuses.map((status) => (
               <NativeSelectOption key={status} value={status}>
                 {statusLabels[status]}
               </NativeSelectOption>
@@ -189,7 +201,7 @@ function FilterBar({
           </FieldLabel>
           <NativeSelect id="submission-type" name="type" defaultValue={filters.kind ?? ""} className="w-full">
             <NativeSelectOption value="">All types</NativeSelectOption>
-            {Object.values(CfpSubmissionKind).map((kind) => (
+            {submissionKinds.map((kind) => (
               <NativeSelectOption key={kind} value={kind}>
                 {kindLabels[kind]}
               </NativeSelectOption>
@@ -514,7 +526,7 @@ export function SubmissionsWorkspace({
         <Button size="sm" variant={filters.status ? "ghost" : "secondary"} asChild>
           <Link href={filterHref(event.slug, { ...filters, status: undefined }, 1)}>All</Link>
         </Button>
-        {Object.values(CfpSubmissionStatus).map((status) => (
+        {submissionStatuses.map((status) => (
           <Button key={status} size="sm" variant={filters.status === status ? "secondary" : "ghost"} asChild>
             <Link href={filterHref(event.slug, { ...filters, status }, 1)}>
               {statusLabels[status]}{" "}
@@ -558,9 +570,6 @@ export function SubmissionsWorkspace({
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <a href={exportHref(event.slug, filters, columns, "xlsx")}>Excel workbook</a>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <a href={exportHref(event.slug, filters, columns, "files")}>Attachment bundle</a>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
