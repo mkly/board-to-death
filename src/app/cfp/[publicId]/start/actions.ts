@@ -96,6 +96,7 @@ function speakerValuesFromFormData(definition: CfpFormDefinition, formData: Form
     consent: requiredFields.has("consent") ? z.literal("on", { error: "Consent is required." }) : z.string().optional(),
   });
   const participants: CfpSubmissionParticipantInput[] = [];
+  const participantIndexes: number[] = [];
   for (const index of indexes) {
     const raw = rawParticipants.get(index) ?? {};
     const parsed = speakerSchema.safeParse(raw);
@@ -107,6 +108,7 @@ function speakerValuesFromFormData(definition: CfpFormDefinition, formData: Form
       }
       continue;
     }
+    participantIndexes.push(index);
     participants.push({
       email: parsed.data.email,
       givenName: parsed.data.givenName,
@@ -118,8 +120,10 @@ function speakerValuesFromFormData(definition: CfpFormDefinition, formData: Form
   }
   const emails = participants.map(({ email }) => email);
   if (new Set(emails).size !== emails.length) {
-    emails.forEach((email, index) => {
-      if (emails.indexOf(email) !== index) errors[`speaker.${index}.email`] = ["Each speaker needs a unique email."];
+    emails.forEach((email, position) => {
+      if (emails.indexOf(email) !== position) {
+        errors[`speaker.${participantIndexes[position]}.email`] = ["Each speaker needs a unique email."];
+      }
     });
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, participants };
