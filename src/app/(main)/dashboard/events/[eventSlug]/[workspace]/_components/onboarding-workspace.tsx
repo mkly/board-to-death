@@ -1,4 +1,4 @@
-import { CalendarClock, ClipboardCheck, UserPlus, UserX } from "lucide-react";
+import { BellOff, BellRing, CalendarClock, ClipboardCheck, UserPlus, UserX } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,17 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
+import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
 
-import { assignSpeakerTasks, updateSpeakerTaskDueDate, withdrawSpeakerTask } from "../actions";
+import {
+  activateSpeakerTaskReminderRule,
+  assignSpeakerTasks,
+  cancelSpeakerTaskReminderRule,
+  saveSpeakerTaskReminderRule,
+  setSpeakerTaskReminderOptOut,
+  updateSpeakerTaskDueDate,
+  withdrawSpeakerTask,
+} from "../actions";
 
 interface OnboardingWorkspaceProps {
   readonly event: {
@@ -37,6 +46,18 @@ function dueDateValue(dueAt: Date | null, timezone: string): string {
   return Temporal.Instant.fromEpochMilliseconds(dueAt.getTime()).toZonedDateTimeISO(timezone).toPlainDate().toString();
 }
 
+function minuteValue(sendAtMinute: number): string {
+  return `${Math.floor(sendAtMinute / 60)
+    .toString()
+    .padStart(2, "0")}:${(sendAtMinute % 60).toString().padStart(2, "0")}`;
+}
+
+function reminderRuleStatus(enabledAt: Date | null, cancelledAt: Date | null) {
+  if (cancelledAt) return { label: "Cancelled", variant: "destructive" as const };
+  if (enabledAt) return { label: "Active", variant: "default" as const };
+  return { label: "Draft", variant: "secondary" as const };
+}
+
 function taskStatus(status: "PENDING" | "SUBMITTED" | "APPROVED" | "REVISION_REQUESTED" | "WITHDRAWN") {
   const labels = {
     PENDING: "Pending",
@@ -57,7 +78,8 @@ function taskStatus(status: "PENDING" | "SUBMITTED" | "APPROVED" | "REVISION_REQ
 
 export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
   const client = getDatabaseClient();
-  const [definitions, speakers, assignments] = await Promise.all([
+  const reminderRepository = new SpeakerTaskReminderRepository(client);
+  const [definitions, speakers, assignments, templates, reminderRules, reminderCandidates] = await Promise.all([
     new SpeakerOnboardingRepository(client).listDefinitions(event.id),
     client.speaker.findMany({
       where: {
@@ -75,10 +97,16 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
       },
       orderBy: [{ assignedAt: "desc" }, { id: "asc" }],
     }),
+    client.communicationTemplate.findMany({ where: { eventId: event.id }, orderBy: { name: "asc" } }),
+    reminderRepository.list(event.id),
+    reminderRepository.previewEligibleAssignments(event.id),
   ]);
   const activeAssignments = assignments.filter(({ status }) => status !== "WITHDRAWN");
   const completedAssignments = assignments.filter(({ status }) => status === "APPROVED");
   const assignAction = assignSpeakerTasks.bind(null, event.slug);
+  const eligibleReminderSpeakers = new Map(
+    reminderCandidates.map((candidate) => [candidate.speakerId, speakerName(candidate.speaker.profileVersions)]),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -189,6 +217,192 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
 
       <Card>
         <CardHeader>
+          <CardTitle>Deadline reminders</CardTitle>
+          <CardDescription>
+            Schedule email rules by local calendar days before each onboarding deadline. Preview eligibility before
+            activation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {templates.length === 0 ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <BellOff />
+                </EmptyMedia>
+                <EmptyTitle>No email templates</EmptyTitle>
+                <EmptyDescription>Create an event email template before adding a reminder rule.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <form action={saveSpeakerTaskReminderRule.bind(null, event.slug, null)}>
+              <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_10rem_10rem_auto] lg:items-end">
+                <Field>
+                  <FieldLabel htmlFor="new-reminder-name">Rule name</FieldLabel>
+                  <Input id="new-reminder-name" name="name" placeholder="One week before" required />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="new-reminder-template">Email template</FieldLabel>
+                  <NativeSelect id="new-reminder-template" name="templateId" required>
+                    {templates.map((template) => (
+                      <NativeSelectOption key={template.id} value={template.id}>
+                        {template.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="new-reminder-days">Days before</FieldLabel>
+                  <Input
+                    id="new-reminder-days"
+                    name="daysBeforeDue"
+                    type="number"
+                    min="0"
+                    step="1"
+                    defaultValue="7"
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="new-reminder-time">Send time</FieldLabel>
+                  <Input id="new-reminder-time" name="sendAt" type="time" defaultValue="09:00" required />
+                </Field>
+                <Button type="submit" variant="outline">
+                  <BellRing data-icon="inline-start" />
+                  Add rule
+                </Button>
+              </FieldGroup>
+            </form>
+          )}
+
+          {reminderRules.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Rule</TableHead>
+                  <TableHead>Schedule</TableHead>
+                  <TableHead>Template</TableHead>
+                  <TableHead>Eligible now</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reminderRules.map((rule) => {
+                  const saveAction = saveSpeakerTaskReminderRule.bind(null, event.slug, rule.id);
+                  const activateAction = activateSpeakerTaskReminderRule.bind(null, event.slug, rule.id);
+                  const cancelAction = cancelSpeakerTaskReminderRule.bind(null, event.slug, rule.id);
+                  const cancelled = rule.cancelledAt !== null;
+                  const status = reminderRuleStatus(rule.enabledAt, rule.cancelledAt);
+                  return (
+                    <TableRow key={rule.id}>
+                      <TableCell colSpan={6}>
+                        <div className="flex flex-col gap-3">
+                          <form
+                            action={saveAction}
+                            className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_8rem_8rem_auto] lg:items-end"
+                          >
+                            <Field>
+                              <FieldLabel htmlFor={`reminder-name-${rule.id}`} className="sr-only">
+                                Rule name
+                              </FieldLabel>
+                              <Input
+                                id={`reminder-name-${rule.id}`}
+                                name="name"
+                                defaultValue={rule.name}
+                                disabled={cancelled}
+                                required
+                              />
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor={`reminder-template-${rule.id}`} className="sr-only">
+                                Email template
+                              </FieldLabel>
+                              <NativeSelect
+                                id={`reminder-template-${rule.id}`}
+                                name="templateId"
+                                defaultValue={rule.templateId}
+                                disabled={cancelled}
+                                required
+                              >
+                                {templates.map((template) => (
+                                  <NativeSelectOption key={template.id} value={template.id}>
+                                    {template.name}
+                                  </NativeSelectOption>
+                                ))}
+                              </NativeSelect>
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor={`reminder-days-${rule.id}`} className="sr-only">
+                                Days before
+                              </FieldLabel>
+                              <Input
+                                id={`reminder-days-${rule.id}`}
+                                name="daysBeforeDue"
+                                type="number"
+                                min="0"
+                                step="1"
+                                defaultValue={rule.daysBeforeDue}
+                                disabled={cancelled}
+                                required
+                              />
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor={`reminder-time-${rule.id}`} className="sr-only">
+                                Send time
+                              </FieldLabel>
+                              <Input
+                                id={`reminder-time-${rule.id}`}
+                                name="sendAt"
+                                type="time"
+                                defaultValue={minuteValue(rule.sendAtMinute)}
+                                disabled={cancelled}
+                                required
+                              />
+                            </Field>
+                            <Button type="submit" size="sm" variant="outline" disabled={cancelled}>
+                              Save changes
+                            </Button>
+                          </form>
+                          <div className="flex flex-wrap items-center gap-3 text-sm">
+                            <span>
+                              {rule.daysBeforeDue} days before at {minuteValue(rule.sendAtMinute)}
+                            </span>
+                            <span>{rule.template.name}</span>
+                            <span title={[...eligibleReminderSpeakers.values()].join(", ")}>
+                              {eligibleReminderSpeakers.size} speakers
+                            </span>
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                            {!rule.enabledAt && !cancelled ? (
+                              <form action={activateAction}>
+                                <Button type="submit" size="sm">
+                                  Activate
+                                </Button>
+                              </form>
+                            ) : null}
+                            {!cancelled ? (
+                              <form action={cancelAction}>
+                                <Button type="submit" size="sm" variant="destructive">
+                                  Cancel
+                                </Button>
+                              </form>
+                            ) : null}
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Assignment history</CardTitle>
           <CardDescription>
             Due dates use {event.timezone}. Completed and withdrawn assignments are locked.
@@ -227,6 +441,12 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                     : "No due date";
                   const dueAction = updateSpeakerTaskDueDate.bind(null, event.slug, assignment.id);
                   const withdrawAction = withdrawSpeakerTask.bind(null, event.slug, assignment.id);
+                  const optOutAction = setSpeakerTaskReminderOptOut.bind(
+                    null,
+                    event.slug,
+                    assignment.id,
+                    !assignment.remindersOptedOut,
+                  );
                   return (
                     <TableRow key={assignment.id}>
                       <TableCell className="font-medium">{name}</TableCell>
@@ -257,17 +477,24 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                       </TableCell>
                       <TableCell>
                         {!terminal && (
-                          <form action={withdrawAction}>
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="destructive"
-                              aria-label={`Withdraw task for ${name}`}
-                            >
-                              <UserX data-icon="inline-start" />
-                              Withdraw
-                            </Button>
-                          </form>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <form action={optOutAction}>
+                              <Button type="submit" size="sm" variant="outline">
+                                {assignment.remindersOptedOut ? "Resume reminders" : "Pause reminders"}
+                              </Button>
+                            </form>
+                            <form action={withdrawAction}>
+                              <Button
+                                type="submit"
+                                size="sm"
+                                variant="destructive"
+                                aria-label={`Withdraw task for ${name}`}
+                              >
+                                <UserX data-icon="inline-start" />
+                                Withdraw
+                              </Button>
+                            </form>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>

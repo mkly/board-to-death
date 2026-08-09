@@ -9,6 +9,13 @@ export {
   type SpeakerTaskCohortResult,
   type SpeakerTaskDefinitionInput,
 } from "./onboarding.ts";
+export type {
+  OnboardingReminderRunOptions,
+  OnboardingReminderRunResult,
+  SpeakerTaskReminderRuleInput,
+  UpdateSpeakerTaskReminderRuleInput,
+} from "./reminders.ts";
+export { runOnboardingReminderWorker, SpeakerTaskReminderRepository } from "./reminders.ts";
 export {
   type CreateSpeakerInput,
   type PersistedSpeaker,

@@ -6,8 +6,8 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 
-import { allowlistEmbeds } from "./allowlist-embeds";
-import { CONTENT_SANITIZE_SCHEMA } from "./schema";
+import { allowlistEmbeds } from "./allowlist-embeds.ts";
+import { CONTENT_SANITIZE_SCHEMA } from "./schema.ts";
 
 /**
  * Shared Markdown + controlled-HTML renderer. Used directly for non-React
