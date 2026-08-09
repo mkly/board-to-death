@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
+import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { EmailTemplateRepository } from "@/server/communications/templates";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -14,7 +15,10 @@ interface EmailTemplatesPageProps {
 export default async function EmailTemplatesPage({ params }: EmailTemplatesPageProps) {
   const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
   const authorizedEvent = findAuthorizedEvent(shell.events, eventSlug);
-  if (!authorizedEvent || shell.activeEvent?.id !== authorizedEvent.id) notFound();
+  if (!authorizedEvent) notFound();
+  if (shell.activeEvent?.id !== authorizedEvent.id) {
+    redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "communications") : "/dashboard");
+  }
 
   const client = getDatabaseClient();
   const event = await client.event.findUnique({
