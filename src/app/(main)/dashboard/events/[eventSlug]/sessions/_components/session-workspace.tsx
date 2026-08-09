@@ -2,7 +2,9 @@
 
 import { useActionState, useMemo, useState, useTransition } from "react";
 
-import { Archive, CalendarClock, FilePlus2, Save } from "lucide-react";
+import Link from "next/link";
+
+import { Archive, CalendarClock, ClipboardPlus, FilePlus2, Save } from "lucide-react";
 
 import {
   AlertDialog,
@@ -294,10 +296,18 @@ export function SessionWorkspace({ event, sessions, speakers, tracks, initialSes
             Guaranteed and manual sessions live here separately from abstract submissions.
           </p>
         </div>
-        <Button type="button" onClick={startCreating}>
-          <FilePlus2 data-icon="inline-start" />
-          New manual session
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/dashboard/events/${event.slug}/sessions/intake`}>
+              <ClipboardPlus data-icon="inline-start" />
+              Add or import records
+            </Link>
+          </Button>
+          <Button type="button" onClick={startCreating}>
+            <FilePlus2 data-icon="inline-start" />
+            New manual session
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-3">
