@@ -30,6 +30,12 @@ export interface CfpPolicyMessages {
   readonly introduction: string;
   readonly submissionConfirmation: string;
   readonly closed: string;
+  readonly thankYou?: string;
+  readonly reminder?: {
+    readonly enabled: boolean;
+    readonly daysBeforeClose: number;
+    readonly sendAtMinute: number;
+  };
 }
 
 export interface CfpPolicyAdminAssignmentInput {
@@ -190,6 +196,26 @@ function validateDefinition(input: CfpPolicyDefinition): CfpPolicyDefinition {
       introduction: requireText(input.messages.introduction, "messages.introduction"),
       submissionConfirmation: requireText(input.messages.submissionConfirmation, "messages.submissionConfirmation"),
       closed: requireText(input.messages.closed, "messages.closed"),
+      ...(input.messages.thankYou === undefined
+        ? {}
+        : { thankYou: requireText(input.messages.thankYou, "messages.thankYou") }),
+      ...(input.messages.reminder === undefined
+        ? {}
+        : {
+            reminder: {
+              enabled: input.messages.reminder.enabled,
+              daysBeforeClose: positiveInteger(
+                input.messages.reminder.daysBeforeClose,
+                "messages.reminder.daysBeforeClose",
+              ),
+              sendAtMinute:
+                Number.isSafeInteger(input.messages.reminder.sendAtMinute) &&
+                input.messages.reminder.sendAtMinute >= 0 &&
+                input.messages.reminder.sendAtMinute < 1_440
+                  ? input.messages.reminder.sendAtMinute
+                  : invalid("messages.reminder.sendAtMinute must be a minute from 0 through 1439."),
+            },
+          }),
     },
     conditionalVisibility,
     categoryRouting,
@@ -307,6 +333,24 @@ export class CfpAdministratorRepository {
       return mapDatabaseError(error);
     }
   }
+
+  async ensure(input: {
+    readonly eventId: string;
+    readonly externalId: string;
+    readonly displayName: string;
+  }): Promise<CfpAdministrator> {
+    const externalId = requireText(input.externalId, "externalId").toLowerCase();
+    const displayName = requireText(input.displayName, "displayName");
+    try {
+      return await this.client.cfpAdministrator.upsert({
+        where: { eventId_externalId: { eventId: input.eventId, externalId } },
+        create: { eventId: input.eventId, externalId, displayName },
+        update: { displayName },
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
 }
 
 export class CfpPolicyRepository {
@@ -371,6 +415,15 @@ export class CfpPolicyRepository {
   async get(eventId: string, policyId: string, versionNumber?: number): Promise<PersistedCfpPolicyDefinition | null> {
     const version = await this.client.cfpPolicyVersion.findFirst({
       where: { eventId, policyId, ...(versionNumber === undefined ? {} : { versionNumber }) },
+      orderBy: { versionNumber: "desc" },
+      include: versionInclude,
+    });
+    return version ? fromStored(version) : null;
+  }
+
+  async getByKey(eventId: string, key: string): Promise<PersistedCfpPolicyDefinition | null> {
+    const version = await this.client.cfpPolicyVersion.findFirst({
+      where: { eventId, policy: { key: normalizeKey(key) } },
       orderBy: { versionNumber: "desc" },
       include: versionInclude,
     });

@@ -34,6 +34,10 @@ export interface EmailTemplateIssue {
   readonly message: string;
 }
 
+export interface EmailTemplateValidationOptions {
+  readonly allowedVariables?: readonly EmailTemplateVariable[];
+}
+
 export type EmailTemplateValidationResult =
   | { readonly ok: true; readonly definition: ValidEmailTemplateDefinition }
   | { readonly ok: false; readonly issues: readonly EmailTemplateIssue[] };
@@ -91,15 +95,19 @@ function extractVariableNames(template: string): { variables: string[]; malforme
   return { variables, malformed };
 }
 
-function inspectVariables(templates: readonly string[]): EmailTemplateIssue[] {
+function inspectVariables(
+  templates: readonly string[],
+  allowedVariables: readonly EmailTemplateVariable[] = EMAIL_TEMPLATE_VARIABLES.map(({ key }) => key),
+): EmailTemplateIssue[] {
   const malformed = new Set<string>();
   const unknown = new Set<string>();
+  const allowed = new Set<string>(allowedVariables);
 
   for (const template of templates) {
     const inspection = extractVariableNames(template);
     for (const placeholder of inspection.malformed) malformed.add(placeholder);
     for (const variable of inspection.variables) {
-      if (!ALLOWED_VARIABLES.has(variable)) unknown.add(variable);
+      if (!ALLOWED_VARIABLES.has(variable) || !allowed.has(variable)) unknown.add(variable);
     }
   }
 
@@ -116,7 +124,10 @@ function inspectVariables(templates: readonly string[]): EmailTemplateIssue[] {
   return issues;
 }
 
-export function validateEmailTemplate(input: EmailTemplateDefinition): EmailTemplateValidationResult {
+export function validateEmailTemplate(
+  input: EmailTemplateDefinition,
+  options: EmailTemplateValidationOptions = {},
+): EmailTemplateValidationResult {
   const issues: EmailTemplateIssue[] = [];
   const key = input.key.trim().toLowerCase();
   const name = requiredText(input.name, "name", 80);
@@ -139,7 +150,7 @@ export function validateEmailTemplate(input: EmailTemplateDefinition): EmailTemp
       message: "Raw HTML is not allowed. Use Markdown so preview and delivery share the safe renderer.",
     });
   }
-  issues.push(...inspectVariables([subject.value, body.value, textTemplate ?? ""]));
+  issues.push(...inspectVariables([subject.value, body.value, textTemplate ?? ""], options.allowedVariables));
 
   if (issues.length > 0) return { ok: false, issues };
   return {
@@ -188,8 +199,9 @@ function escapeMarkdown(value: string): string {
 export function renderEmailTemplate(
   input: EmailTemplateDefinition,
   values: Readonly<Partial<Record<EmailTemplateVariable, string | null>>>,
+  options: EmailTemplateValidationOptions = {},
 ): EmailTemplateRenderResult {
-  const validation = validateEmailTemplate(input);
+  const validation = validateEmailTemplate(input, options);
   if (!validation.ok) return validation;
 
   const variables = usedVariables(validation.definition);
