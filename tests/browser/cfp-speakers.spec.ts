@@ -22,12 +22,13 @@ test("collects one or two ordered speakers and preserves their state through val
   const stepId = randomUUID();
   const policyId = randomUUID();
   const publicId = randomUUID();
+  const eventSlug = `cfp-speakers-${publicId.slice(0, 8)}`;
   const now = new Date();
 
   await database.query(
     `INSERT INTO "events" ("id", "name", "slug", "type", "timezone", "startsAt", "endsAt", "updatedAt")
      VALUES ($1, 'Multi-speaker Conference', $2, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5)`,
-    [eventId, `cfp-speakers-${publicId.slice(0, 8)}`, new Date("2027-03-13"), new Date("2027-03-15"), now],
+    [eventId, eventSlug, new Date("2027-03-13"), new Date("2027-03-15"), now],
   );
   await database.query(`INSERT INTO "cfp_forms" ("id", "eventId", "key", "updatedAt") VALUES ($1, $2, 'main', $3)`, [
     formId,
@@ -69,7 +70,12 @@ test("collects one or two ordered speakers and preserves their state through val
       new Date(Date.now() - 86_400_000),
       new Date(Date.now() + 86_400_000),
       JSON.stringify({ maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 2 }),
-      JSON.stringify({ introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" }),
+      JSON.stringify({
+        introduction: "Welcome",
+        submissionConfirmation: "Submitted",
+        closed: "Closed",
+        portalHandoff: { autoRedirect: true, redirectDelaySeconds: 60 },
+      }),
     ],
   );
 
@@ -111,6 +117,38 @@ test("collects one or two ordered speakers and preserves their state through val
     await speakerField(1, "email").fill("sam@example.test");
     await page.getByRole("button", { name: "Submit proposal" }).click();
     await expect(page.getByRole("heading", { name: "Proposal submitted" })).toBeVisible();
+    await expect(page.getByText(/Opening the speaker portal in \d+ seconds\./)).toBeVisible();
+    await page.getByRole("button", { name: "Cancel automatic redirect" }).click();
+    await expect(page.getByText("Automatic redirect cancelled.")).toBeVisible();
+
+    const session = await database.query(
+      `SELECT p."sortOrder", s."id" AS "speakerId", COUNT(ss."id")::int AS "sessionCount"
+       FROM "cfp_submission_participants" p
+       JOIN "speakers" s ON s."id" = p."speakerId"
+       LEFT JOIN "speaker_sessions" ss ON ss."eventId" = s."eventId" AND ss."speakerId" = s."id"
+       WHERE p."eventId" = $1
+       GROUP BY p."sortOrder", s."id"
+       ORDER BY p."sortOrder"`,
+      [eventId],
+    );
+    expect(session.rows.map(({ sessionCount, sortOrder }) => ({ sessionCount, sortOrder }))).toEqual([
+      { sessionCount: 1, sortOrder: 0 },
+      { sessionCount: 0, sortOrder: 1 },
+    ]);
+
+    const fallback = await database.query(
+      `SELECT r."textSnapshot"
+       FROM "message_deliveries" d
+       JOIN "message_recipients" r ON r."deliveryId" = d."id"
+       WHERE d."eventId" = $1`,
+      [eventId],
+    );
+    expect(fallback.rows[0]?.textSnapshot).toContain(`/portal/${eventSlug}/sign-in`);
+    expect(fallback.rows[0]?.textSnapshot).not.toContain("token=");
+
+    await page.getByRole("link", { name: "Continue to speaker portal" }).click();
+    await expect(page).toHaveURL(new RegExp(`/portal/${eventSlug}/?$`));
+    await expect(page).not.toHaveURL(/sign-in/);
 
     const persisted = await database.query(
       `SELECT p."sortOrder", v."email", v."givenName", v."biography", v."consentToPublishProfile"
@@ -137,6 +175,41 @@ test("collects one or two ordered speakers and preserves their state through val
         consentToPublishProfile: true,
       },
     ]);
+
+    const sessionsBeforeResubmission = await database.query(
+      `SELECT ss."id", ss."tokenHash" FROM "speaker_sessions" ss WHERE ss."eventId" = $1 ORDER BY ss."id"`,
+      [eventId],
+    );
+
+    await database.query(
+      `UPDATE "cfp_policy_versions"
+       SET "messages" = jsonb_set("messages", '{portalHandoff,autoRedirect}', 'false')
+       WHERE "policyId" = $1`,
+      [policyId],
+    );
+    await page.goto(`/cfp/${publicId}/start`);
+    await waitForHydration(speakerField(0, "givenName"));
+    await speakerField(0, "givenName").fill("Alex");
+    await speakerField(0, "familyName").fill("Rivera");
+    await speakerField(0, "email").fill("alex@example.test");
+    await speakerField(0, "phone").fill("+1 555 0100");
+    await speakerField(0, "biography").fill("Designs cooperative games.");
+    await page.getByRole("checkbox", { name: "Speaker profile consent *" }).check();
+    await page.getByLabel("Session title", { exact: false }).fill("Cooperative systems follow-up");
+    await page.getByRole("button", { name: "Submit proposal" }).click();
+
+    await expect(page.getByRole("heading", { name: "Proposal submitted" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Continue to speaker portal" })).toBeVisible();
+    await expect(page.getByText(/Opening the speaker portal in \d+ seconds\./)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Cancel automatic redirect" })).toHaveCount(0);
+
+    // The public form never verifies the submitted address, so a submission naming a speaker who
+    // already exists must not mint or rotate that speaker's session.
+    const sessionsAfterResubmission = await database.query(
+      `SELECT ss."id", ss."tokenHash" FROM "speaker_sessions" ss WHERE ss."eventId" = $1 ORDER BY ss."id"`,
+      [eventId],
+    );
+    expect(sessionsAfterResubmission.rows).toEqual(sessionsBeforeResubmission.rows);
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [eventId]);
   }

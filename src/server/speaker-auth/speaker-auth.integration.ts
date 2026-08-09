@@ -110,4 +110,19 @@ describe("speaker magic-link authentication", () => {
     await auth.logout(secondSession.sessionToken);
     assert.equal(await auth.getSession(secondSession.sessionToken), null);
   });
+
+  test("issues a direct session and rotates it without persisting the raw token", async () => {
+    const identity = await createSpeaker("direct-session-speaker");
+    const first = await auth.issueSession(identity);
+    const second = await auth.issueSession(identity);
+    const stored = await client.speakerSession.findFirstOrThrow({ where: identity });
+
+    assert.equal(await auth.getSession(first.sessionToken), null);
+    assert.deepEqual(await auth.getSession(second.sessionToken), {
+      ...identity,
+      expiresAt: second.expiresAt,
+    });
+    assert.notEqual(stored.tokenHash, second.sessionToken);
+    assert.equal(JSON.stringify(stored).includes(second.sessionToken), false);
+  });
 });

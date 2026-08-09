@@ -2,7 +2,6 @@
 
 import { type FormEvent, startTransition, useActionState, useEffect, useMemo, useState } from "react";
 
-import { SanitizedMarkdown } from "@/components/content/sanitized-markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +21,7 @@ import {
   saveCfpDraft,
   submitPublicCfpForm,
 } from "../actions";
+import { CfpCompletion } from "./cfp-completion";
 import { PublicCfpSpeakers } from "./public-cfp-speakers";
 
 interface PublicCfpFormProps {
@@ -186,17 +186,7 @@ export function PublicCfpForm({
   }
 
   if (state.status === "success") {
-    return (
-      <Alert>
-        <AlertTitle>
-          <h2>Proposal submitted</h2>
-        </AlertTitle>
-        <AlertDescription>
-          {state.confirmationMarkdown ? <SanitizedMarkdown content={state.confirmationMarkdown} /> : null}
-          <p>Keep this reference: {state.submissionId}</p>
-        </AlertDescription>
-      </Alert>
-    );
+    return <CfpCompletion {...state} />;
   }
 
   return (

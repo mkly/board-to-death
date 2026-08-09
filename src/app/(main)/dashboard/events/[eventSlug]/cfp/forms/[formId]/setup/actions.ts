@@ -517,6 +517,8 @@ async function createPolicyForForm(
   form: PersistedCfpFormDefinition,
   administratorId: string,
   messages: {
+    readonly portalAutoRedirect: boolean;
+    readonly portalRedirectDelaySeconds: number;
     readonly remindersEnabled: boolean;
     readonly reminderDaysBeforeClose: number;
     readonly reminderSendAtMinute: number;
@@ -539,6 +541,10 @@ async function createPolicyForForm(
         submissionConfirmation: messages.submissionConfirmation,
         closed: "This call for proposals is closed.",
         thankYou: messages.thankYou,
+        portalHandoff: {
+          autoRedirect: messages.portalAutoRedirect,
+          redirectDelaySeconds: messages.portalRedirectDelaySeconds,
+        },
         reminder: {
           enabled: messages.remindersEnabled,
           daysBeforeClose: messages.reminderDaysBeforeClose,
@@ -566,6 +572,8 @@ export async function saveCfpMessageSettings(
   }
 
   const validation = validateCfpMessageSettings({
+    portalAutoRedirect: value(formData, "portalAutoRedirect") === "true",
+    portalRedirectDelaySeconds: value(formData, "portalRedirectDelaySeconds"),
     remindersEnabled: value(formData, "remindersEnabled") === "true",
     reminderDaysBeforeClose: value(formData, "reminderDaysBeforeClose"),
     reminderSendAt: value(formData, "reminderSendAt"),
@@ -593,6 +601,10 @@ export async function saveCfpMessageSettings(
           ...existing.definition.messages,
           submissionConfirmation: validation.fields.submissionConfirmation,
           thankYou: validation.fields.thankYou,
+          portalHandoff: {
+            autoRedirect: validation.fields.portalAutoRedirect,
+            redirectDelaySeconds: validation.fields.portalRedirectDelaySeconds,
+          },
           reminder: {
             enabled: validation.fields.remindersEnabled,
             daysBeforeClose: validation.fields.reminderDaysBeforeClose,

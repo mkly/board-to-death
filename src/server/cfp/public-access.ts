@@ -6,6 +6,7 @@ import type { CfpPolicyMessages } from "./policies.ts";
 export interface CfpPublicAccessEvent {
   readonly id: string;
   readonly name: string;
+  readonly slug: string;
 }
 
 export interface CfpPublicAccessPolicy {
@@ -70,7 +71,9 @@ export class CfpPublicAccessRepository {
       select: {
         id: true,
         status: true,
-        event: { select: { id: true, name: true, timezone: true, theme: true, startsAt: true, location: true } },
+        event: {
+          select: { id: true, name: true, slug: true, timezone: true, theme: true, startsAt: true, location: true },
+        },
         publishedFormVersion: {
           select: {
             id: true,
@@ -134,7 +137,7 @@ export class CfpPublicAccessRepository {
       return { status: "unknown" };
     }
 
-    const event: CfpPublicAccessEvent = { id: policy.event.id, name: policy.event.name };
+    const event: CfpPublicAccessEvent = { id: policy.event.id, name: policy.event.name, slug: policy.event.slug };
 
     if (policy.status === CfpPolicyStatus.CLOSED || policy.status === CfpPolicyStatus.ARCHIVED) {
       return { status: "closed", event };

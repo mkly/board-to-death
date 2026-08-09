@@ -20,6 +20,8 @@ import { EMAIL_TEMPLATE_PREVIEW_VALUES, renderEmailTemplate } from "@/lib/commun
 import { type SaveCfpMessageSettingsState, saveCfpMessageSettings } from "../actions";
 
 export interface InitialCfpMessageSettings {
+  readonly portalAutoRedirect: boolean;
+  readonly portalRedirectDelaySeconds: number;
   readonly remindersEnabled: boolean;
   readonly reminderDaysBeforeClose: number;
   readonly reminderSendAt: string;
@@ -60,6 +62,10 @@ function preview(bodyTemplate: string, values: Readonly<Record<string, string>>)
 
 export function CfpMessageSettings({ event, eventSlug, formId, initialSettings, onSaved }: CfpMessageSettingsProps) {
   const [remindersEnabled, setRemindersEnabled] = useState(initialSettings.remindersEnabled);
+  const [portalAutoRedirect, setPortalAutoRedirect] = useState(initialSettings.portalAutoRedirect);
+  const [portalRedirectDelaySeconds, setPortalRedirectDelaySeconds] = useState(
+    initialSettings.portalRedirectDelaySeconds.toString(),
+  );
   const [reminderDaysBeforeClose, setReminderDaysBeforeClose] = useState(
     initialSettings.reminderDaysBeforeClose.toString(),
   );
@@ -89,6 +95,10 @@ export function CfpMessageSettings({ event, eventSlug, formId, initialSettings, 
   return (
     <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
       <form action={formAction}>
+        <input type="hidden" name="portalAutoRedirect" value={String(portalAutoRedirect)} />
+        {!portalAutoRedirect ? (
+          <input type="hidden" name="portalRedirectDelaySeconds" value={portalRedirectDelaySeconds} />
+        ) : null}
         <input type="hidden" name="remindersEnabled" value={String(remindersEnabled)} />
         {!remindersEnabled ? (
           <>
@@ -105,6 +115,41 @@ export function CfpMessageSettings({ event, eventSlug, formId, initialSettings, 
           </CardHeader>
           <CardContent>
             <FieldGroup>
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="cfp-portal-auto-redirect">Continue to speaker portal automatically</FieldLabel>
+                  <FieldDescription>
+                    Applicants can always continue manually. When enabled, the confirmation counts down before opening
+                    the lead speaker's portal.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  checked={portalAutoRedirect}
+                  id="cfp-portal-auto-redirect"
+                  onCheckedChange={setPortalAutoRedirect}
+                />
+              </Field>
+              <Field
+                data-disabled={!portalAutoRedirect || undefined}
+                data-invalid={Boolean(firstError(state, "portalRedirectDelaySeconds")) || undefined}
+              >
+                <FieldLabel htmlFor="cfp-portal-redirect-delay">Redirect delay in seconds</FieldLabel>
+                <Input
+                  aria-invalid={Boolean(firstError(state, "portalRedirectDelaySeconds")) || undefined}
+                  disabled={!portalAutoRedirect}
+                  id="cfp-portal-redirect-delay"
+                  max={60}
+                  min={5}
+                  name="portalRedirectDelaySeconds"
+                  onChange={(event) => setPortalRedirectDelaySeconds(event.target.value)}
+                  required={portalAutoRedirect}
+                  step={1}
+                  type="number"
+                  value={portalRedirectDelaySeconds}
+                />
+                <FieldDescription>Applicants can cancel the redirect from the confirmation screen.</FieldDescription>
+                <FieldError>{firstError(state, "portalRedirectDelaySeconds")}</FieldError>
+              </Field>
               <Field orientation="horizontal">
                 <FieldContent>
                   <FieldLabel htmlFor="cfp-reminders-enabled">Draft reminders</FieldLabel>

@@ -17,8 +17,11 @@ export const CFP_MESSAGE_VARIABLE_KEYS = CFP_MESSAGE_VARIABLES.map(
 
 export const DEFAULT_REMINDER_DAYS = 3;
 export const DEFAULT_REMINDER_SEND_AT_MINUTE = 540;
+export const DEFAULT_PORTAL_REDIRECT_DELAY_SECONDS = 10;
 
 export interface CfpMessageSettings {
+  readonly portalAutoRedirect: boolean;
+  readonly portalRedirectDelaySeconds: number;
   readonly remindersEnabled: boolean;
   readonly reminderDaysBeforeClose: number;
   readonly reminderSendAtMinute: number;
@@ -27,6 +30,8 @@ export interface CfpMessageSettings {
 }
 
 export interface CfpMessageSettingsInput {
+  readonly portalAutoRedirect: boolean;
+  readonly portalRedirectDelaySeconds: string;
   readonly remindersEnabled: boolean;
   readonly reminderDaysBeforeClose: string;
   readonly reminderSendAt: string;
@@ -88,6 +93,7 @@ export function validateCfpMessageSettings(input: CfpMessageSettingsInput): CfpM
   if (!thankYou.ok) addTemplateErrors(errors, "thankYou", thankYou.issues);
 
   const days = Number(input.reminderDaysBeforeClose);
+  const portalRedirectDelaySeconds = Number(input.portalRedirectDelaySeconds);
   const sendAtMinute = parseSendAtMinute(input.reminderSendAt);
   if (input.remindersEnabled) {
     if (!Number.isSafeInteger(days) || days < 1 || days > 90) {
@@ -97,13 +103,29 @@ export function validateCfpMessageSettings(input: CfpMessageSettingsInput): CfpM
       addError(errors, "reminderSendAt", "Choose a valid reminder time.");
     }
   }
+  if (
+    input.portalAutoRedirect &&
+    (!Number.isSafeInteger(portalRedirectDelaySeconds) ||
+      portalRedirectDelaySeconds < 5 ||
+      portalRedirectDelaySeconds > 60)
+  ) {
+    addError(errors, "portalRedirectDelaySeconds", "Choose a whole number from 5 to 60 seconds.");
+  }
 
   if (!confirmation.ok || !thankYou.ok || Object.keys(errors).length > 0) return { fields: null, errors };
   // Disabled reminders still round-trip whatever timing the form carried, so turning reminders back
   // on restores the administrator's last choice instead of silently reverting to the defaults.
   const retainedDays = Number.isSafeInteger(days) && days >= 1 && days <= 90 ? days : DEFAULT_REMINDER_DAYS;
+  const retainedPortalDelay =
+    Number.isSafeInteger(portalRedirectDelaySeconds) &&
+    portalRedirectDelaySeconds >= 5 &&
+    portalRedirectDelaySeconds <= 60
+      ? portalRedirectDelaySeconds
+      : DEFAULT_PORTAL_REDIRECT_DELAY_SECONDS;
   return {
     fields: {
+      portalAutoRedirect: input.portalAutoRedirect,
+      portalRedirectDelaySeconds: retainedPortalDelay,
       remindersEnabled: input.remindersEnabled,
       reminderDaysBeforeClose: retainedDays,
       reminderSendAtMinute: sendAtMinute ?? DEFAULT_REMINDER_SEND_AT_MINUTE,

@@ -33,6 +33,10 @@ export interface CfpPolicyMessages {
   readonly submissionConfirmation: string;
   readonly closed: string;
   readonly thankYou?: string;
+  readonly portalHandoff?: {
+    readonly autoRedirect: boolean;
+    readonly redirectDelaySeconds: number;
+  };
   readonly reminder?: {
     readonly enabled: boolean;
     readonly daysBeforeClose: number;
@@ -219,6 +223,17 @@ function validateDefinition(input: CfpPolicyDefinition): CfpPolicyDefinition {
       ...(input.messages.thankYou === undefined
         ? {}
         : { thankYou: requireText(input.messages.thankYou, "messages.thankYou") }),
+      ...(input.messages.portalHandoff === undefined
+        ? {}
+        : {
+            portalHandoff: {
+              autoRedirect: input.messages.portalHandoff.autoRedirect,
+              redirectDelaySeconds: positiveInteger(
+                input.messages.portalHandoff.redirectDelaySeconds,
+                "messages.portalHandoff.redirectDelaySeconds",
+              ),
+            },
+          }),
       ...(input.messages.reminder === undefined
         ? {}
         : {
