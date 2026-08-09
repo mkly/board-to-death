@@ -53,7 +53,7 @@ function cellValue(item: CfpSubmissionListItem, columnId: SubmissionColumnId): s
 
 export function submissionExportRows(table: SubmissionExportTable): readonly (readonly string[])[] {
   return [
-    table.columns.map((column) => columnLabel(column, table.customLabels)),
+    table.columns.map((column) => neutralizeFormula(columnLabel(column, table.customLabels))),
     ...table.items.map((item) => table.columns.map((column) => neutralizeFormula(cellValue(item, column)))),
   ];
 }
