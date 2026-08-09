@@ -408,12 +408,14 @@ model CfpPolicyCategoryRoute {
 }
 
 model CfpPolicyAdminAssignment {
-  eventId         String           @db.Uuid
-  versionId       String           @db.Uuid
-  administratorId String           @db.Uuid
-  role            CfpAdminRole
-  version         CfpPolicyVersion @relation(fields: [eventId, versionId], references: [eventId, id], onDelete: Cascade)
-  administrator   CfpAdministrator @relation(fields: [eventId, administratorId], references: [eventId, id], onDelete: NoAction)
+  eventId                    String           @db.Uuid
+  versionId                  String           @db.Uuid
+  administratorId            String           @db.Uuid
+  role                       CfpAdminRole
+  notifyOnNewSubmission      Boolean          @default(false)
+  notifyOnSubmissionUpdate   Boolean          @default(false)
+  version                    CfpPolicyVersion @relation(fields: [eventId, versionId], references: [eventId, id], onDelete: Cascade)
+  administrator              CfpAdministrator @relation(fields: [eventId, administratorId], references: [eventId, id], onDelete: NoAction)
 
   @@id([versionId, administratorId])
   @@index([eventId, administratorId])

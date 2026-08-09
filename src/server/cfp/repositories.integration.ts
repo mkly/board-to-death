@@ -174,7 +174,14 @@ describe("CFP form persistence", () => {
         },
         conditionalVisibility: [],
         categoryRouting: [],
-        adminAssignments: [{ administratorId: administrator.id, role: CfpAdminRole.OWNER }],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
       },
     });
     await submissions.createDraft({

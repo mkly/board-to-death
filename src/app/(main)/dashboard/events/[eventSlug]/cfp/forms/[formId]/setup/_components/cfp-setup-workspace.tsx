@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
-import { ArrowRight, Check, FileText, Save, Settings2, Sparkles } from "lucide-react";
+import { ArrowRight, Check, FileText, Save, Settings2, Sparkles, UsersRound } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,9 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CfpFormDefinition } from "@/lib/cfp";
 
 import { type SaveCfpSetupState, saveCfpSetupStep } from "../actions";
+import { type CfpAdministratorSetting, CfpAdministratorSettings } from "./cfp-administrator-settings";
 
-type SetupStep = "setup" | "welcome" | "terms";
+type SetupStep = "setup" | "welcome" | "terms" | "administrators";
 
 const INITIAL_STATE: SaveCfpSetupState = { status: "idle" };
 
@@ -325,10 +326,14 @@ function TermsForm({
 }
 
 export function CfpSetupWorkspace({
+  administrators,
+  canManageAdministrators,
   definition,
   eventSlug,
   formId,
 }: {
+  readonly administrators: readonly CfpAdministratorSetting[];
+  readonly canManageAdministrators: boolean;
   readonly definition: CfpFormDefinition;
   readonly eventSlug: string;
   readonly formId: string;
@@ -354,6 +359,10 @@ export function CfpSetupWorkspace({
         <TabsTrigger value="terms">
           <FileText data-icon="inline-start" />
           Terms
+        </TabsTrigger>
+        <TabsTrigger value="administrators">
+          <UsersRound data-icon="inline-start" />
+          Administrators
         </TabsTrigger>
       </TabsList>
       <div className="min-w-0 flex-1">
@@ -390,6 +399,14 @@ export function CfpSetupWorkspace({
               Every saved step preserves the previous draft so later editors never rewrite history.
             </AlertDescription>
           </Alert>
+        </TabsContent>
+        <TabsContent value="administrators">
+          <CfpAdministratorSettings
+            administrators={administrators}
+            canManage={canManageAdministrators}
+            eventSlug={eventSlug}
+            formId={formId}
+          />
         </TabsContent>
       </div>
     </Tabs>

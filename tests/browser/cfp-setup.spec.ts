@@ -110,4 +110,39 @@ test.describe("CFP setup", () => {
     await page.goto(`/dashboard/events/not-${eventSlug}/cfp/forms/${formId}/setup`);
     await expect(page.getByRole("heading", { name: "Page not found." })).toBeVisible();
   });
+
+  test("assigns and removes an event administrator with independent alert preferences", async ({ page }) => {
+    await page.goto(`/dashboard/events/${eventSlug}/cfp/forms/${formId}/setup`);
+    await page.getByRole("tab", { name: "Administrators" }).click();
+
+    const owner = page.getByRole("checkbox", { name: /CFP Owner/ });
+    const editor = page.getByRole("checkbox", { name: /Program Editor/ });
+    await expect(owner).toBeChecked();
+    await expect(owner).toBeDisabled();
+    await editor.check();
+
+    await page.getByRole("switch", { name: "New submissions" }).nth(1).check();
+    await page.getByRole("switch", { name: "Submission updates" }).nth(1).check();
+    await page.getByRole("button", { name: "Save administrators" }).click();
+    await expect(page.getByText("Administrator assignments and alert preferences saved.")).toBeVisible();
+
+    await page.reload();
+    await page.getByRole("tab", { name: "Administrators" }).click();
+    await expect(page.getByRole("checkbox", { name: /Program Editor/ })).toBeChecked();
+    await expect(page.getByRole("switch", { name: "New submissions" }).nth(1)).toBeChecked();
+    await expect(page.getByRole("switch", { name: "Submission updates" }).nth(1)).toBeChecked();
+
+    await page.getByRole("checkbox", { name: /Program Editor/ }).uncheck();
+    await Promise.all([
+      page.waitForResponse(
+        (response) => response.request().method() === "POST" && response.url().includes(`/cfp/forms/${formId}/setup`),
+      ),
+      page.getByRole("button", { name: "Save administrators" }).click(),
+    ]);
+    await page.reload();
+    await page.getByRole("tab", { name: "Administrators" }).click();
+    await expect(page.getByRole("checkbox", { name: /Program Editor/ })).not.toBeChecked();
+    await expect(page.getByRole("switch", { name: "New submissions" }).nth(1)).toBeDisabled();
+    await expect(page.getByText("Submitter confirmation stays mandatory")).toBeVisible();
+  });
 });

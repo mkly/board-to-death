@@ -5,7 +5,9 @@ import { notFound } from "next/navigation";
 
 import { z } from "zod";
 
+import { CfpAdminRole } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
+import { CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
@@ -52,6 +54,27 @@ export interface SaveCfpSetupState {
   readonly message?: string;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
 }
+
+export interface SaveCfpAdministratorsState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+const administratorSettingsSchema = z
+  .object({
+    administratorIds: z.array(z.string().uuid()).min(1, "Assign at least one administrator."),
+    newSubmissionAdministratorIds: z.array(z.string().uuid()),
+    submissionUpdateAdministratorIds: z.array(z.string().uuid()),
+  })
+  .superRefine((input, context) => {
+    const assigned = new Set(input.administratorIds);
+    for (const administratorId of [...input.newSubmissionAdministratorIds, ...input.submissionUpdateAdministratorIds]) {
+      if (!assigned.has(administratorId)) {
+        context.addIssue({ code: "custom", message: "Alert recipients must also be assigned administrators." });
+        break;
+      }
+    }
+  });
 
 function value(formData: FormData, name: string): string {
   const result = formData.get(name);
@@ -138,6 +161,59 @@ export async function saveCfpSetupStep(
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
     return { status: "success", message: "Changes saved as a new draft version." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+export async function saveCfpAdministrators(
+  eventSlug: string,
+  formId: string,
+  _previousState: SaveCfpAdministratorsState,
+  formData: FormData,
+): Promise<SaveCfpAdministratorsState> {
+  const validation = administratorSettingsSchema.safeParse({
+    administratorIds: formData.getAll("administratorIds"),
+    newSubmissionAdministratorIds: formData.getAll("newSubmissionAdministratorIds"),
+    submissionUpdateAdministratorIds: formData.getAll("submissionUpdateAdministratorIds"),
+  });
+  if (!validation.success) {
+    return { status: "error", message: validation.error.issues[0]?.message ?? "Review the administrator settings." };
+  }
+
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, formId);
+  if (!form) notFound();
+  const policies = new CfpPolicyRepository(client);
+  const policy = await policies.getByKey(event.id, form.key);
+  if (!policy) notFound();
+
+  const currentAssignments = new Map(
+    policy.definition.adminAssignments.map((assignment) => [assignment.administratorId, assignment]),
+  );
+  const notifyOnNewSubmission = new Set(validation.data.newSubmissionAdministratorIds);
+  const notifyOnSubmissionUpdate = new Set(validation.data.submissionUpdateAdministratorIds);
+
+  try {
+    await policies.updateAdministratorAssignments(
+      event.id,
+      policy.id,
+      shell.user.email.toLowerCase(),
+      validation.data.administratorIds.map((administratorId) => ({
+        administratorId,
+        role: currentAssignments.get(administratorId)?.role ?? CfpAdminRole.EDITOR,
+        notifyOnNewSubmission: notifyOnNewSubmission.has(administratorId),
+        notifyOnSubmissionUpdate: notifyOnSubmissionUpdate.has(administratorId),
+      })),
+    );
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${encodeURIComponent(formId)}/setup`);
+    return { status: "success", message: "Administrator assignments and alert preferences saved." };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;

@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
+import { CfpAdministratorRepository, CfpPolicyRepository } from "@/server/cfp/policies";
 import { CfpFormRepository } from "@/server/cfp/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -25,8 +26,31 @@ export default async function CfpFormSetupPage({
     redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "cfp") : "/dashboard");
   }
 
-  const form = await new CfpFormRepository(getDatabaseClient()).get(event.id, formId);
+  const client = getDatabaseClient();
+  const form = await new CfpFormRepository(client).get(event.id, formId);
   if (!form) notFound();
+  const [eligibleAdministrators, policy] = await Promise.all([
+    new CfpAdministratorRepository(client).list(event.id),
+    new CfpPolicyRepository(client).getByKey(event.id, form.key),
+  ]);
+  const assignments = new Map(
+    policy?.definition.adminAssignments.map((assignment) => [assignment.administratorId, assignment]) ?? [],
+  );
+  const currentAdministrator = eligibleAdministrators.find(
+    ({ externalId }) => externalId.toLowerCase() === shell.user.email.toLowerCase(),
+  );
+  const canManageAdministrators = assignments.get(currentAdministrator?.id ?? "")?.role === "OWNER";
+  const administrators = eligibleAdministrators.map(({ displayName, externalId, id }) => {
+    const assignment = assignments.get(id);
+    return {
+      id,
+      displayName,
+      externalId,
+      role: assignment?.role ?? null,
+      notifyOnNewSubmission: assignment?.notifyOnNewSubmission ?? false,
+      notifyOnSubmissionUpdate: assignment?.notifyOnSubmissionUpdate ?? false,
+    };
+  });
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
@@ -42,11 +66,17 @@ export default async function CfpFormSetupPage({
           {form.definition.title}
         </h1>
         <p className="max-w-2xl text-muted-foreground text-sm">
-          Configure the applicant-facing setup, welcome message, and consent terms. Each save creates a new draft
+          Configure the applicant-facing setup, consent terms, administrators, and alerts. Each save creates a new draft
           version.
         </p>
       </header>
-      <CfpSetupWorkspace definition={form.definition} eventSlug={event.slug} formId={form.formId} />
+      <CfpSetupWorkspace
+        administrators={administrators}
+        canManageAdministrators={canManageAdministrators}
+        definition={form.definition}
+        eventSlug={event.slug}
+        formId={form.formId}
+      />
     </div>
   );
 }
