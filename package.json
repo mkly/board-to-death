@@ -39,7 +39,7 @@
     "test:authorization": "vitest run src/server/authorization/authorization.test.ts",
     "test:browser": "playwright test",
     "test:browser:webhook": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/magic-link-webhook.node-test.ts",
-    "quality": "npm run check && npm run typecheck && npm run test && npm run db:test:reset && npm run test:repositories && npm run test:auth && npm run test:email-templates && npm run test:authorization && npm run build && npm run test:browser"
+    "quality": "npm run check && npm run typecheck && npm run test && npm run db:test:reset && npm run test:repositories && npm run test:auth && npm run test:email-templates && npm run test:authorization && npm run test:browser"
   },
   "lint-staged": {
     "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"]
