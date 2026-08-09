@@ -26,6 +26,15 @@ export interface PublishedSpeakerResource {
   readonly version: SpeakerResourcePageVersion;
 }
 
+export type SpeakerResourcePageStatus = "draft" | "published" | "unpublished";
+
+export interface AdminSpeakerResourcePage {
+  readonly id: string;
+  readonly key: string;
+  readonly status: SpeakerResourcePageStatus;
+  readonly version: SpeakerResourcePageVersion;
+}
+
 function invalid(message: string): never {
   throw new RepositoryError("invalid-input", message);
 }
@@ -266,6 +275,66 @@ export class SpeakerResourceRepository {
         return version ? [{ pageId: page.id, key: page.key, version }] : [];
       })
       .sort((first, second) => first.version.sortOrder - second.version.sortOrder);
+  }
+
+  async list(eventId: string): Promise<AdminSpeakerResourcePage[]> {
+    const pages = await this.client.speakerResourcePage.findMany({
+      where: { eventId, archivedAt: null },
+      include: { versions: { orderBy: { versionNumber: "desc" } } },
+    });
+    return pages
+      .flatMap((page) => {
+        const head = page.versions[0];
+        if (!head) return [];
+        const active = page.versions.find((version) => version.publishedAt !== null && version.unpublishedAt === null);
+        const everPublished = page.versions.some((version) => version.publishedAt !== null);
+        let status: SpeakerResourcePageStatus = "draft";
+        if (active) status = "published";
+        else if (everPublished) status = "unpublished";
+        return [{ id: page.id, key: page.key, status, version: active ?? head }];
+      })
+      .sort((first, second) => first.version.sortOrder - second.version.sortOrder);
+  }
+
+  async reorder(eventId: string, orderedIds: readonly string[]): Promise<AdminSpeakerResourcePage[]> {
+    const current = await this.list(eventId);
+    const uniqueIds = new Set(orderedIds);
+    if (uniqueIds.size !== orderedIds.length || current.length !== orderedIds.length) {
+      invalid("orderedIds must contain every event-owned resource exactly once.");
+    }
+    const currentIds = new Set(current.map(({ id }) => id));
+    if (orderedIds.some((id) => !currentIds.has(id))) {
+      invalid("orderedIds must contain every event-owned resource exactly once.");
+    }
+    await this.client.$transaction(
+      orderedIds.map((pageId, index) =>
+        this.client.speakerResourcePageVersion.updateMany({
+          where: { eventId, pageId },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+    return this.list(eventId);
+  }
+
+  async findPublished(eventId: string, slug: string): Promise<PublishedSpeakerResource | null> {
+    const page = await this.client.speakerResourcePage.findFirst({
+      where: {
+        eventId,
+        archivedAt: null,
+        versions: { some: { slug, publishedAt: { not: null }, unpublishedAt: null } },
+      },
+      select: {
+        id: true,
+        key: true,
+        versions: {
+          where: { slug, publishedAt: { not: null }, unpublishedAt: null },
+          take: 1,
+        },
+      },
+    });
+    const version = page?.versions[0];
+    return page && version ? { pageId: page.id, key: page.key, version } : null;
   }
 
   private async require(eventId: string, pageId: string) {
