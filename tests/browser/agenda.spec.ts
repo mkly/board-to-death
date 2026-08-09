@@ -1,23 +1,15 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { Pool } from "pg";
 
+import { signInAsAdmin } from "./fixtures/magic-link-webhook";
 import { randomUUID } from "node:crypto";
-import { createServer, type Server } from "node:http";
 
 const testDatabaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 const database = new Pool({ connectionString: testDatabaseUrl });
-let webhook: Server;
-let resolveMagicLink: ((url: string) => void) | undefined;
 
 test.setTimeout(120_000);
-
-function nextMagicLink(): Promise<string> {
-  return new Promise((resolve) => {
-    resolveMagicLink = resolve;
-  });
-}
 
 async function dragAgendaCard(page: Page, source: Locator, target: Locator, targetY: number): Promise<void> {
   await page.locator("[data-agenda-scroll]").scrollIntoViewIfNeeded();
@@ -29,27 +21,7 @@ async function dragAgendaCard(page: Page, source: Locator, target: Locator, targ
   await page.mouse.up();
 }
 
-test.beforeAll(async () => {
-  webhook = createServer((request, response) => {
-    const chunks: Buffer[] = [];
-    request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("end", () => {
-      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { text?: string };
-      const link = body.text?.match(/https?:\/\/\S+/)?.[0];
-      if (link) resolveMagicLink?.(link);
-      response.writeHead(204).end();
-    });
-  });
-  await new Promise<void>((resolve, reject) => {
-    webhook.once("error", reject);
-    webhook.listen(3199, "127.0.0.1", resolve);
-  });
-});
-
 test.afterAll(async () => {
-  await new Promise<void>((resolve, reject) => {
-    webhook.close((error) => (error ? reject(error) : resolve()));
-  });
   await database.end();
 });
 
@@ -107,11 +79,7 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
   }
 
   try {
-    const deliveredLink = nextMagicLink();
-    await page.goto("/auth/v1/login");
-    await page.getByRole("textbox", { name: "Email address" }).fill("admin@example.test");
-    await page.getByRole("button", { name: "Email me a sign-in link" }).click();
-    await page.goto(await deliveredLink);
+    await signInAsAdmin(page);
     await context.addCookies([
       {
         name: "board_to_death_active_event",
