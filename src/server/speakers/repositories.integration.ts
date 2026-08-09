@@ -36,8 +36,8 @@ async function createEvent(slug: string): Promise<string> {
   return event.id;
 }
 
-async function createSubmission(eventId: string): Promise<string> {
-  const form = await forms.create({ eventId, key: "main-cfp", definition });
+async function createSubmission(eventId: string, key = "main-cfp"): Promise<string> {
+  const form = await forms.create({ eventId, key, definition });
   const version = await client.cfpFormVersion.findUniqueOrThrow({
     where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
   });
@@ -167,6 +167,88 @@ describe("speaker persistence", () => {
       (await speakers.listSubmissionParticipants(eventId, submissionId)).map(({ speaker }) => speaker.id),
       [coSpeaker.id, primary.id],
     );
+  });
+
+  test("stores participant file keys per speaker and refuses speakers outside the submission", async () => {
+    const eventId = await createEvent("participant-files");
+    const otherEventId = await createEvent("other-participant-files");
+    const submissionId = await createSubmission(eventId);
+    const otherSubmissionId = await createSubmission(eventId, "second-cfp");
+    const primary = await createSpeaker(eventId, "files-primary@example.test", "Primary");
+    const coSpeaker = await createSpeaker(eventId, "files-co@example.test", "Co");
+    const outsider = await createSpeaker(otherEventId, "files-outsider@example.test", "Outsider");
+    await speakers.replaceSubmissionParticipants(eventId, submissionId, [primary.id, coSpeaker.id]);
+
+    assert.deepEqual(
+      await speakers
+        .getSubmissionParticipant(eventId, submissionId, primary.id)
+        .then((participant) => [
+          participant?.speaker.id,
+          participant?.slidesObjectKey,
+          participant?.supportingDocumentObjectKey,
+        ]),
+      [primary.id, null, null],
+    );
+
+    const withSlides = await speakers.updateSubmissionParticipantFiles(eventId, submissionId, primary.id, {
+      slidesObjectKey: "events/e/speakers/primary/slides-1",
+    });
+    assert.equal(withSlides.slidesObjectKey, "events/e/speakers/primary/slides-1");
+    assert.equal(withSlides.supportingDocumentObjectKey, null);
+
+    // A second purpose is set independently, and replacing one key leaves the other untouched.
+    await speakers.updateSubmissionParticipantFiles(eventId, submissionId, primary.id, {
+      supportingDocumentObjectKey: "events/e/speakers/primary/doc-1",
+    });
+    const replaced = await speakers.updateSubmissionParticipantFiles(eventId, submissionId, primary.id, {
+      slidesObjectKey: "events/e/speakers/primary/slides-2",
+    });
+    assert.equal(replaced.slidesObjectKey, "events/e/speakers/primary/slides-2");
+    assert.equal(replaced.supportingDocumentObjectKey, "events/e/speakers/primary/doc-1");
+
+    const cleared = await speakers.updateSubmissionParticipantFiles(eventId, submissionId, primary.id, {
+      slidesObjectKey: null,
+    });
+    assert.equal(cleared.slidesObjectKey, null);
+    assert.equal(cleared.supportingDocumentObjectKey, "events/e/speakers/primary/doc-1");
+
+    // One participant's files never leak onto a co-speaker's row.
+    const co = await speakers.getSubmissionParticipant(eventId, submissionId, coSpeaker.id);
+    assert.equal(co?.slidesObjectKey, null);
+    assert.equal(co?.supportingDocumentObjectKey, null);
+
+    assert.equal(await speakers.getSubmissionParticipant(eventId, otherSubmissionId, primary.id), null);
+    assert.equal(await speakers.getSubmissionParticipant(eventId, submissionId, outsider.id), null);
+    assert.equal(await speakers.getSubmissionParticipant(otherEventId, submissionId, primary.id), null);
+    await expectRepositoryError(
+      speakers.updateSubmissionParticipantFiles(eventId, submissionId, outsider.id, { slidesObjectKey: "forged" }),
+      "not-found",
+    );
+    await expectRepositoryError(
+      speakers.updateSubmissionParticipantFiles(otherEventId, submissionId, primary.id, { slidesObjectKey: "forged" }),
+      "not-found",
+    );
+    await expectRepositoryError(
+      speakers.updateSubmissionParticipantFiles(eventId, otherSubmissionId, primary.id, { slidesObjectKey: "forged" }),
+      "not-found",
+    );
+    assert.equal(
+      (await speakers.getSubmissionParticipant(eventId, submissionId, primary.id))?.supportingDocumentObjectKey,
+      "events/e/speakers/primary/doc-1",
+    );
+  });
+
+  test("keeps the speaker agreement key across unrelated profile edits", async () => {
+    const eventId = await createEvent("agreement-key");
+    const speaker = await createSpeaker(eventId, "agreement@example.test", "Agreed");
+
+    await speakers.updateProfile(eventId, speaker.id, { agreementObjectKey: "events/e/speakers/s/agreement-1" });
+    const edited = await speakers.updateProfile(eventId, speaker.id, { biography: "Writes rules." });
+    assert.equal(edited.profile.agreementObjectKey, "events/e/speakers/s/agreement-1");
+
+    const removed = await speakers.updateProfile(eventId, speaker.id, { agreementObjectKey: null });
+    assert.equal(removed.profile.agreementObjectKey, null);
+    assert.equal(removed.profile.biography, "Writes rules.");
   });
 
   test("restricts deletion of assigned speakers and cascades links when their submission is deleted", async () => {

@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, test } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -34,6 +34,157 @@ async function preparePortal(): Promise<SpeakerPortalFixture> {
 async function addSpeakerCookie(context: BrowserContext, value: string): Promise<void> {
   await context.addCookies([{ name: "board-to-death.speaker-session", value, url: `${baseURL}/portal` }]);
 }
+
+// The innermost card that wraps one file input, so "Upload"/"Remove"/"Download"
+// and the failure alert resolve within a single control on a page with several.
+function fileControl(page: Page, inputId: string): Locator {
+  return page
+    .locator("div.rounded-lg")
+    .filter({ has: page.locator(`#${inputId}`) })
+    .last();
+}
+
+function payload(signature: readonly number[], trailer = "board-to-death"): Buffer {
+  return Buffer.concat([Buffer.from(signature), Buffer.from(trailer, "utf8")]);
+}
+
+const PNG_BYTES = payload([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_BYTES = payload([0xff, 0xd8, 0xff, 0xe0]);
+const PDF_BYTES = payload([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
+const ELF_BYTES = payload([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00]);
+
+// Replacing a file changes no visible control state — the Download link is
+// already there — so wait on the Server Action response instead of the DOM
+// before reading the stored bytes back.
+async function uploadTo(
+  page: Page,
+  control: Locator,
+  inputId: string,
+  file: { name: string; mimeType: string; buffer: Buffer },
+) {
+  await control.locator(`#${inputId}`).setInputFiles(file);
+  const submitted = page.waitForResponse((response) => response.request().method() === "POST");
+  await control.getByRole("button", { name: /^(Upload|Replace)$/ }).click();
+  await submitted;
+}
+
+test("uploads, replaces, downloads, and removes speaker profile files", async ({ page }) => {
+  const fixture = await preparePortal();
+  await page.goto(fixture.populatedAuthHref);
+  await page.goto(`/portal/${fixture.eventSlug}/profile`);
+
+  const headshot = fileControl(page, "profile-file-headshot");
+  const downloadHref = `/portal/${fixture.eventSlug}/profile/files/headshot`;
+  await expect(headshot.getByRole("link", { name: "Download" })).toHaveCount(0);
+  expect((await page.request.get(downloadHref)).status()).toBe(404);
+
+  // Executable content wearing an allowed content type is rejected server-side.
+  await uploadTo(page, headshot, "profile-file-headshot", {
+    name: "headshot.png",
+    mimeType: "image/png",
+    buffer: ELF_BYTES,
+  });
+  await expect(headshot.getByText("The file's contents do not match its declared type.")).toBeVisible();
+  expect((await page.request.get(downloadHref)).status()).toBe(404);
+
+  await uploadTo(page, headshot, "profile-file-headshot", {
+    name: "headshot.png",
+    mimeType: "image/png",
+    buffer: PNG_BYTES,
+  });
+  await expect(headshot.getByRole("link", { name: "Download" })).toBeVisible();
+  const stored = await page.request.get(downloadHref);
+  expect(stored.status()).toBe(200);
+  expect(stored.headers()["content-type"]).toBe("image/png");
+  expect(stored.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(stored.headers()["content-disposition"]).toContain("attachment");
+  expect(Buffer.from(await stored.body()).equals(PNG_BYTES)).toBe(true);
+
+  // Replacing swaps the stored bytes rather than adding a second file.
+  await uploadTo(page, headshot, "profile-file-headshot", {
+    name: "new.jpg",
+    mimeType: "image/jpeg",
+    buffer: JPEG_BYTES,
+  });
+  await expect(headshot.getByRole("link", { name: "Download" })).toBeVisible();
+  const replaced = await page.request.get(downloadHref);
+  expect(replaced.headers()["content-type"]).toBe("image/jpeg");
+  expect(Buffer.from(await replaced.body()).equals(JPEG_BYTES)).toBe(true);
+
+  await headshot.getByRole("button", { name: "Remove" }).click();
+  await expect(headshot.getByRole("link", { name: "Download" })).toHaveCount(0);
+  expect((await page.request.get(downloadHref)).status()).toBe(404);
+
+  // The agreement control enforces its own type list independently.
+  const agreement = fileControl(page, "profile-file-agreement");
+  await uploadTo(page, agreement, "profile-file-agreement", {
+    name: "agreement.pdf",
+    mimeType: "application/pdf",
+    buffer: ELF_BYTES,
+  });
+  await expect(agreement.getByText("The file's contents do not match its declared type.")).toBeVisible();
+  await uploadTo(page, agreement, "profile-file-agreement", {
+    name: "agreement.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_BYTES,
+  });
+  await expect(agreement.getByRole("link", { name: "Download" })).toBeVisible();
+  const agreementResponse = await page.request.get(`/portal/${fixture.eventSlug}/profile/files/agreement`);
+  expect(agreementResponse.status()).toBe(200);
+  expect(agreementResponse.headers()["content-type"]).toBe("application/pdf");
+  // Removing one purpose leaves the other purpose's file in place.
+  expect((await page.request.get(downloadHref)).status()).toBe(404);
+});
+
+test("manages submission slides and supporting documents per speaker", async ({ page }) => {
+  const fixture = await preparePortal();
+  await page.goto(fixture.populatedAuthHref);
+  await page.goto(`/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}`);
+
+  const slides = fileControl(page, "submission-file-slides");
+  const slidesHref = `/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}/files/slides`;
+  expect((await page.request.get(slidesHref)).status()).toBe(404);
+
+  await uploadTo(page, slides, "submission-file-slides", {
+    name: "deck.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("not a pdf at all", "utf8"),
+  });
+  await expect(slides.getByText("The file's contents do not match its declared type.")).toBeVisible();
+
+  await uploadTo(page, slides, "submission-file-slides", {
+    name: "deck.pdf",
+    mimeType: "application/pdf",
+    buffer: PDF_BYTES,
+  });
+  await expect(slides.getByRole("link", { name: "Download" })).toBeVisible();
+  expect((await page.request.get(slidesHref)).status()).toBe(200);
+
+  const supporting = fileControl(page, "submission-file-supporting-document");
+  const supportingHref = `/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}/files/supportingDocument`;
+  await uploadTo(page, supporting, "submission-file-supporting-document", {
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Session notes for the organizers.", "utf8"),
+  });
+  await expect(supporting.getByRole("link", { name: "Download" })).toBeVisible();
+  expect((await page.request.get(supportingHref)).status()).toBe(200);
+
+  // Removing the slides leaves the supporting document untouched.
+  await slides.getByRole("button", { name: "Remove" }).click();
+  await expect(slides.getByRole("link", { name: "Download" })).toHaveCount(0);
+  expect((await page.request.get(slidesHref)).status()).toBe(404);
+  expect((await page.request.get(supportingHref)).status()).toBe(200);
+
+  // Another speaker's submission exposes neither its page nor its files.
+  expect(
+    (
+      await page.request.get(
+        `/portal/${fixture.eventSlug}/submissions/${fixture.outsiderSubmissionId}/files/supportingDocument`,
+      )
+    ).status(),
+  ).toBe(404);
+});
 
 test("shows the populated speaker portal and keeps another speaker's submission inaccessible", async ({ page }) => {
   const fixture = await preparePortal();

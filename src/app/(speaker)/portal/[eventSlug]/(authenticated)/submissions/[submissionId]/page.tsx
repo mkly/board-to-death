@@ -13,6 +13,7 @@ import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
 import { getPortalViewer, portalHref } from "../../../_lib/portal-session";
 import { PortalSectionHeading, SubmissionStatus } from "../../_components/portal-content";
+import { SubmissionParticipantFiles } from "./_components/submission-participant-files";
 
 interface SpeakerSubmissionPageProps {
   readonly params: Promise<{ readonly eventSlug: string; readonly submissionId: string }>;
@@ -89,10 +90,20 @@ export default async function SpeakerSubmissionPage({ params }: SpeakerSubmissio
             <Separator />
             <ul className="flex flex-col gap-3">
               {submission.participants.map((participant) => (
-                <li key={participant.id} className="rounded-lg border p-3">
-                  <p className="font-medium">{participant.displayName}</p>
-                  {participant.organization ? (
-                    <p className="text-muted-foreground text-sm">{participant.organization}</p>
+                <li key={participant.id} className="flex flex-col gap-3 rounded-lg border p-3">
+                  <div>
+                    <p className="font-medium">{participant.displayName}</p>
+                    {participant.organization ? (
+                      <p className="text-muted-foreground text-sm">{participant.organization}</p>
+                    ) : null}
+                  </div>
+                  {participant.isSelf ? (
+                    <SubmissionParticipantFiles
+                      eventSlug={eventSlug}
+                      submissionId={submissionId}
+                      slidesObjectKey={participant.slidesObjectKey}
+                      supportingDocumentObjectKey={participant.supportingDocumentObjectKey}
+                    />
                   ) : null}
                 </li>
               ))}

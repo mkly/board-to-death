@@ -7,7 +7,15 @@ const nextConfig = {
   reactCompiler: true,
   experimental: {
     serverActions: {
-      bodySizeLimit: "6mb",
+      // Speaker file uploads are Server Actions, and Next.js caps action
+      // request bodies at 1MB by default — far below the per-purpose limits
+      // enforced in src/server/speakers/file-policy.ts (slides allow 50 MB,
+      // the largest). Raise the transport cap past the largest policy limit
+      // plus multipart overhead so file-policy.ts stays the only place that
+      // decides what is too big; a rejected upload then reports its real
+      // reason instead of failing as an unhandled request. This supersedes the
+      // earlier 6mb cap, which every other action body still fits under.
+      bodySizeLimit: "52mb",
     },
   },
   compiler: {
