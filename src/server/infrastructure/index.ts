@@ -38,6 +38,7 @@ export {
   DeterministicTokenGenerator,
   InMemoryFileStorage,
 } from "./fakes.ts";
+export { contentDisposition, safeFileName } from "./file-names.ts";
 export type { FileStorageOptions, LocalFileStorageOptions } from "./file-storage.ts";
 export { createFileStorage, LocalFileStorage } from "./file-storage.ts";
 export { isSafeObjectKey } from "./object-key.ts";
