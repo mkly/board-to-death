@@ -183,6 +183,11 @@ describe("CFP form persistence", () => {
       },
     });
 
+    await expectInvalid(
+      policies.transitionByForm(event.id, first.formId, CfpPolicyStatus.PUBLISHED, administrator.externalId),
+    );
+    assert.equal(await forms.getPublishedByPublicId(policy.publicId), null);
+
     await policies.publishByForm(event.id, first.formId, previewed.versionNumber, administrator.externalId);
     await forms.createVersion(event.id, first.formId, definition("Later draft"));
 

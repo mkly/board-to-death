@@ -531,7 +531,7 @@ export class CfpPolicyRepository {
           select: {
             cfpPolicies: {
               where: { key: { not: "" } },
-              select: { id: true, key: true },
+              select: { id: true, key: true, status: true },
             },
             cfpAdministrators: {
               where: { externalId: actorExternalId.trim().toLowerCase() },
@@ -544,6 +544,9 @@ export class CfpPolicyRepository {
     if (!context) throw new RepositoryError("not-found", "The event-owned CFP form was not found.");
     const policy = context.event.cfpPolicies.find(({ key }) => key === context.key);
     if (!policy) throw new RepositoryError("not-found", "This CFP form does not have publication settings yet.");
+    if (toStatus === CfpPolicyStatus.PUBLISHED && policy.status === CfpPolicyStatus.DRAFT) {
+      invalid("A draft CFP form must be published from its setup page so the public form version is pinned.");
+    }
     const administrator = context.event.cfpAdministrators[0];
     if (!administrator) invalid("The signed-in administrator is not assigned to this event's CFP.");
     return this.transition(eventId, policy.id, toStatus, administrator.id);
