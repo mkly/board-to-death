@@ -287,6 +287,8 @@ describe("reviewer workspace authorization", () => {
       ["speaker-name", "abstract"],
     );
     assert.deepEqual(blind?.submission.applicants, []);
+    assert.match(blind?.submission.reference ?? "", /^Submission [0-9A-F]{8}$/);
+    assert.notEqual(blind?.submission.reference, identified?.submission.reference);
     assert.deepEqual(
       blind?.submission.answers.map(({ questionId }) => questionId),
       ["abstract"],

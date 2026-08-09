@@ -219,10 +219,9 @@ function applicantsOf(
 }
 
 function referenceOf(assignment: IncludedAssignment, visibility: ReviewerVisibility): string {
-  if (visibility === ReviewerVisibility.ANONYMIZED) {
+  if (visibility !== ReviewerVisibility.IDENTIFIED) {
     return `Submission ${assignment.submission.id.slice(0, 8).toUpperCase()}`;
   }
-  if (visibility === ReviewerVisibility.BLIND) return "Identity hidden";
   return (
     applicantsOf(assignment, true)
       .map(({ name }) => name)
