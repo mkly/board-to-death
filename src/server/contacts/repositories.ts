@@ -1,4 +1,11 @@
-import type { Contact, ContactGroup, ContactGroupKind, Person, Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import type {
+  Contact,
+  ContactGroup,
+  ContactGroupKind,
+  Person,
+  Prisma,
+  PrismaClient,
+} from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export interface CreateContactInput {
