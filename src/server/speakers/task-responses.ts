@@ -1,8 +1,13 @@
 import type { Prisma } from "@/generated/prisma/client";
 
+import {
+  parsePortalFormAnswers,
+  parsePortalFormDefinition,
+  validatePortalFormAnswers,
+} from "../../lib/portal-forms.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
-export type SpeakerTaskResponseKind = "CONFIRMATION" | "FILE" | "NONE" | "TEXT";
+export type SpeakerTaskResponseKind = "CONFIRMATION" | "FILE" | "FORM" | "NONE" | "TEXT";
 
 function objectValue(value: unknown): Readonly<Record<string, unknown>> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -21,6 +26,7 @@ export function speakerTaskResponseKind(
   responseSchema: Prisma.JsonValue | null,
 ): SpeakerTaskResponseKind {
   if (!responseRequired) return "NONE";
+  if (parsePortalFormDefinition(responseSchema) !== null) return "FORM";
   const schema = objectValue(responseSchema);
   if (schema?.type === "string") return "TEXT";
   if (schema?.type === "boolean") return "CONFIRMATION";
@@ -55,6 +61,17 @@ export function normalizeSpeakerTaskResponse(
       );
     }
     return normalized;
+  }
+
+  if (kind === "FORM") {
+    const form = parsePortalFormDefinition(responseSchema);
+    if (!form) throw new RepositoryError("invalid-input", "This task has an unsupported response definition.");
+    const answers = parsePortalFormAnswers(response ?? null);
+    const errors = validatePortalFormAnswers(form, answers);
+    if (Object.keys(errors).length > 0) {
+      throw new RepositoryError("invalid-input", "Complete the required fields.");
+    }
+    return answers as Prisma.InputJsonValue;
   }
 
   const value = objectValue(response ?? null);

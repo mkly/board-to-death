@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
+import { type PortalFormSection, portalFormFieldTypes } from "@/lib/portal-forms";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database";
 import { RepositoryError } from "@/server/events";
@@ -21,7 +22,11 @@ const definitionSchema = z.object({
   defaultDueOffsetDays: z
     .union([z.literal(""), z.coerce.number().int().min(0).max(365)])
     .transform((value) => (value === "" ? null : value)),
-  responseType: z.enum(["NONE", "TEXT", "FILE"]),
+  responseType: z.enum(["NONE", "TEXT", "FILE", "FORM"]),
+  formDefinition: z.string().trim().max(12_000, "Form definition must be 12,000 characters or fewer."),
+  confirmationSubject: z.string().trim().max(160),
+  confirmationMessage: z.string().trim().max(2_000),
+  sendConfirmationEmail: z.boolean(),
   confirmedOnly: z.boolean(),
   sessionKinds: z
     .string()
@@ -39,6 +44,8 @@ const definitionSchema = z.object({
       "Use letters, numbers, and underscores for session kinds.",
     ),
 });
+
+class FormDefinitionError extends Error {}
 
 function repository(): SpeakerOnboardingRepository {
   return new SpeakerOnboardingRepository(getDatabaseClient());
@@ -64,6 +71,9 @@ function invalidResult(error: z.ZodError): MutationResult {
 }
 
 function failureResult(error: unknown): MutationResult {
+  if (error instanceof FormDefinitionError) {
+    return { ok: false, message: "Review the highlighted fields.", fieldErrors: { formDefinition: [error.message] } };
+  }
   if (error instanceof RepositoryError || (error instanceof Error && error.message === "Authentication is required.")) {
     return { ok: false, message: error.message };
   }
@@ -77,12 +87,65 @@ function parseForm(formData: FormData) {
     description: formData.get("description"),
     defaultDueOffsetDays: formData.get("defaultDueOffsetDays"),
     responseType: formData.get("responseType"),
+    formDefinition: formData.get("formDefinition"),
+    confirmationSubject: formData.get("confirmationSubject"),
+    confirmationMessage: formData.get("confirmationMessage"),
+    sendConfirmationEmail: formData.get("sendConfirmationEmail") === "on",
     confirmedOnly: formData.get("confirmedOnly") === "on",
     sessionKinds: formData.get("sessionKinds"),
   });
 }
 
-function responseDefinition(responseType: TaskResponseType): {
+function formSections(source: string): PortalFormSection[] {
+  const sections: PortalFormSection[] = [];
+  let current: {
+    title: string;
+    instructions: string | null;
+    fields: PortalFormSection["fields"] extends readonly (infer T)[] ? T[] : never;
+  } | null = null;
+  for (const [index, rawLine] of source.split("\n").entries()) {
+    const line = rawLine.trim();
+    if (line === "") continue;
+    if (line.startsWith("[") && line.endsWith("]")) {
+      const [title, instructions] = line
+        .slice(1, -1)
+        .split("::", 2)
+        .map((part) => part.trim());
+      if (!title) throw new FormDefinitionError(`Section on line ${index + 1} needs a title.`);
+      current = { title, instructions: instructions || null, fields: [] };
+      sections.push({ id: `section-${sections.length + 1}`, ...current });
+      continue;
+    }
+    if (!current) throw new FormDefinitionError(`Add a [Section title] before the field on line ${index + 1}.`);
+    const [label, rawType = "text", requiredFlag = "", reusableKey = ""] = line.split("|").map((part) => part.trim());
+    const type = rawType.toLowerCase();
+    if (!label) throw new FormDefinitionError(`Field on line ${index + 1} needs a label.`);
+    if (!portalFormFieldTypes.some((candidate) => candidate === type)) {
+      throw new FormDefinitionError(`Field on line ${index + 1} has an unsupported type.`);
+    }
+    current.fields.push({
+      id: `field-${sections.length}-${current.fields.length + 1}`,
+      label,
+      type: type as (typeof portalFormFieldTypes)[number],
+      required: requiredFlag.toLowerCase() === "required",
+      reusableKey: reusableKey || null,
+    });
+  }
+  if (sections.length === 0 || sections.some(({ fields }) => fields.length === 0)) {
+    throw new FormDefinitionError("Every response form needs at least one section and every section needs a field.");
+  }
+  return sections;
+}
+
+function responseDefinition(
+  responseType: TaskResponseType,
+  options: {
+    readonly formDefinition: string;
+    readonly confirmationSubject: string;
+    readonly confirmationMessage: string;
+    readonly sendConfirmationEmail: boolean;
+  },
+): {
   readonly responseRequired: boolean;
   readonly responseSchema?: Prisma.InputJsonValue;
 } {
@@ -97,6 +160,20 @@ function responseDefinition(responseType: TaskResponseType): {
       },
     };
   }
+  if (responseType === "FORM") {
+    return {
+      responseRequired: true,
+      responseSchema: {
+        kind: "portal-form",
+        sections: formSections(options.formDefinition),
+        confirmation: {
+          subject: options.confirmationSubject || "Response received",
+          message: options.confirmationMessage || "Thank you. Your response was submitted.",
+          sendEmail: options.sendConfirmationEmail,
+        },
+      } as unknown as Prisma.InputJsonValue,
+    };
+  }
   return { responseRequired: false };
 }
 
@@ -107,7 +184,7 @@ function definitionInput(value: z.infer<typeof definitionSchema>, sortOrder: num
     description: value.description || null,
     applicability: { confirmedOnly: value.confirmedOnly, sessionKinds: value.sessionKinds },
     defaultDueOffsetDays: value.defaultDueOffsetDays,
-    ...responseDefinition(value.responseType),
+    ...responseDefinition(value.responseType, value),
   };
 }
 

@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 
 import { parseCfpDefinition } from "../../lib/cfp/index.ts";
+import { parsePortalFormAnswers, parsePortalFormDefinition } from "../../lib/portal-forms.ts";
 import { LIST_BOUNDS } from "../database/list-bounds.ts";
 
 export interface SpeakerPortalIdentity {
@@ -35,6 +36,16 @@ function displayName(profile: {
   readonly familyName: string;
 }) {
   return `${profile.preferredName ?? profile.givenName} ${profile.familyName}`;
+}
+
+function confirmationHtml(message: string): string {
+  const escaped = message
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+  return `<p>${escaped}</p>`;
 }
 
 function questionLabelsFromSnapshot(snapshot: Prisma.JsonValue): Map<string, string> {
@@ -150,7 +161,9 @@ export class SpeakerPortalRepository {
           dueAt: true,
           submittedAt: true,
           completedAt: true,
-          definitionVersion: { select: { title: true, description: true, responseRequired: true } },
+          definitionVersion: {
+            select: { title: true, description: true, responseRequired: true, responseSchema: true },
+          },
         },
         orderBy: [{ dueAt: "asc" }, { assignedAt: "asc" }, { id: "asc" }],
       }),
@@ -311,7 +324,7 @@ export class SpeakerPortalRepository {
   }
 
   async getTask(identity: SpeakerPortalIdentity, assignmentId: string) {
-    return this.#database.speakerTaskAssignment.findFirst({
+    const assignment = await this.#database.speakerTaskAssignment.findFirst({
       where: {
         id: assignmentId,
         eventId: identity.eventId,
@@ -343,5 +356,111 @@ export class SpeakerPortalRepository {
         },
       },
     });
+    if (!assignment) return null;
+    const form = parsePortalFormDefinition(assignment.definitionVersion.responseSchema);
+    if (!form) return { ...assignment, form: null, answers: {} };
+
+    const answers = { ...parsePortalFormAnswers(assignment.submissions.at(-1)?.response) };
+    const missingReusableFields = form.sections
+      .flatMap(({ fields }) => fields)
+      .filter(({ id, reusableKey }) => reusableKey && answers[id] === undefined);
+    if (missingReusableFields.length > 0) {
+      const previous = await this.#database.speakerTaskAssignment.findMany({
+        where: {
+          eventId: identity.eventId,
+          speakerId: identity.speakerId,
+          id: { not: assignmentId },
+          submissions: { some: {} },
+        },
+        select: {
+          definitionVersion: { select: { responseSchema: true } },
+          submissions: { orderBy: { attemptNumber: "desc" }, take: 1, select: { response: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      const reusableAnswers = new Map<string, string | boolean>();
+      for (const candidate of previous) {
+        const candidateForm = parsePortalFormDefinition(candidate.definitionVersion.responseSchema);
+        const candidateAnswers = parsePortalFormAnswers(candidate.submissions[0]?.response);
+        for (const field of candidateForm?.sections.flatMap(({ fields }) => fields) ?? []) {
+          const answer = candidateAnswers[field.id];
+          if (field.reusableKey && answer !== undefined && !reusableAnswers.has(field.reusableKey)) {
+            reusableAnswers.set(field.reusableKey, answer);
+          }
+        }
+      }
+      for (const field of missingReusableFields) {
+        const answer = field.reusableKey ? reusableAnswers.get(field.reusableKey) : undefined;
+        if (answer !== undefined) answers[field.id] = answer;
+      }
+    }
+    return { ...assignment, form, answers };
+  }
+
+  async queueTaskConfirmation(identity: SpeakerPortalIdentity, assignmentId: string): Promise<boolean> {
+    const assignment = await this.#database.speakerTaskAssignment.findFirst({
+      where: { eventId: identity.eventId, id: assignmentId, speakerId: identity.speakerId, status: "SUBMITTED" },
+      select: {
+        id: true,
+        definitionVersion: { select: { id: true, title: true, responseSchema: true } },
+        speaker: {
+          select: {
+            profileVersions: {
+              orderBy: { versionNumber: "desc" },
+              take: 1,
+              select: { email: true, givenName: true, familyName: true, preferredName: true },
+            },
+          },
+        },
+      },
+    });
+    const form = parsePortalFormDefinition(assignment?.definitionVersion.responseSchema);
+    const profile = assignment?.speaker.profileVersions[0];
+    if (!assignment || !form?.confirmation.sendEmail || !profile) return false;
+
+    const templateKey = `portal-form-confirmation-${assignment.definitionVersion.id}`;
+    const template = await this.#database.communicationTemplate.upsert({
+      where: { eventId_key: { eventId: identity.eventId, key: templateKey } },
+      create: {
+        eventId: identity.eventId,
+        key: templateKey,
+        name: `${assignment.definitionVersion.title} confirmation`,
+        versions: {
+          create: {
+            version: 1,
+            subjectTemplate: form.confirmation.subject,
+            htmlTemplate: confirmationHtml(form.confirmation.message),
+            textTemplate: form.confirmation.message,
+          },
+        },
+      },
+      update: {},
+      include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+    });
+    const templateVersion = template.versions[0];
+    if (!templateVersion) return false;
+    const occurrenceKey = `portal-form-confirmation:${assignment.id}:1`;
+    const created = await this.#database.messageDelivery.upsert({
+      where: { eventId_occurrenceKey: { eventId: identity.eventId, occurrenceKey } },
+      create: {
+        eventId: identity.eventId,
+        templateVersionId: templateVersion.id,
+        idempotencyKey: occurrenceKey,
+        occurrenceKey,
+        recipients: {
+          create: {
+            recipientKey: `assignment:${assignment.id}`,
+            email: profile.email,
+            displayName: displayName(profile),
+            subjectSnapshot: form.confirmation.subject,
+            htmlSnapshot: confirmationHtml(form.confirmation.message),
+            textSnapshot: form.confirmation.message,
+          },
+        },
+      },
+      update: {},
+      select: { createdAt: true },
+    });
+    return Boolean(created);
   }
 }
