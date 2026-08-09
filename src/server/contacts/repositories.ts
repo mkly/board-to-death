@@ -302,11 +302,40 @@ export async function listContactProgramSessionParticipations(
   if (!contact) throw new RepositoryError("not-found", "The event-owned contact was not found.");
   if (!contact.personId) return [];
 
-  return await client.programSessionParticipant.findMany({
+  const participations = await client.programSessionParticipant.findMany({
     where: { eventId, speaker: { personId: contact.personId } },
     include: contactProgramSessionParticipationInclude,
     orderBy: [{ sessionVersion: { createdAt: "asc" } }, { sortOrder: "asc" }],
   });
+  if (participations.length === 0) return [];
+
+  // Editing a session writes a new version and keeps the superseded ones, so a participant row
+  // survives for every version the person ever appeared in. Only the highest-numbered version of
+  // each session describes the current lineup; without this filter one edited session reports
+  // several participations and a removed speaker keeps reporting one.
+  const currentVersionIds = await currentSessionVersionIds(
+    client,
+    eventId,
+    participations.map(({ sessionVersion }) => sessionVersion.sessionId),
+  );
+  return participations.filter(({ sessionVersionId }) => currentVersionIds.has(sessionVersionId));
+}
+
+async function currentSessionVersionIds(
+  client: Prisma.TransactionClient,
+  eventId: string,
+  sessionIds: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const versions = await client.programSessionVersion.findMany({
+    where: { eventId, sessionId: { in: [...new Set(sessionIds)] } },
+    select: { id: true, sessionId: true, versionNumber: true },
+  });
+  const current = new Map<string, { id: string; versionNumber: number }>();
+  for (const version of versions) {
+    const previous = current.get(version.sessionId);
+    if (!previous || version.versionNumber > previous.versionNumber) current.set(version.sessionId, version);
+  }
+  return new Set([...current.values()].map(({ id }) => id));
 }
 
 /**

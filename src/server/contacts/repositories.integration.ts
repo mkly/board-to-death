@@ -185,6 +185,59 @@ describe("organization contact directory", () => {
     assert.deepEqual(await listContactProgramSessionParticipations(client, otherEvent.id, otherContact.id), []);
   });
 
+  test("reports only the current version of an edited session's participation", async () => {
+    const event = await createEvent("contact-participation-versions", "2027-08-15T16:00:00.000Z");
+    const contact = await createContact(client, {
+      eventId: event.id,
+      email: "edited@example.test",
+      givenName: "Edited",
+      familyName: "Speaker",
+    });
+    const other = await createContact(client, {
+      eventId: event.id,
+      email: "retained@example.test",
+      givenName: "Retained",
+      familyName: "Speaker",
+    });
+    const speaker = await speakers.create({
+      eventId: event.id,
+      email: contact.email,
+      givenName: contact.givenName,
+      familyName: contact.familyName,
+    });
+    const replacement = await speakers.create({
+      eventId: event.id,
+      email: other.email,
+      givenName: other.givenName,
+      familyName: other.familyName,
+    });
+    const session = await sessions.createManual({
+      eventId: event.id,
+      title: "Edited twice",
+      durationMinutes: 30,
+      participants: [{ speakerId: speaker.id, role: ProgramSessionParticipantRole.SPEAKER }],
+    });
+
+    await sessions.update(event.id, session.id, { title: "Edited twice, renamed" });
+    assert.deepEqual(
+      (await listContactProgramSessionParticipations(client, event.id, contact.id)).map(
+        ({ sessionVersion }) => sessionVersion.sessionId,
+      ),
+      [session.id],
+    );
+
+    await sessions.update(event.id, session.id, {
+      participants: [{ speakerId: replacement.id, role: ProgramSessionParticipantRole.SPEAKER }],
+    });
+    assert.deepEqual(await listContactProgramSessionParticipations(client, event.id, contact.id), []);
+    assert.deepEqual(
+      (await listContactProgramSessionParticipations(client, event.id, other.id)).map(
+        ({ sessionVersion }) => sessionVersion.sessionId,
+      ),
+      [session.id],
+    );
+  });
+
   test("reassigns session participation while collapsing target and order collisions", async () => {
     const event = await createEvent("reassign-participation", "2027-10-01T16:00:00.000Z");
     const sourceContact = await createContact(client, {
