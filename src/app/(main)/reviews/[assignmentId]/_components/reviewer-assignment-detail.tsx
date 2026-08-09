@@ -54,6 +54,12 @@ const recommendations = Object.keys(recommendationLabels) as EvaluationRecommend
 
 const INITIAL_STATE: EvaluationFormState = { status: "idle" };
 
+function latestState(first: EvaluationFormState, second: EvaluationFormState): EvaluationFormState {
+  if (first.status === "idle") return second;
+  if (second.status === "idle") return first;
+  return (second.at ?? 0) >= (first.at ?? 0) ? second : first;
+}
+
 function FormAlert({ state }: { readonly state: EvaluationFormState }) {
   if (state.status === "idle") return null;
   return (
@@ -170,7 +176,7 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
             <p className="text-muted-foreground text-sm">{assignment.round.planTitle}</p>
           </div>
 
-          <FormAlert state={submitState.status !== "idle" ? submitState : draftState} />
+          <FormAlert state={latestState(draftState, submitState)} />
 
           {isFinal ? (
             <>

@@ -13,6 +13,16 @@ import { RepositoryError } from "@/server/events/repositories";
 export interface EvaluationFormState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
+  /** Server timestamp of this result, so the view can render the most recent of the draft and submit states. */
+  readonly at?: number;
+}
+
+function errorState(message: string): EvaluationFormState {
+  return { status: "error", message, at: Date.now() };
+}
+
+function successState(message: string): EvaluationFormState {
+  return { status: "success", message, at: Date.now() };
 }
 
 const criterionSchema = z.object({
@@ -68,7 +78,7 @@ export async function saveEvaluationDraft(
 
   const result = draftSchema.safeParse(parseCommon(formData));
   if (!result.success) {
-    return { status: "error", message: result.error.issues[0]?.message ?? "Check the evaluation fields." };
+    return errorState(result.error.issues[0]?.message ?? "Check the evaluation fields.");
   }
 
   const repository = new ReviewerWorkspaceRepository(getDatabaseClient());
@@ -80,9 +90,9 @@ export async function saveEvaluationDraft(
       criteria: result.data.criteria,
     });
     revalidatePath(`/reviews/${result.data.assignmentId}`);
-    return { status: "success", message: "Draft saved." };
+    return successState("Draft saved.");
   } catch (error) {
-    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    if (error instanceof RepositoryError) return errorState(error.message);
     throw error;
   }
 }
@@ -95,7 +105,7 @@ export async function submitEvaluation(
 
   const result = submissionSchema.safeParse(parseCommon(formData));
   if (!result.success) {
-    return { status: "error", message: result.error.issues[0]?.message ?? "Check the evaluation fields." };
+    return errorState(result.error.issues[0]?.message ?? "Check the evaluation fields.");
   }
 
   const repository = new ReviewerWorkspaceRepository(getDatabaseClient());
@@ -107,9 +117,9 @@ export async function submitEvaluation(
       criteria: result.data.criteria,
     });
     revalidatePath(`/reviews/${result.data.assignmentId}`);
-    return { status: "success", message: "Evaluation submitted." };
+    return successState("Evaluation submitted.");
   } catch (error) {
-    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    if (error instanceof RepositoryError) return errorState(error.message);
     throw error;
   }
 }

@@ -259,6 +259,7 @@ interface MutableAssignment {
   readonly round: {
     readonly criteria: readonly {
       readonly id: string;
+      readonly label: string;
       readonly minimum: number;
       readonly maximum: number;
       readonly required: boolean;
@@ -289,7 +290,7 @@ async function loadMutableAssignment(
     select: {
       round: {
         select: {
-          criteria: { select: { id: true, minimum: true, maximum: true, required: true } },
+          criteria: { select: { id: true, label: true, minimum: true, maximum: true, required: true } },
         },
       },
       evaluation: {
@@ -313,6 +314,7 @@ async function loadMutableAssignment(
     round: {
       criteria: assignment.round.criteria.map((criterion) => ({
         id: criterion.id,
+        label: criterion.label,
         minimum: criterion.minimum.toNumber(),
         maximum: criterion.maximum.toNumber(),
         required: criterion.required,
@@ -340,7 +342,7 @@ function validateCriteria(criteria: readonly EvaluationDraftCriterionInput[], ro
     if (!Number.isFinite(entry.score) || entry.score < criterion.minimum || entry.score > criterion.maximum) {
       throw new RepositoryError(
         "invalid-input",
-        `Score for "${criterion.id}" must be between ${criterion.minimum} and ${criterion.maximum}.`,
+        `Score for "${criterion.label}" must be between ${criterion.minimum} and ${criterion.maximum}.`,
       );
     }
   }
