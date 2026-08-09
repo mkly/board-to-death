@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { Pool } from "pg";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFileSync } from "node:child_process";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
@@ -36,6 +37,7 @@ test("configures, previews, persists, copies, validates, and adapts the embed bu
   await page.goto(`/dashboard/events/${eventSlug}/publishing/embeds`);
   await expect(page.getByRole("heading", { name: "Embed builder" })).toBeVisible();
   await expect(page.getByText("Saved automatically")).toBeVisible();
+  await waitForHydration(page.getByRole("radio", { name: "Speaker gallery" }));
 
   await page.getByRole("radio", { name: "Speaker gallery" }).focus();
   await page.keyboard.press("Space");
@@ -60,6 +62,7 @@ test("configures, previews, persists, copies, validates, and adapts the embed bu
   await expect(page.getByLabel("Web component snippet")).toContainText("/embed/board-to-death.js");
 
   await page.reload();
+  await waitForHydration(page.getByRole("radio", { name: "Speaker gallery" }));
   await expect(page.getByRole("radio", { name: "Speaker gallery" })).toBeChecked();
   await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
   await expect(page.getByRole("radio", { name: "Compact" })).toBeChecked();

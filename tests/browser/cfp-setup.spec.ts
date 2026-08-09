@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -65,6 +66,7 @@ test.describe("CFP setup", () => {
     await page.goto(`/dashboard/events/${eventSlug}/cfp/forms/${formId}/setup`);
 
     await expect(page.getByRole("heading", { name: "Untitled CFP" })).toBeVisible();
+    await waitForHydration(page.getByRole("button", { name: "Publish form" }));
     await page.getByRole("button", { name: "Publish form" }).click();
     await expect(page.getByText("Complete the saved form setup before publishing.")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Save the minimum and maximum speaker requirements.")).toBeVisible();
@@ -80,6 +82,8 @@ test.describe("CFP setup", () => {
     await page.getByRole("radio", { name: "Restricted" }).click();
     await page.getByRole("button", { name: "Save and continue" }).click();
 
+    await expect(page.getByRole("tabpanel", { name: "Questions" })).toBeVisible();
+    await page.getByRole("tab", { name: "Speakers" }).click();
     await expect(page.getByText("Speaker requirements", { exact: true })).toBeVisible();
     await page.getByRole("spinbutton", { name: "Minimum speakers" }).fill("3");
     await page.getByRole("spinbutton", { name: "Maximum speakers" }).fill("2");

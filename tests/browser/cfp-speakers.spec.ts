@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { Pool } from "pg";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { randomUUID } from "node:crypto";
 
 const testDatabaseUrl =
@@ -77,6 +78,7 @@ test("collects one or two ordered speakers and preserves their state through val
     await page.goto(`/cfp/${publicId}/start`);
 
     const speakerField = (index: number, field: string) => page.locator(`[name="speaker.${index}.${field}"]`);
+    await waitForHydration(speakerField(0, "givenName"));
     await speakerField(0, "givenName").fill("Alex");
     await speakerField(0, "familyName").fill("Rivera");
     await speakerField(0, "email").fill("alex@example.test");
@@ -98,7 +100,7 @@ test("collects one or two ordered speakers and preserves their state through val
     await speakerField(1, "phone").fill("+1 555 0200");
     await speakerField(1, "biography").fill("Builds accessible party games.");
     await page.getByRole("checkbox", { name: "Speaker profile consent *" }).nth(1).check();
-    await page.getByRole("button", { name: "Save responses" }).click();
+    await page.getByRole("button", { name: "Submit proposal" }).click();
 
     await expect(page.getByText("Each speaker needs a unique email.")).toBeVisible();
     await expect(speakerField(0, "biography")).toHaveValue("Designs cooperative games.");
@@ -107,8 +109,8 @@ test("collects one or two ordered speakers and preserves their state through val
     await expect(page.getByLabel("Session title", { exact: false })).toHaveValue("Cooperative systems");
 
     await speakerField(1, "email").fill("sam@example.test");
-    await page.getByRole("button", { name: "Save responses" }).click();
-    await expect(page.getByRole("heading", { name: "Responses saved" })).toBeVisible();
+    await page.getByRole("button", { name: "Submit proposal" }).click();
+    await expect(page.getByRole("heading", { name: "Proposal submitted" })).toBeVisible();
 
     const persisted = await database.query(
       `SELECT p."sortOrder", v."email", v."givenName", v."biography", v."consentToPublishProfile"

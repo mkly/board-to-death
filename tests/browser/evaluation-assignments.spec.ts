@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -53,6 +54,7 @@ test.describe("evaluation reviewer assignments", () => {
     await expect(page.getByRole("heading", { name: "Reviewer assignments" })).toBeVisible();
     await expect(page.getByLabel("Open round")).toHaveValue(/.+/);
     await expect(page.getByText("2 eligible submissions")).toBeVisible();
+    await waitForHydration(page.getByLabel("Action"));
 
     await page
       .getByLabel(/Select submission/)
@@ -94,6 +96,7 @@ test.describe("evaluation reviewer assignments", () => {
 
     await runFixture("remove-committee-member", fixture.committeeId, fixture.sourceReviewerId);
     await page.reload();
+    await waitForHydration(page.getByLabel("Action"));
     await page.getByLabel("Action").selectOption("assign-committee");
     await expect(page.getByLabel("Reviewer committee").getByText("Program committee · 1 active")).toBeAttached();
     await page.getByLabel(`Select submission ${fixture.secondSubmissionId}`).click();
@@ -121,6 +124,7 @@ test.describe("evaluation reviewer assignments", () => {
     await runFixture("deactivate-reviewers", fixture.eventId);
     await page.goto(`/dashboard/events/${fixture.eventSlug}/evaluations/assignments`);
     await expect(page.getByText("No active reviewers")).toBeVisible();
+    await waitForHydration(page.getByRole("button", { name: "Apply action" }));
     await page
       .getByLabel(/Select submission/)
       .first()

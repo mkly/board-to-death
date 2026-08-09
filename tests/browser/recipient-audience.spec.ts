@@ -1,5 +1,6 @@
 import { type BrowserContext, expect, test } from "@playwright/test";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -33,6 +34,7 @@ test("previews a deduplicated live audience with exact recipients and explained 
   await page.goto(`/dashboard/events/${eventSlug}/communications/audience`);
 
   await expect(page.getByRole("heading", { name: "Recipient audience" })).toBeVisible();
+  await waitForHydration(page.getByRole("checkbox", { name: "Ada Lovelace" }));
   await page.getByRole("checkbox", { name: "Ada Lovelace" }).check();
   await page.getByRole("checkbox", { name: "Accepted" }).check();
   await page.getByRole("checkbox", { name: "Opening keynote" }).check();

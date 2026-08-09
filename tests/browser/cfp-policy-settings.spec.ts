@@ -1,5 +1,6 @@
 import { type BrowserContext, expect, test } from "@playwright/test";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -43,6 +44,7 @@ test("validates, saves, and restores event-time-zone CFP submission settings", a
 
   await expect(page.getByRole("heading", { name: "Board Game Design CFP" })).toBeVisible();
   await expect(page.getByText("America/Los_Angeles", { exact: true })).toBeVisible();
+  await waitForHydration(page.getByLabel("Opens at"));
 
   await page.getByLabel("Opens at").fill("2027-03-14T02:30");
   await page.getByLabel("Closes at").fill("2027-03-14T04:00");
