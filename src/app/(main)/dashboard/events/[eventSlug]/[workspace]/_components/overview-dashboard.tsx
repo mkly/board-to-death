@@ -39,9 +39,14 @@ const statusVariants: Readonly<Record<CfpSubmissionStatus, BadgeVariant>> = {
 };
 
 function submittedTimeFormatter(timezone: string): Intl.DateTimeFormat {
+  // timeZoneName cannot be combined with dateStyle/timeStyle, so the medium-date and
+  // short-time fields are spelled out to keep the event's zone label on the timestamp.
   return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     timeZone: timezone,
     timeZoneName: "short",
   });

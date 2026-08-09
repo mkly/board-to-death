@@ -15,7 +15,9 @@ export default defineConfig({
   globalSetup: "./tests/browser/global-setup.ts",
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Every spec seeds the one shared *_test database and wipes it first, so the suite is only
+  // correct serially; parallel workers clobber each other's fixtures.
+  workers: 1,
   reporter: [["line"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   use: {
     baseURL,
