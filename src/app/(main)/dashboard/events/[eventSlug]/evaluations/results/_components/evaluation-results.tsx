@@ -1,24 +1,56 @@
-import { ChartNoAxesCombinedIcon } from "lucide-react";
+import { ChartNoAxesCombinedIcon, CircleAlertIcon, CircleCheckIcon, MoveRightIcon } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { EvaluationResultsWorkspace } from "@/server/evaluations/results";
+import type { EvaluationResultsWorkspace, EvaluationSubmissionResult } from "@/server/evaluations/results";
+
+import { advanceEvaluationSubmission, closeEvaluationRound } from "../actions";
 
 interface EvaluationResultsProps {
   readonly event: { readonly name: string; readonly slug: string };
   readonly workspace: EvaluationResultsWorkspace;
+  readonly notice?: string;
+  readonly error?: string;
 }
 
 function scoreLabel(score: number | null): string {
   return score === null ? "—" : score.toFixed(2);
 }
 
-export function EvaluationResults({ event, workspace }: EvaluationResultsProps) {
+function ProgressionAction({
+  eventSlug,
+  roundId,
+  submission,
+  hasNextRound,
+}: {
+  readonly eventSlug: string;
+  readonly roundId: string;
+  readonly submission: EvaluationSubmissionResult;
+  readonly hasNextRound: boolean;
+}) {
+  if (submission.advancedAt) return <Badge variant="secondary">Advanced</Badge>;
+  if (!submission.canAdvance) {
+    return (
+      <span className="text-muted-foreground text-xs">{hasNextRound ? "Complete reviews first" : "Final round"}</span>
+    );
+  }
+  return (
+    <form action={advanceEvaluationSubmission.bind(null, eventSlug, roundId, submission.id)}>
+      <Button type="submit" size="sm">
+        <MoveRightIcon data-icon="inline-start" />
+        Advance
+      </Button>
+    </form>
+  );
+}
+
+export function EvaluationResults({ event, workspace, notice, error }: EvaluationResultsProps) {
   const completedReviews = workspace.submissions.reduce(
     (total, submission) => total + submission.completedReviewerCount,
     0,
@@ -58,6 +90,57 @@ export function EvaluationResults({ event, workspace }: EvaluationResultsProps) 
           </form>
         ) : null}
       </header>
+
+      {notice ? (
+        <Alert>
+          <CircleCheckIcon />
+          <AlertTitle>Evaluation workflow updated</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      ) : null}
+      {error ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>Evaluation workflow not updated</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {workspace.workflow && workspace.selectedRoundId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Round progression</CardTitle>
+            <CardDescription>
+              Advance fully reviewed submissions without changing this round&apos;s assignments or evaluation history.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <Badge variant={workspace.workflow.status === "OPEN" ? "default" : "secondary"}>
+              {workspace.workflow.status.toLowerCase()}
+            </Badge>
+            {workspace.workflow.nextRound ? (
+              <span className="text-muted-foreground text-sm">Next round: {workspace.workflow.nextRound.title}</span>
+            ) : (
+              <span className="text-muted-foreground text-sm">This is the final round.</span>
+            )}
+          </CardContent>
+          {workspace.workflow.status === "OPEN" ? (
+            <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-muted-foreground text-sm">
+                {workspace.workflow.incompleteAssignmentCount === 0
+                  ? "Every active reviewer assignment is complete."
+                  : `${workspace.workflow.incompleteAssignmentCount} active reviewer assignments remain incomplete.`}
+              </span>
+              <form action={closeEvaluationRound.bind(null, event.slug, workspace.selectedRoundId)}>
+                <Button type="submit" variant="outline" disabled={!workspace.workflow.canClose}>
+                  <CircleCheckIcon data-icon="inline-start" />
+                  Close round
+                </Button>
+              </form>
+            </CardFooter>
+          ) : null}
+        </Card>
+      ) : null}
 
       {workspace.rounds.length === 0 ? (
         <Empty className="min-h-80 border">
@@ -161,6 +244,7 @@ export function EvaluationResults({ event, workspace }: EvaluationResultsProps) 
                     ))}
                     <TableHead>Weighted average</TableHead>
                     <TableHead className="pr-(--card-spacing)">Rank</TableHead>
+                    <TableHead className="pr-(--card-spacing)">Progression</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -221,6 +305,16 @@ export function EvaluationResults({ event, workspace }: EvaluationResultsProps) 
                             {submission.tied ? <Badge variant="outline">Tie</Badge> : null}
                           </div>
                         )}
+                      </TableCell>
+                      <TableCell className="pr-(--card-spacing)">
+                        {workspace.selectedRoundId ? (
+                          <ProgressionAction
+                            eventSlug={event.slug}
+                            roundId={workspace.selectedRoundId}
+                            submission={submission}
+                            hasNextRound={workspace.workflow?.nextRound !== null}
+                          />
+                        ) : null}
                       </TableCell>
                     </TableRow>
                   ))}

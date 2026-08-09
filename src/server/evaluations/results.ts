@@ -38,6 +38,8 @@ export interface EvaluationSubmissionResult {
   readonly weightedAverage: number | null;
   readonly rank: number | null;
   readonly tied: boolean;
+  readonly advancedAt: Date | null;
+  readonly canAdvance: boolean;
 }
 
 export interface EvaluationResultsWorkspace {
@@ -45,6 +47,12 @@ export interface EvaluationResultsWorkspace {
   readonly selectedRoundId: string | null;
   readonly criteria: readonly { readonly id: string; readonly label: string; readonly weight: number }[];
   readonly submissions: readonly EvaluationSubmissionResult[];
+  readonly workflow: {
+    readonly status: EvaluationRoundStatus;
+    readonly nextRound: { readonly id: string; readonly title: string } | null;
+    readonly incompleteAssignmentCount: number;
+    readonly canClose: boolean;
+  } | null;
 }
 
 function roundScore(value: number): number {
@@ -90,6 +98,8 @@ export class EvaluationResultsRepository {
         id: true,
         title: true,
         status: true,
+        sortOrder: true,
+        planVersionId: true,
         planVersion: { select: { title: true, versionNumber: true } },
         criteria: {
           orderBy: { sortOrder: "asc" },
@@ -111,8 +121,14 @@ export class EvaluationResultsRepository {
       planVersionNumber: planVersion.versionNumber,
     }));
     if (!selectedRound) {
-      return { rounds: roundOptions, selectedRoundId: null, criteria: [], submissions: [] };
+      return { rounds: roundOptions, selectedRoundId: null, criteria: [], submissions: [], workflow: null };
     }
+
+    const nextRound = await this.client.evaluationRound.findFirst({
+      where: { planVersionId: selectedRound.planVersionId, sortOrder: { gt: selectedRound.sortOrder } },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, title: true },
+    });
 
     const criteria = selectedRound.criteria.map(({ id, label, weight }) => ({
       id,
@@ -156,6 +172,11 @@ export class EvaluationResultsRepository {
               },
             },
           },
+        },
+        evaluationAdvancements: {
+          where: { sourceRoundId: selectedRound.id },
+          take: 1,
+          select: { occurredAt: true },
         },
       },
     });
@@ -211,6 +232,13 @@ export class EvaluationResultsRepository {
         weightedAverage,
         rank: null,
         tied: false,
+        advancedAt: submission.evaluationAdvancements[0]?.occurredAt ?? null,
+        canAdvance:
+          selectedRound.status === EvaluationRoundStatus.OPEN &&
+          nextRound !== null &&
+          activeAssignments.length > 0 &&
+          completedReviewerCount === activeAssignments.length &&
+          submission.evaluationAdvancements.length === 0,
       };
     });
 
@@ -233,11 +261,22 @@ export class EvaluationResultsRepository {
       return right.weightedAverage - left.weightedAverage;
     });
 
+    const incompleteAssignmentCount = ranked.reduce(
+      (total, submission) => total + submission.incompleteReviewerCount,
+      0,
+    );
+
     return {
       rounds: roundOptions,
       selectedRoundId: selectedRound.id,
       criteria,
       submissions: ranked,
+      workflow: {
+        status: selectedRound.status,
+        nextRound,
+        incompleteAssignmentCount,
+        canClose: selectedRound.status === EvaluationRoundStatus.OPEN && incompleteAssignmentCount === 0,
+      },
     };
   }
 }

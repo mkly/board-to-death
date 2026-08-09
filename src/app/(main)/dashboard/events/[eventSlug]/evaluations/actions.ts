@@ -53,7 +53,9 @@ function field(formData: FormData, name: string): string {
   return typeof value === "string" ? value : "";
 }
 
-async function requireAdminEvent(eventSlug: string): Promise<{ readonly id: string; readonly slug: string }> {
+async function requireAdminEvent(
+  eventSlug: string,
+): Promise<{ readonly id: string; readonly slug: string; readonly actorId: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session || !isAllowedAdminEmail(session.user.email, allowedAdminEmails)) {
     throw new Error("Administrator access is required.");
@@ -63,7 +65,7 @@ async function requireAdminEvent(eventSlug: string): Promise<{ readonly id: stri
     select: { id: true, slug: true },
   });
   if (!event) throw new RepositoryError("not-found", "This event is not available.");
-  return event;
+  return { ...event, actorId: session.user.id };
 }
 
 function destination(eventSlug: string, result: { readonly notice?: string; readonly error?: string }): string {
@@ -179,7 +181,9 @@ export async function transitionRound(
 ): Promise<never> {
   try {
     const event = await requireAdminEvent(eventSlug);
-    await new EvaluationPlanRepository(getDatabaseClient()).transition(event.id, roundId, toStatus);
+    await new EvaluationPlanRepository(getDatabaseClient()).transition(event.id, roundId, toStatus, {
+      actorId: event.actorId,
+    });
   } catch (error) {
     redirect(destination(eventSlug, { error: errorMessage(error) }));
   }

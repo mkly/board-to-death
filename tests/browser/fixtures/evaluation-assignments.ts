@@ -129,12 +129,25 @@ async function setup() {
       sortOrder: 0,
       status: EvaluationRoundStatus.OPEN,
       visibilitySnapshot: ReviewerVisibility.BLIND,
-      opensAt: new Date("2027-01-15T18:00:00.000Z"),
+      opensAt: new Date("2026-01-15T18:00:00.000Z"),
       criteria: {
         create: [
           { key: "clarity", label: "Clarity", sortOrder: 0, weight: 1, minimum: 1, maximum: 5 },
           { key: "fit", label: "Event fit", sortOrder: 1, weight: 3, minimum: 1, maximum: 5 },
         ],
+      },
+    },
+  });
+  await database.evaluationRound.create({
+    data: {
+      planVersionId: planVersion.id,
+      key: "committee",
+      title: "Committee review",
+      sortOrder: 1,
+      status: EvaluationRoundStatus.PLANNED,
+      reviewerVisibility: ReviewerVisibility.IDENTIFIED,
+      criteria: {
+        create: [{ key: "impact", label: "Impact", sortOrder: 0, weight: 1, minimum: 1, maximum: 5 }],
       },
     },
   });
@@ -250,6 +263,20 @@ try {
     const submissionId = process.argv[3];
     if (!submissionId) throw new Error("submissionId is required to complete evaluations.");
     await completeSubmission(submissionId);
+  } else if (action === "open-next-round") {
+    const eventId = process.argv[3];
+    if (!eventId) throw new Error("eventId is required to open the next round.");
+    await database.evaluationRound.updateMany({
+      where: {
+        status: EvaluationRoundStatus.PLANNED,
+        planVersion: { plan: { eventId } },
+      },
+      data: {
+        status: EvaluationRoundStatus.OPEN,
+        visibilitySnapshot: ReviewerVisibility.IDENTIFIED,
+        opensAt: new Date(),
+      },
+    });
   } else {
     throw new Error(`Unknown fixture action: ${action ?? "missing"}`);
   }

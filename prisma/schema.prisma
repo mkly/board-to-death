@@ -480,6 +480,7 @@ model CfpSubmission {
   transitions           CfpSubmissionTransition[]
   evaluationAssignments EvaluationAssignment[]
   evaluationDecisions   EvaluationDecision[]
+  evaluationAdvancements EvaluationRoundAdvancement[]
   participants          CfpSubmissionParticipant[]
   promotedSession       ProgramSession?            @relation("ProgramSessionSourceSubmission")
 
@@ -1093,6 +1094,8 @@ model EvaluationRound {
   assignments        EvaluationAssignment[]
   decisions          EvaluationDecision[]
   transitions        EvaluationRoundTransition[]
+  advancementsFrom   EvaluationRoundAdvancement[] @relation("EvaluationAdvancementSourceRound")
+  advancementsTo     EvaluationRoundAdvancement[] @relation("EvaluationAdvancementTargetRound")
 
   @@unique([planVersionId, key])
   @@unique([planVersionId, sortOrder])
@@ -1105,11 +1108,30 @@ model EvaluationRoundTransition {
   roundId    String                 @db.Uuid
   fromStatus EvaluationRoundStatus?
   toStatus   EvaluationRoundStatus
+  actorId    String?
+  note       String?
   occurredAt DateTime               @default(now()) @db.Timestamptz(3)
   round      EvaluationRound        @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
   @@index([roundId, occurredAt])
   @@map("evaluation_round_transitions")
+}
+
+model EvaluationRoundAdvancement {
+  id            String          @id @default(uuid()) @db.Uuid
+  sourceRoundId String          @db.Uuid
+  targetRoundId String          @db.Uuid
+  submissionId  String          @db.Uuid
+  actorId       String
+  occurredAt    DateTime        @default(now()) @db.Timestamptz(3)
+  sourceRound   EvaluationRound @relation("EvaluationAdvancementSourceRound", fields: [sourceRoundId], references: [id], onDelete: Restrict)
+  targetRound   EvaluationRound @relation("EvaluationAdvancementTargetRound", fields: [targetRoundId], references: [id], onDelete: Restrict)
+  submission    CfpSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceRoundId, submissionId])
+  @@unique([targetRoundId, submissionId])
+  @@index([submissionId, occurredAt])
+  @@map("evaluation_round_advancements")
 }
 
 model EvaluationCriterion {
@@ -1200,12 +1222,27 @@ model EvaluationAssignment {
   reviewer     EvaluationReviewer         @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
   committee    EvaluationCommittee?       @relation(fields: [committeeId], references: [id], onDelete: SetNull)
   evaluation   Evaluation?
+  correctionReturns EvaluationCorrectionReturn[]
 
   @@unique([roundId, submissionId, reviewerId])
   @@index([submissionId, roundId])
   @@index([reviewerId, status])
   @@index([committeeId])
   @@map("evaluation_assignments")
+}
+
+model EvaluationCorrectionReturn {
+  id                String               @id @default(uuid()) @db.Uuid
+  assignmentId      String               @db.Uuid
+  evaluationVersion Int
+  actorId           String
+  note              String?
+  occurredAt        DateTime             @default(now()) @db.Timestamptz(3)
+  assignment        EvaluationAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, evaluationVersion])
+  @@index([assignmentId, occurredAt])
+  @@map("evaluation_correction_returns")
 }
 
 model Evaluation {
