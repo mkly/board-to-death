@@ -11,6 +11,7 @@ import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.
 import { RepositoryError } from "../events/repositories.ts";
 import { type SpeakerProfileInput, validateSpeakerProfileInput } from "../speakers/repositories.ts";
 import { cfpDefinitionInputFromStored } from "./definition.ts";
+import type { CfpSubmissionLimits } from "./policies.ts";
 
 export interface CreateCfpCategoryInput {
   readonly eventId: string;
@@ -470,6 +471,66 @@ async function requireCategories(
   }
 }
 
+async function currentSubmissionLimits(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  formKey: string,
+): Promise<CfpSubmissionLimits | undefined> {
+  const policyVersion = await transaction.cfpPolicyVersion.findFirst({
+    where: { eventId, policy: { key: formKey } },
+    orderBy: { versionNumber: "desc" },
+    select: { submissionLimits: true },
+  });
+  return policyVersion?.submissionLimits as unknown as CfpSubmissionLimits | undefined;
+}
+
+/**
+ * Locks are taken in sorted participant-email order, before the speaker rows
+ * are read or written, so two concurrent finalizations sharing a participant
+ * serialize on that participant. Keying on the event-scoped email rather than
+ * the speaker id covers the speaker that does not exist yet: otherwise both
+ * transactions race to insert the same `eventId_normalizedEmail` row, or to
+ * append the same next profile version, and the loser fails with a generic
+ * unique-violation conflict before the limit check ever runs.
+ */
+async function lockSubmissionParticipants(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  emails: readonly string[],
+): Promise<void> {
+  for (const email of [...new Set(emails)].sort()) {
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${eventId}:${email}`}))`;
+  }
+}
+
+async function enforceSubmissionLimitPerSpeaker(
+  transaction: Prisma.TransactionClient,
+  formId: string,
+  speakerIds: readonly string[],
+  submissionLimits: CfpSubmissionLimits,
+): Promise<void> {
+  const uniqueSpeakerIds = [...new Set(speakerIds)].sort();
+  if (uniqueSpeakerIds.length === 0) return;
+  const counts = await transaction.cfpSubmissionParticipant.groupBy({
+    by: ["speakerId"],
+    where: {
+      speakerId: { in: uniqueSpeakerIds },
+      submission: { submittedAt: { not: null }, formVersion: { formId } },
+    },
+    _count: { _all: true },
+  });
+  const countBySpeakerId = new Map(counts.map(({ speakerId, _count }) => [speakerId, _count._all]));
+  for (const speakerId of uniqueSpeakerIds) {
+    const count = countBySpeakerId.get(speakerId) ?? 0;
+    if (count >= submissionLimits.maxSubmissionsPerSpeaker) {
+      throw new RepositoryError(
+        "conflict",
+        `A speaker on this submission has already reached the limit of ${submissionLimits.maxSubmissionsPerSpeaker} submissions for this CFP.`,
+      );
+    }
+  }
+}
+
 async function createSubmission(
   transaction: Prisma.TransactionClient,
   input: CreateCfpSubmissionDraftInput,
@@ -484,6 +545,17 @@ async function createSubmission(
   const participantProfiles = participantData(input.participants, definition);
   const categoryIds = input.categoryIds ?? [];
   await requireCategories(transaction, input.eventId, categoryIds);
+  const submissionLimits = await currentSubmissionLimits(transaction, input.eventId, formVersion.form.key);
+  if (submissionLimits && participantProfiles.length > submissionLimits.maxParticipantsPerSubmission) {
+    invalid(`Add at most ${submissionLimits.maxParticipantsPerSubmission} speakers to this submission.`);
+  }
+  if (options.finalized) {
+    await lockSubmissionParticipants(
+      transaction,
+      input.eventId,
+      participantProfiles.map(({ email }) => email),
+    );
+  }
   const speakerIds: string[] = [];
   for (const profile of participantProfiles) {
     const existing = await transaction.speaker.findUnique({
@@ -508,6 +580,10 @@ async function createSubmission(
       });
       speakerIds.push(speaker.id);
     }
+  }
+
+  if (options.finalized && submissionLimits) {
+    await enforceSubmissionLimitPerSpeaker(transaction, formVersion.formId, speakerIds, submissionLimits);
   }
 
   const submittedAt = options.finalized ? new Date() : null;

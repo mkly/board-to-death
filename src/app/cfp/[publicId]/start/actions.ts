@@ -251,7 +251,10 @@ export async function submitPublicCfpForm(
       submissionId: submission.id,
       confirmationMarkdown: confirmation.previewMarkdown,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof RepositoryError) {
+      return { status: "error", message: error.message };
+    }
     return { status: "error", message: "Your proposal could not be submitted. Try again." };
   }
 }

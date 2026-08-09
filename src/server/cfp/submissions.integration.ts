@@ -1,6 +1,8 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import {
+  CfpAdminRole,
+  CfpDraftPolicy,
   CfpSubmissionKind,
   CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
@@ -11,6 +13,7 @@ import {
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
+import { CfpAdministratorRepository, type CfpPolicyDefinition, CfpPolicyRepository } from "./policies.ts";
 import { CfpFormRepository } from "./repositories.ts";
 import { CfpCategoryRepository, type CfpSubmissionParticipantInput, CfpSubmissionRepository } from "./submissions.ts";
 import assert from "node:assert/strict";
@@ -24,6 +27,8 @@ const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: data
 const events = new EventRepository(client);
 const forms = new CfpFormRepository(client);
 const categories = new CfpCategoryRepository(client);
+const administrators = new CfpAdministratorRepository(client);
+const policies = new CfpPolicyRepository(client);
 const submissions = new CfpSubmissionRepository(client);
 const speakers = new SpeakerRepository(client);
 
@@ -69,6 +74,26 @@ async function createEventAndForm(slug: string = eventInput.slug): Promise<{ eve
 
 async function expectRepositoryError(promise: Promise<unknown>, code: RepositoryError["code"]): Promise<void> {
   await assert.rejects(promise, (error: unknown) => error instanceof RepositoryError && error.code === code);
+}
+
+function policyDefinition(ownerId: string, maxSubmissionsPerSpeaker: number): CfpPolicyDefinition {
+  return {
+    submissionOpensAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    submissionClosesAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    draftPolicy: CfpDraftPolicy.ALLOWED,
+    submissionLimits: { maxSubmissionsPerSpeaker, maxParticipantsPerSubmission: 4 },
+    messages: { introduction: "Intro", submissionConfirmation: "Confirmed", closed: "Closed" },
+    conditionalVisibility: [],
+    categoryRouting: [],
+    adminAssignments: [
+      {
+        administratorId: ownerId,
+        role: CfpAdminRole.OWNER,
+        notifyOnNewSubmission: true,
+        notifyOnSubmissionUpdate: true,
+      },
+    ],
+  };
 }
 
 describe("CFP submission persistence", () => {
@@ -195,6 +220,63 @@ describe("CFP submission persistence", () => {
       }),
       1,
     );
+  });
+
+  test("enforces the per-speaker submission limit atomically under concurrent finalization", async () => {
+    const event = await events.create({ ...eventInput, slug: "concurrent-limit" });
+    const form = await forms.create({
+      eventId: event.id,
+      key: "speaker-cfp",
+      definition: { ...definition(), minimumSpeakerCount: 1, maximumSpeakerCount: 1, requiredSpeakerFields: [] },
+    });
+    const version = await client.cfpFormVersion.findUniqueOrThrow({
+      where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
+    });
+    const owner = await administrators.create({
+      eventId: event.id,
+      externalId: "owner@example.com",
+      displayName: "Owner",
+    });
+    await policies.create({
+      eventId: event.id,
+      key: "speaker-cfp",
+      definition: policyDefinition(owner.id, 2),
+    });
+    const participant = { email: "concurrent@example.test", givenName: "Con", familyName: "Current" } as const;
+    const buildInput = (label: string) =>
+      ({
+        eventId: event.id,
+        formVersionId: version.id,
+        kind: CfpSubmissionKind.ABSTRACT,
+        idempotencyKey: randomUUID(),
+        answers: [
+          { questionId: "abstract", value: label },
+          { questionId: "duration", value: 30 },
+        ],
+        participants: [participant],
+      }) as const;
+
+    // Seed the speaker's first submission sequentially so the racing pair both
+    // resolve an existing speaker row. Without it the two transactions collide
+    // on the speaker's unique event-scoped email and the loser fails with the
+    // same "conflict" code the limit check raises, which would let this test
+    // pass with the limit enforcement removed entirely.
+    await submissions.createFinalized(buildInput("Seed"));
+
+    const results = await Promise.allSettled([
+      submissions.createFinalized(buildInput("First")),
+      submissions.createFinalized(buildInput("Second")),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 1);
+    const reason: unknown = rejected[0]?.reason;
+    assert.ok(reason instanceof RepositoryError);
+    assert.equal(reason.code, "conflict");
+    assert.match(reason.message, /already reached the limit of 2 submissions/);
+    assert.equal(await client.cfpSubmission.count({ where: { eventId: event.id, submittedAt: { not: null } } }), 2);
   });
 
   test("rolls back public submission participants when finalization rejects a forged answer", async () => {
