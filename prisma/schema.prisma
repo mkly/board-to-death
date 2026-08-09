@@ -304,6 +304,9 @@ model CfpFormVersion {
   instructions    String?
   termsContent    String?
   consentRequired Boolean?
+  minimumSpeakerCount Int?
+  maximumSpeakerCount Int?
+  requiredSpeakerFields Json?
   customTypes     Json
   categories      Json?
   categoryRules   Json?

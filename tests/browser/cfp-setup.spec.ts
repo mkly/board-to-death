@@ -61,6 +61,7 @@ test.describe("CFP setup", () => {
   });
 
   test("validates, saves, navigates, and restores every setup step", async ({ page }) => {
+    test.setTimeout(60_000);
     await page.goto(`/dashboard/events/${eventSlug}/cfp/forms/${formId}/setup`);
 
     await expect(page.getByRole("heading", { name: "Untitled CFP" })).toBeVisible();
@@ -72,6 +73,17 @@ test.describe("CFP setup", () => {
     await title.fill("Board Games 2028 CFP");
     await page.getByRole("radio", { name: "Guaranteed session" }).click();
     await page.getByRole("radio", { name: "Restricted" }).click();
+    await page.getByRole("button", { name: "Save and continue" }).click();
+
+    await expect(page.getByText("Speaker requirements", { exact: true })).toBeVisible();
+    await page.getByRole("spinbutton", { name: "Minimum speakers" }).fill("3");
+    await page.getByRole("spinbutton", { name: "Maximum speakers" }).fill("2");
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await expect(page.getByText("Maximum speakers must be greater than or equal to minimum speakers.")).toBeVisible();
+    await page.getByRole("spinbutton", { name: "Maximum speakers" }).fill("4");
+    await page.getByRole("switch", { name: "Biography" }).click();
+    await page.getByRole("switch", { name: "Contact details" }).click();
+    await page.getByRole("switch", { name: "Consent" }).click();
     await page.getByRole("button", { name: "Save and continue" }).click();
 
     await expect(page.getByText("Welcome and instructions", { exact: true })).toBeVisible();
@@ -97,6 +109,12 @@ test.describe("CFP setup", () => {
     await expect(page.getByRole("textbox", { name: "Form name" })).toHaveValue("Board Games 2028 CFP");
     await expect(page.getByRole("radio", { name: "Guaranteed session" })).toBeChecked();
     await expect(page.getByRole("radio", { name: "Restricted" })).toBeChecked();
+    await page.getByRole("tab", { name: "Speakers" }).click();
+    await expect(page.getByRole("spinbutton", { name: "Minimum speakers" })).toHaveValue("3");
+    await expect(page.getByRole("spinbutton", { name: "Maximum speakers" })).toHaveValue("4");
+    await expect(page.getByRole("switch", { name: "Biography" })).toBeChecked();
+    await expect(page.getByRole("switch", { name: "Contact details" })).toBeChecked();
+    await expect(page.getByRole("switch", { name: "Consent" })).toBeChecked();
     await page.getByRole("tab", { name: "Welcome" }).click();
     await expect(page.getByRole("textbox", { name: "Welcome heading" })).toHaveValue("Bring your best tabletop idea");
     await page.getByRole("tab", { name: "Terms" }).click();
