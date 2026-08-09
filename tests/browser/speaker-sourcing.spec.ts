@@ -73,6 +73,10 @@ test.describe
       await movedCard.getByRole("button", { name: "Add note" }).click();
       await expect(page.getByText("Invite for the design track.")).toBeVisible();
 
+      const notedCard = page.getByText("Avery Public").locator("xpath=ancestor::*[@data-slot='card'][1]");
+      await expect(notedCard.getByText("Automated", { exact: true }).first()).toBeVisible();
+      await expect(notedCard.getByText("Team member", { exact: true }).first()).toBeVisible();
+
       await page
         .getByText("Avery Public")
         .locator("xpath=ancestor::*[@data-slot='card'][1]")
