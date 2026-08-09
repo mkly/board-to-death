@@ -51,6 +51,7 @@ describe("program workspace navigation", () => {
 
     expect(navigation.map(({ id }) => id)).toEqual([
       "overview",
+      "dashboards",
       "cfp",
       "submissions",
       "sessions",
