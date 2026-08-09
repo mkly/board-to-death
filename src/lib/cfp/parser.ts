@@ -6,6 +6,7 @@ import {
   type CfpFormDefinition,
   type CfpQuestion,
 } from "./types.ts";
+import { validateConditionForQuestion } from "./visibility.ts";
 
 export type CfpParseResult =
   | { ok: true; definition: CfpFormDefinition; errors: [] }
@@ -317,13 +318,19 @@ function findVisibilityRuleErrors(definition: CfpFormDefinition): CfpParseError[
   const errors: CfpParseError[] = [];
   const questions = allQuestions(definition);
   const pathById = new Map(questions.map(({ question, path }) => [question.id, path]));
+  const questionById = new Map(questions.map(({ question }) => [question.id, question]));
   const dependsOn = new Map<string, Set<string>>();
 
-  for (const { question } of questions) {
+  for (const { question, path } of questions) {
     const deps = new Set<string>();
-    for (const condition of question.visibleWhen?.conditions ?? []) {
+    for (const [conditionIndex, condition] of (question.visibleWhen?.conditions ?? []).entries()) {
       if (pathById.has(condition.questionId)) {
         deps.add(condition.questionId);
+        const sourceQuestion = questionById.get(condition.questionId);
+        const message = sourceQuestion ? validateConditionForQuestion(condition, sourceQuestion) : null;
+        if (message) {
+          errors.push(cfpError("impossible_rule", `${path}.visibleWhen.conditions.${conditionIndex}`, message));
+        }
       }
     }
     dependsOn.set(question.id, deps);

@@ -35,6 +35,7 @@ import {
 } from "@/lib/cfp";
 
 import { type SaveCfpQuestionsState, saveCfpQuestions } from "../actions";
+import { CfpVisibilityRuleEditor } from "./cfp-visibility-rule-editor";
 
 interface DraftQuestion {
   readonly editorId: string;
@@ -202,7 +203,7 @@ function buildDefinition(definition: CfpFormDefinition, sections: readonly Draft
             ...(question.description.trim() ? { description: question.description.trim() } : {}),
             required: question.required,
             ...(constraintsFromDraft(question) ? { constraints: constraintsFromDraft(question) } : {}),
-            ...(visibleWhen && ruleHasTargets(visibleWhen) ? { visibleWhen } : {}),
+            ...(visibleWhen ? { visibleWhen } : {}),
           };
         }),
       };
@@ -244,6 +245,13 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
   );
   const draftDefinition = useMemo(() => buildDefinition(definition, sections), [definition, sections]);
   const localValidation = useMemo(() => parseCfpDefinition(draftDefinition), [draftDefinition]);
+  const sourceQuestions = useMemo(
+    () =>
+      sections.flatMap((section) =>
+        section.questions.map((question) => ({ ...question, constraints: constraintsFromDraft(question) })),
+      ),
+    [sections],
+  );
   const displayedVersion = state.status === "success" ? (state.versionNumber ?? versionNumber) : versionNumber;
 
   const updateQuestion = (sectionId: string, editorId: string, update: Partial<DraftQuestion>) => {
@@ -534,6 +542,14 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
                                 }
                               />
                             </Field>
+
+                            <CfpVisibilityRuleEditor
+                              idPrefix={idPrefix}
+                              questionEditorId={question.editorId}
+                              rule={question.visibleWhen}
+                              sourceQuestions={sourceQuestions}
+                              onChange={(visibleWhen) => updateQuestion(section.id, question.editorId, { visibleWhen })}
+                            />
 
                             {["short_text", "long_text", "url", "email"].includes(question.type) ? (
                               <>

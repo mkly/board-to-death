@@ -315,6 +315,45 @@ describe("parseCfpDefinition", () => {
     }
   });
 
+  it("rejects operators and values that are incompatible with the source question", () => {
+    const definition = baseDefinition();
+    definition.sections[1].questions[1].visibleWhen = {
+      logic: "all",
+      conditions: [{ questionId: "session-type", operator: "equals", value: "webinar" }],
+    };
+
+    const result = parseCfpDefinition(definition);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        errors: expect.arrayContaining([
+          expect.objectContaining({
+            code: "impossible_rule",
+            path: "sections.1.questions.1.visibleWhen.conditions.0",
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("rejects comparison values on empty-state operators", () => {
+    const definition = baseDefinition();
+    definition.sections[1].questions[1].visibleWhen = {
+      logic: "all",
+      conditions: [{ questionId: "session-type", operator: "is_empty", value: "talk" }],
+    };
+
+    const result = parseCfpDefinition(definition);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        errors: expect.arrayContaining([expect.objectContaining({ code: "impossible_rule" })]),
+      }),
+    );
+  });
+
   it("reports an impossible rule when minLength exceeds maxLength", () => {
     const definition = baseDefinition();
     definition.sections[0].questions[0].constraints = { minLength: 10, maxLength: 5 };
