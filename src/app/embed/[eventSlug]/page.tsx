@@ -13,9 +13,10 @@ import {
 } from "@/lib/published-embeds/configuration";
 import { cn } from "@/lib/utils";
 import { getDatabaseClient } from "@/server/database/client";
-import { PublishedProgramRepository } from "@/server/published-program";
+import { PublishedProgramRepository, type PublishedProgramSnapshot } from "@/server/published-program";
 
 import { EmbedFrameBridge } from "../_components/embed-frame-bridge";
+import { AgendaEmbed } from "./_components/agenda-embed";
 import { PublishedSessionList, type PublishedSessionListItem } from "./_components/published-session-list";
 import { PublishedSpeakerList, type PublishedSpeakerListItem } from "./_components/published-speaker-list";
 
@@ -140,6 +141,64 @@ async function publishedSessionList(
   };
 }
 
+const AGENDA_UNAVAILABLE_COPY = {
+  "event-not-found": {
+    title: "Event not found",
+    description: "Check the embed URL and try again.",
+  },
+  "not-published": {
+    title: "Agenda not published",
+    description: "This event does not have a published agenda yet.",
+  },
+  unpublished: {
+    title: "Agenda unavailable",
+    description: "The organizer has taken this agenda offline.",
+  },
+} as const;
+
+function agendaData(snapshot: PublishedProgramSnapshot) {
+  const sessions = new Map(snapshot.sessions.map((session) => [session.id, session]));
+  const rooms = new Map(snapshot.rooms.map((room) => [room.id, room]));
+  const tracks = new Map(snapshot.tracks.map((track) => [track.id, track]));
+  const speakers = new Map(snapshot.speakers.map((speaker) => [speaker.id, speaker]));
+
+  return {
+    event: snapshot.event,
+    rooms: snapshot.rooms,
+    tracks: snapshot.tracks,
+    placements: snapshot.placements.flatMap((placement) => {
+      const session = sessions.get(placement.sessionId);
+      const room = rooms.get(placement.roomId);
+      if (!session || !room) return [];
+      return [
+        {
+          id: placement.id,
+          sessionId: session.id,
+          title: session.title,
+          description: session.description,
+          startsAt: placement.startsAt,
+          endsAt: placement.endsAt,
+          room: { id: room.id, name: room.name },
+          tracks: placement.trackIds.flatMap((trackId) => {
+            const track = tracks.get(trackId);
+            return track ? [{ id: track.id, name: track.name }] : [];
+          }),
+          speakers: placement.speakerIds.flatMap((speakerId) => {
+            const speaker = speakers.get(speakerId);
+            if (!speaker) return [];
+            return [
+              {
+                id: speaker.id,
+                name: speaker.preferredName ?? `${speaker.givenName} ${speaker.familyName}`,
+              },
+            ];
+          }),
+        },
+      ];
+    }),
+  };
+}
+
 export default async function PublishedEmbedPreview({
   params,
   searchParams,
@@ -153,6 +212,47 @@ export default async function PublishedEmbedPreview({
   const instance =
     typeof instanceValue === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(instanceValue) ? instanceValue : "preview";
   const Icon = KIND_ICONS[configuration.kind];
+
+  if (configuration.kind === "agenda") {
+    const publication = await new PublishedProgramRepository(getDatabaseClient()).findPublic(eventSlug);
+    if (publication.status === "published") {
+      return (
+        <AgendaEmbed
+          configuration={configuration}
+          data={agendaData(publication.version.snapshot)}
+          instance={instance}
+          publishedAt={publication.version.createdAt.toISOString()}
+        />
+      );
+    }
+
+    const copy = AGENDA_UNAVAILABLE_COPY[publication.status];
+    return (
+      <main
+        className={cn(
+          "min-h-64 bg-background p-4 text-foreground",
+          configuration.density === "compact" ? "sm:p-4" : "sm:p-6",
+          configuration.theme === "dark" && "dark",
+          configuration.theme === "light" && "light",
+        )}
+        data-embed-configuration={JSON.stringify(configuration)}
+      >
+        <EmbedFrameBridge instance={instance} />
+        <Card className="mx-auto w-full max-w-4xl" size={configuration.density === "compact" ? "sm" : "default"}>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CalendarDays aria-hidden="true" />
+              <CardTitle>
+                <h1>{copy.title}</h1>
+              </CardTitle>
+            </div>
+            <CardDescription>{copy.description}</CardDescription>
+          </CardHeader>
+        </Card>
+      </main>
+    );
+  }
+
   const speakerList =
     configuration.kind === "speaker-list" ? await publishedSpeakerList(eventSlug, configuration) : null;
   const sessionList = configuration.kind === "session-list" ? await publishedSessionList(eventSlug) : null;
