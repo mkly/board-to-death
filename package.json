@@ -35,7 +35,7 @@
     "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts",
     "test": "npm run test:env && vitest run && npm run test:infrastructure",
     "test:auth": "node scripts/run-test-database-command.mjs vitest run src/server/auth/auth.test.ts",
-    "test:email-templates": "node scripts/run-test-database-command.mjs vitest run src/server/communications/templates.integration.test.ts",
+    "test:email-templates": "node scripts/run-test-database-command.mjs vitest run --config vitest.repositories.config.ts src/server/communications/templates.integration.ts",
     "test:authorization": "vitest run src/server/authorization/authorization.test.ts",
     "test:browser": "playwright test",
     "test:browser:webhook": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/magic-link-webhook.node-test.ts",
