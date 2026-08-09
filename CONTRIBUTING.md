@@ -145,6 +145,21 @@ with Incus, `distrobuilder`, the `crabbox-btrfs` profile, passwordless access to
 operation, and a Crabbox build containing the image-ready optimization. On a prepared host, run
 `./scripts/bootstrap-image.sh` independently.
 
+The bootstrap command validates and builds `distrobuilder.yml`, imports the resulting `incus.tar.xz` and
+`rootfs.squashfs` under a unique staging alias, and promotes it to `board-to-death` only after all smoke checks pass.
+If that alias already exists, it is retained as a dated `board-to-death-prev-*` rollback alias. The application smoke
+launches two clean containers, injects generated local-only runtime configuration, attaches a temporary custom storage
+volume, installs the tracked checkout, deploys the local database migrations, and verifies the application systemd
+service, its HTTP login page, a ready `GET /api/health`, stop/start/restart behavior, and a second launch. The
+generated configuration points `FILE_STORAGE_PATH` at the mounted volume, so a ready health check proves PostgreSQL
+and that volume are both usable by the application, and the second instance must recover a file the first one left
+under `FILE_STORAGE_PATH`. On failure it prints the path to
+retained Incus, systemd, and journal logs; those logs do not include the generated secret or environment file.
+
+The application smoke resolves its storage pool from the default profile and then `crabbox-btrfs`. Set
+`INCUS_STORAGE_POOL=<pool>` when neither profile should supply it. To validate an already-imported image without
+rebuilding or changing aliases, run `./scripts/smoke-incus-image.sh <image-alias>`.
+
 ---
 
 ## Submitting PRs
