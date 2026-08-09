@@ -76,7 +76,7 @@ type StoredVersion = Prisma.CfpPolicyVersionGetPayload<{ include: typeof version
 const allowedTransitions: Readonly<Record<CfpPolicyStatus, readonly CfpPolicyStatus[]>> = {
   [CfpPolicyStatus.DRAFT]: [CfpPolicyStatus.PUBLISHED],
   [CfpPolicyStatus.PUBLISHED]: [CfpPolicyStatus.CLOSED],
-  [CfpPolicyStatus.CLOSED]: [CfpPolicyStatus.ARCHIVED],
+  [CfpPolicyStatus.CLOSED]: [CfpPolicyStatus.PUBLISHED, CfpPolicyStatus.ARCHIVED],
   [CfpPolicyStatus.ARCHIVED]: [],
 };
 
@@ -413,5 +413,37 @@ export class CfpPolicyRepository {
     } catch (error) {
       return mapDatabaseError(error);
     }
+  }
+
+  async transitionByForm(
+    eventId: string,
+    formId: string,
+    toStatus: CfpPolicyStatus,
+    actorExternalId: string,
+  ): Promise<CfpPolicy> {
+    const context = await this.client.cfpForm.findFirst({
+      where: { id: formId, eventId },
+      select: {
+        key: true,
+        event: {
+          select: {
+            cfpPolicies: {
+              where: { key: { not: "" } },
+              select: { id: true, key: true },
+            },
+            cfpAdministrators: {
+              where: { externalId: actorExternalId.trim().toLowerCase() },
+              select: { id: true },
+            },
+          },
+        },
+      },
+    });
+    if (!context) throw new RepositoryError("not-found", "The event-owned CFP form was not found.");
+    const policy = context.event.cfpPolicies.find(({ key }) => key === context.key);
+    if (!policy) throw new RepositoryError("not-found", "This CFP form does not have publication settings yet.");
+    const administrator = context.event.cfpAdministrators[0];
+    if (!administrator) invalid("The signed-in administrator is not assigned to this event's CFP.");
+    return this.transition(eventId, policy.id, toStatus, administrator.id);
   }
 }

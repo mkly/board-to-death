@@ -113,7 +113,7 @@ describe("CFP policy persistence", () => {
     assert.deepEqual((await policies.get(event.id, created.id))?.definition, secondDefinition);
   });
 
-  test("allows only the explicit publication lifecycle and keeps public identifiers immutable", async () => {
+  test("allows close, reopen, and archive only through the explicit publication lifecycle", async () => {
     const { event, category, owner, editor } = await fixtures();
     const created = await policies.create({
       eventId: event.id,
@@ -127,6 +127,12 @@ describe("CFP policy persistence", () => {
       "PUBLISHED",
     );
     await expectInvalid(policies.createVersion(event.id, created.id, definition(category.id, owner.id, editor.id)));
+    await expectInvalid(policies.transition(event.id, created.id, CfpPolicyStatus.ARCHIVED, owner.id));
+    assert.equal((await policies.transition(event.id, created.id, CfpPolicyStatus.CLOSED, editor.id)).status, "CLOSED");
+    assert.equal(
+      (await policies.transition(event.id, created.id, CfpPolicyStatus.PUBLISHED, owner.id)).status,
+      "PUBLISHED",
+    );
     assert.equal((await policies.transition(event.id, created.id, CfpPolicyStatus.CLOSED, editor.id)).status, "CLOSED");
     assert.equal(
       (await policies.transition(event.id, created.id, CfpPolicyStatus.ARCHIVED, owner.id)).status,
@@ -142,6 +148,8 @@ describe("CFP policy persistence", () => {
       [
         [null, "DRAFT"],
         ["DRAFT", "PUBLISHED"],
+        ["PUBLISHED", "CLOSED"],
+        ["CLOSED", "PUBLISHED"],
         ["PUBLISHED", "CLOSED"],
         ["CLOSED", "ARCHIVED"],
       ],
