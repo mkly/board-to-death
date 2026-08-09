@@ -16,10 +16,12 @@ Supply secrets as process environment variables, or mount a `KEY=VALUE` file and
 absolute path. Existing process environment values take precedence over values in the mounted file. Restrict the file
 to the service account and never copy it into the repository or application image.
 
-Production requires `AUTH_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`,
-`AUTH_MAGIC_LINK_WEBHOOK_URL`, `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, and an absolute `FILE_STORAGE_PATH`.
-`AUTH_MAGIC_LINK_WEBHOOK_TOKEN` is optional when the delivery endpoint does not authenticate requests. The configured
-file path is created with service-account-only permissions when absent and must live on a persistent mounted volume.
+Production requires `AUTH_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, `DATABASE_URL`,
+`NEXT_PUBLIC_APP_URL`, and an absolute `FILE_STORAGE_PATH`. Production also requires a way to deliver magic links:
+either `AUTH_MAGIC_LINK_WEBHOOK_URL`, or both `RESEND_API_KEY` and `RESEND_FROM_EMAIL` together. Setting only one of
+the Resend pair is rejected the same as setting neither. `AUTH_MAGIC_LINK_WEBHOOK_TOKEN` is optional when the
+delivery endpoint does not authenticate requests. The configured file path is created with service-account-only
+permissions when absent and must live on a persistent mounted volume.
 
 Validate configuration and storage access without printing values:
 
@@ -63,6 +65,66 @@ The launcher validates configuration and the file volume again before starting N
 The Playwright test runner does not use this production launcher by default. `npm run test:browser` starts `npm run dev`
 on `127.0.0.1:3100`, which keeps browser tests independent of production-only storage and secret requirements. Use
 `PLAYWRIGHT_WEB_SERVER_COMMAND` only when the suite should start a different server command.
+
+## Seed and demo access
+
+`npm run runtime:seed` replaces the deterministic demo event at slug `board-to-death-demo`; rerunning it reuses the
+same IDs instead of duplicating records, so it is safe to run again after a redeploy. The fixture includes a CFP form
+and accepted submission, a speaker and session, an onboarding assignment, an evaluation plan and reviewer, an agenda
+placement, and a completed Accelevents-style speaker resource sync.
+
+The fixture labels its actors `demo-admin` and `demo-reviewer` and uses `ada@example.test` and
+`reviewer@example.test`. These are data labels, not login accounts: seeding creates no passwords or authentication
+sessions, and reaching the demo event as an operator still goes through `AUTH_ALLOWED_EMAILS` like any other access.
+Its integration configuration points at `local://adapters/accelevents/board-to-death-demo`, a deterministic local
+adapter reference used only by the fixture, not a production credential.
+
+Seeding is not part of `runtime:migrate` or application startup — it only runs when invoked explicitly (`npm run
+runtime:seed` in production, `npm run db:seed` otherwise). Running it against a database that already has real event
+data is safe as long as nothing else uses the `board-to-death-demo` slug.
+
+## Integration adapters and credentials
+
+External integrations, currently Accelevents, are accessed through an adapter interface (`AcceleventsAdapter` in
+`src/server/integrations/accelevents.ts`) rather than called directly from application code. The only implementation
+in the repository today is `DeterministicAcceleventsAdapter`, which fabricates stable responses for tests and the
+demo fixture; there is no live HTTP Accelevents adapter to configure yet, so an Accelevents integration in a running
+environment today is exercising this deterministic adapter, not a real one.
+
+Integration configuration stores a `credentialReference`, never a raw secret. `AcceleventsConfigurationRepository`
+(`src/server/integrations/configuration.ts`) rejects any value that does not match `^(?:secret|env)://...`, for
+example:
+
+```
+secret://accelevents/production
+env://ACCELEVENTS_API_KEY
+```
+
+The reference only names where a credential lives; resolving it into an actual API key is deployment-specific and
+outside this repository. Never put an API key, token, or password directly into integration configuration — the
+validator rejects values that are not `secret://` or `env://` references, but reviewing configuration changes before
+they reach production is still the operator's responsibility.
+
+## Roles and security boundaries
+
+Access control has two independent layers.
+
+The app-level gate is `AUTH_ALLOWED_EMAILS`, a comma-separated allowlist compared case-insensitively against the
+signed-in session's email (`src/server/auth/admin-access.ts`). An email outside this list has no admin access to the
+application regardless of any event- or form-level role below it. Keep this list to real operators; anyone added
+here can act on every event.
+
+Within an authenticated session, event-scoped resources (event programs, reviews, profiles, submissions, sessions,
+files, tasks) are authorized per event against one or more `EventRole` values — `organizer-admin`, `reviewer`,
+`applicant`, or `speaker` (`src/server/authorization/policy.ts`). An organizer-admin can read and write everything
+scoped to their event; a reviewer can act on reviews they are assigned to; an applicant or speaker can act only on
+resources they own. These roles are derived per request from the underlying event data (organizer status, reviewer
+assignment, submission or speaker ownership) rather than granted through a separate role-management screen.
+
+Separately, each CFP form has its own `CfpAdminRole` — `OWNER`, `EDITOR`, or `REVIEWER` — assigned per form as
+`CfpPolicyAdminAssignment` records through that form's setup screen in the dashboard. This controls who can edit a
+specific form's questions, visibility rules, and category routing independently of the broader event roles above;
+holding an event role does not by itself grant a CFP form admin role, and vice versa.
 
 ## Health and restart
 
@@ -116,6 +178,103 @@ The build command is `npm run build`, which runs `prisma generate` first. That i
 dependency cache and skips `postinstall` on subsequent deployments, which otherwise ships a Prisma Client generated
 against an older schema.
 
+## Self-hosted Incus deployment
+
+`distrobuilder.yml`, `scripts/bootstrap-image.sh`, and `scripts/smoke-incus-image.sh` build and validate a base
+Ubuntu 24.04 Incus image with the pinned Node.js, a local PostgreSQL server, and Playwright's Chromium preinstalled.
+Those two scripts are a **contributor smoke test**: they deliberately run the application in development mode
+(`npm run dev`) behind a disposable, generated secret so a throwaway container can be launched and deleted safely
+end to end. Do not copy their generated `/etc/board-to-death.env` or systemd unit into a real deployment; build the
+production-shaped equivalents below instead, using the commands already documented under "Install and configure" and
+"Build and release".
+
+To bring up a real instance from an image built or promoted by `./scripts/bootstrap-image.sh` (default alias
+`board-to-death`):
+
+1. **(One-time) Launch a container and attach a persistent storage volume for application data.**
+
+   ```sh
+   incus launch board-to-death my-app-instance
+   incus storage volume create <pool> board-to-death-data
+   incus config device add my-app-instance app-data disk pool=<pool> source=board-to-death-data \
+     path=/var/lib/board-to-death
+   ```
+
+2. **(Per release) Copy a release checkout into the container and install production dependencies.** Copy a tagged
+   release tree, not a working checkout with uncommitted changes.
+
+   ```sh
+   git ls-files -z | tar --create --file=- --directory=. --null --files-from=- \
+     | incus exec my-app-instance -- tar --extract --file=- --directory=/opt/board-to-death
+   incus exec my-app-instance -- sh -c 'cd /opt/board-to-death && npm ci'
+   ```
+
+3. **(One-time, update on rotation) Write `/etc/board-to-death.env` with real production values**, pointing
+   `FILE_STORAGE_PATH` at the mounted volume. Replace every placeholder below; do not reuse these example values.
+
+   ```sh
+   incus exec my-app-instance -- sh -c 'umask 077; cat > /etc/board-to-death.env' <<'EOF'
+   NODE_ENV=production
+   DATABASE_URL=postgresql://USER:PASSWORD@db-host:5432/board_to_death?schema=public
+   AUTH_SECRET=replace-with-a-32-plus-character-secret
+   BETTER_AUTH_SECRET=replace-with-a-different-32-plus-character-secret
+   BETTER_AUTH_URL=https://events.example.com
+   NEXT_PUBLIC_APP_URL=https://events.example.com
+   AUTH_ALLOWED_EMAILS=admin@example.com
+   AUTH_MAGIC_LINK_WEBHOOK_URL=https://events.example.com/hooks/magic-link
+   FILE_STORAGE_PATH=/var/lib/board-to-death/files
+   EOF
+   incus exec my-app-instance -- install -d -m 0700 /var/lib/board-to-death/files
+   ```
+
+4. **(Per release) Build, then apply migrations**, using the same production commands as a non-container deploy:
+
+   ```sh
+   incus exec my-app-instance -- sh -c \
+     "set -a; . /etc/board-to-death.env; set +a; cd /opt/board-to-death && npm run build"
+   incus exec my-app-instance -- sh -c \
+     "set -a; . /etc/board-to-death.env; set +a; cd /opt/board-to-death && npm run runtime:migrate"
+   ```
+
+   A nonzero migration result means the release stops here; do not proceed to restart the service.
+
+5. **(One-time) Install a systemd unit that runs the production launcher** (`npm run start`, never `npm run dev`).
+   If PostgreSQL runs outside this container, as it should for anything beyond a single-box trial, point
+   `DATABASE_URL` at that external server instead of adding a local dependency.
+
+   ```sh
+   incus exec my-app-instance -- sh -c 'cat > /etc/systemd/system/board-to-death.service' <<'EOF'
+   [Unit]
+   Description=Board to Death application
+   After=network-online.target
+   Wants=network-online.target
+
+   [Service]
+   Type=simple
+   WorkingDirectory=/opt/board-to-death
+   EnvironmentFile=/etc/board-to-death.env
+   Environment=PATH=/usr/local/bin:/usr/bin:/bin
+   ExecStart=/usr/local/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+   Restart=on-failure
+   RestartSec=2
+
+   [Install]
+   WantedBy=multi-user.target
+   EOF
+   incus exec my-app-instance -- systemctl daemon-reload
+   incus exec my-app-instance -- systemctl enable --now board-to-death.service
+   ```
+
+6. **(Per release) Verify readiness before sending traffic**, then front the instance with a reverse proxy that
+   terminates TLS at `BETTER_AUTH_URL`'s origin.
+
+   ```sh
+   incus exec my-app-instance -- curl --fail --silent http://127.0.0.1:3000/api/health
+   ```
+
+A redeploy repeats steps 2 and 4–6 against the existing container and volume; it does not recreate the volume
+(step 1) or rewrite the env file (step 3) unless a secret or configuration value is actually changing.
+
 ## Persistence, backup, and recovery
 
 Back up PostgreSQL and the volume mounted at `FILE_STORAGE_PATH` together according to the application's recovery-point
@@ -124,3 +283,56 @@ file volume to a consistent point, validate configuration, run `runtime:migrate`
 
 For a failed Prisma deployment migration, inspect `npm run db:status`, repair with a forward migration or documented
 `prisma migrate resolve` procedure, and rerun `runtime:migrate`. Never edit a successfully applied migration in place.
+
+## Troubleshooting
+
+**The process exits immediately with a configuration message and no server starts.** `runtime:validate`,
+`runtime:migrate`, `runtime:seed`, and `npm run start` all parse configuration
+(`src/config/runtime-env.server.ts`) before doing anything else, so a bad or missing variable fails fast with one
+message per problem rather than a partial start. Common messages and their fix:
+
+| Message | Fix |
+| --- | --- |
+| `<KEY> is required when NODE_ENV=production` | Set the named variable — `AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, or `FILE_STORAGE_PATH`. |
+| `must contain at least 32 characters` | `AUTH_SECRET` or `BETTER_AUTH_SECRET` is too short; generate a longer one, for example `openssl rand -hex 32`. |
+| `must use the postgres or postgresql protocol` | `DATABASE_URL` has the wrong URL scheme. |
+| `must use the http or https protocol` | `BETTER_AUTH_URL` (or `AUTH_MAGIC_LINK_WEBHOOK_URL`) has the wrong URL scheme. |
+| `AUTH_MAGIC_LINK_WEBHOOK_URL or both RESEND_API_KEY and RESEND_FROM_EMAIL are required when NODE_ENV=production` | Set the webhook URL, or set both Resend variables together — setting only one of the pair fails too, naming the one still missing. |
+| `FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production` | Use an absolute path such as `/var/lib/board-to-death/files`, not a relative one. |
+
+The parser reports every failing check at once, so fix everything listed and rerun once rather than iterating message
+by message.
+
+**`FILE_STORAGE_PATH could not be prepared for read/write access.`** The service account cannot create or write the
+configured directory. Confirm the parent directory — typically the mounted persistent volume — exists, is owned by
+the service account, and is not mounted read-only.
+
+**`GET /api/health` returns `503`.** The body names only which checks failed (database, storage), never a
+connection string, path, or credential. A failed database check usually means `DATABASE_URL` is unreachable or the
+database has not finished starting; a failed storage check usually means the persistent volume is not attached yet
+or lost its permissions across a restart. Do not route traffic to an instance, and remove it from rotation before
+sending its shutdown signal, until this returns `200`.
+
+**A release-time migration (`runtime:migrate` / `db:deploy`) fails partway through.** Do not start the new
+application version. Run `npm run db:status` to see which migrations applied, fix or revert the failing migration's
+SQL, use `prisma migrate diff` to prepare any compensating SQL the partial apply left behind, apply it with
+`prisma db execute`, then mark the failed migration resolved:
+
+```sh
+npx prisma migrate resolve --rolled-back <MIGRATION_NAME>
+```
+
+This is a **destructive, production-database** command — confirm the compensating SQL is correct first, and never
+mark a migration that actually succeeded as rolled back.
+
+**A systemd-managed instance won't come up (Incus or otherwise).** Check the service and its recent log before
+anything else:
+
+```sh
+systemctl status --no-pager --full board-to-death.service
+journalctl --no-pager -u board-to-death.service -n 300
+```
+
+Most failures trace back to one of the configuration or health-check causes above; a unit that keeps restarting
+under a bounded restart policy without ever passing `/api/health` is almost always a configuration or storage
+problem, not an application bug.
