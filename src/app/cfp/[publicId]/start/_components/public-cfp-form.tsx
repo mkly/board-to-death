@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { type FormEvent, startTransition, useActionState, useMemo, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import type { CfpFormDefinition, CfpQuestion } from "@/lib/cfp";
 import { visibleCfpQuestionIds } from "@/lib/cfp";
 
 import { type PublicCfpFormActionState, submitPublicCfpForm } from "../actions";
+import { PublicCfpSpeakers } from "./public-cfp-speakers";
 
 interface PublicCfpFormProps {
   readonly publicId: string;
@@ -55,6 +56,12 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
     setAnswers((current) => ({ ...current, [questionId]: value }));
   }
 
+  function submitForm(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
+
   function questionControl(question: CfpQuestion) {
     const name = `answer.${question.id}`;
     const error = state.errors?.[question.id]?.[0];
@@ -69,6 +76,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
     } as const;
 
     if (question.type === "long_text") {
+      const answer = answers[question.id];
       return (
         <Textarea
           {...common}
@@ -76,11 +84,16 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
           minLength={question.constraints?.minLength}
           onChange={(event) => setAnswer(question.id, event.target.value)}
           required={question.required}
+          value={typeof answer === "string" ? answer : ""}
         />
       );
     }
     if (question.type === "select" || question.type === "multi_select") {
       const multiple = question.type === "multi_select";
+      const answer = answers[question.id];
+      let value: string | readonly string[] = "";
+      if (multiple && Array.isArray(answer)) value = answer;
+      else if (!multiple && typeof answer === "string") value = answer;
       return (
         <NativeSelect
           {...common}
@@ -93,6 +106,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
             )
           }
           required={question.required}
+          value={value}
         >
           {!multiple ? <NativeSelectOption value="">Select an option</NativeSelectOption> : null}
           {(question.constraints?.options ?? []).map((option) => (
@@ -115,6 +129,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
     }
 
     const type = question.type === "short_text" ? "text" : question.type;
+    const answer = answers[question.id];
     return (
       <Input
         {...common}
@@ -126,6 +141,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
         pattern={question.constraints?.pattern}
         required={question.required}
         type={type}
+        value={typeof answer === "string" ? answer : ""}
       />
     );
   }
@@ -144,13 +160,15 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form action={formAction} className="flex flex-col gap-4" onSubmit={submitForm}>
       {state.status === "error" && state.message ? (
         <Alert variant="destructive">
           <AlertTitle>We could not save your responses</AlertTitle>
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}
+
+      <PublicCfpSpeakers definition={definition} state={state} />
 
       {definition.sections.map((section) => {
         const questions = section.questions.filter(({ id }) => visibleIds.has(id));
