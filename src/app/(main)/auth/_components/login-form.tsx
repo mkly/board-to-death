@@ -29,9 +29,10 @@ export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL
     }
 
     setIsPending(true);
+    const twoFactorCallback = `/api/auth/two-factor/start-passwordless?callbackURL=${encodeURIComponent(callbackURL)}`;
     const result = await authClient.signIn.magicLink({
       email: parsedEmail.data,
-      callbackURL,
+      callbackURL: twoFactorCallback,
       errorCallbackURL: "/auth/v1/login?error=invalid-link",
     });
     setIsPending(false);
