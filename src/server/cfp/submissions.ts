@@ -9,6 +9,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { cfpDefinitionInputFromStored } from "./definition.ts";
 
 export interface CreateCfpCategoryInput {
   readonly eventId: string;
@@ -365,39 +366,7 @@ function mapDatabaseError(error: unknown): never {
 }
 
 function definitionFromStored(version: StoredFormVersion): CfpFormDefinition {
-  const result = parseCfpDefinition({
-    version: version.schemaVersion,
-    title: version.title,
-    ...(version.description === null ? {} : { description: version.description }),
-    ...(version.submissionKind === null ? {} : { submissionKind: version.submissionKind }),
-    ...(version.accessPolicy === null ? {} : { accessPolicy: version.accessPolicy }),
-    ...(version.welcomeTitle === null ? {} : { welcomeTitle: version.welcomeTitle }),
-    ...(version.welcomeContent === null ? {} : { welcomeContent: version.welcomeContent }),
-    ...(version.instructions === null ? {} : { instructions: version.instructions }),
-    ...(version.termsContent === null ? {} : { termsContent: version.termsContent }),
-    ...(version.consentRequired === null ? {} : { consentRequired: version.consentRequired }),
-    ...(version.minimumSpeakerCount === null ? {} : { minimumSpeakerCount: version.minimumSpeakerCount }),
-    ...(version.maximumSpeakerCount === null ? {} : { maximumSpeakerCount: version.maximumSpeakerCount }),
-    ...(version.requiredSpeakerFields === null ? {} : { requiredSpeakerFields: version.requiredSpeakerFields }),
-    ...((version.customTypes as unknown[]).length === 0 ? {} : { customQuestionTypes: version.customTypes }),
-    ...(version.categories === null ? {} : { categories: version.categories }),
-    sections: version.steps.map((step) => ({
-      id: step.key,
-      kind: step.kind,
-      title: step.title,
-      ...(step.description === null ? {} : { description: step.description }),
-      questions: step.questions.map((question) => ({
-        id: question.key,
-        type: question.type,
-        label: question.label,
-        ...(question.description === null ? {} : { description: question.description }),
-        required: question.required,
-        ...(question.constraints === null ? {} : { constraints: question.constraints }),
-        ...(question.visibleWhen === null ? {} : { visibleWhen: question.visibleWhen }),
-      })),
-    })),
-    ...(version.categoryRules === null ? {} : { categoryRouting: version.categoryRules }),
-  });
+  const result = parseCfpDefinition(cfpDefinitionInputFromStored(version));
   if (!result.ok) invalid("The stored CFP form definition is invalid.");
   return result.definition;
 }

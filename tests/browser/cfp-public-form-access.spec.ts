@@ -25,6 +25,7 @@ test("serves distinct safe experiences for every public CFP access state via dir
   const genericVersionId = randomUUID();
   const restrictedVersionId = randomUUID();
   const openVersionId = randomUUID();
+  const openStepId = randomUUID();
   const now = new Date();
   const timezone = "America/Los_Angeles";
 
@@ -88,6 +89,17 @@ test("serves distinct safe experiences for every public CFP access state via dir
        VALUES ($1, $2, 3, 1, 'Main CFP', 'OPEN', 'Call for speakers', 'We would love to hear **your** talk idea.',
                'Prepare a short abstract before you start.', 'By submitting you agree to be recorded.', true, '[]')`,
       [openVersionId, formId],
+    );
+    await seedConnection.query(
+      `INSERT INTO "cfp_form_steps" ("id", "versionId", "key", "kind", "title", "sortOrder")
+       VALUES ($1, $2, 'proposal', 'questions', 'Proposal details', 0)`,
+      [openStepId, openVersionId],
+    );
+    await seedConnection.query(
+      `INSERT INTO "cfp_form_questions"
+       ("id", "stepId", "key", "type", "label", "required", "sortOrder")
+       VALUES ($1, $2, 'title', 'short_text', 'Session title', true, 0)`,
+      [randomUUID(), openStepId],
     );
 
     await seedConnection.query(

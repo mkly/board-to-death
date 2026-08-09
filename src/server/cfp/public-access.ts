@@ -1,10 +1,15 @@
 import { CfpAccessPolicy, CfpPolicyStatus, type PrismaClient } from "../../generated/prisma/client.ts";
+import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
+import { cfpDefinitionInputFromStored } from "./definition.ts";
 
 export interface CfpPublicAccessEvent {
+  readonly id: string;
   readonly name: string;
 }
 
 export interface CfpPublicAccessForm {
+  readonly versionId: string;
+  readonly definition: CfpFormDefinition;
   readonly title: string;
   readonly welcomeTitle: string | null;
   readonly welcomeContent: string | null;
@@ -49,16 +54,47 @@ export class CfpPublicAccessRepository {
       where: { publicId },
       select: {
         status: true,
-        event: { select: { name: true, timezone: true, theme: true } },
+        event: { select: { id: true, name: true, timezone: true, theme: true } },
         publishedFormVersion: {
           select: {
+            id: true,
+            schemaVersion: true,
             title: true,
+            description: true,
+            submissionKind: true,
             welcomeTitle: true,
             welcomeContent: true,
             instructions: true,
             termsContent: true,
             consentRequired: true,
             accessPolicy: true,
+            minimumSpeakerCount: true,
+            maximumSpeakerCount: true,
+            requiredSpeakerFields: true,
+            customTypes: true,
+            categories: true,
+            categoryRules: true,
+            steps: {
+              orderBy: { sortOrder: "asc" },
+              select: {
+                key: true,
+                kind: true,
+                title: true,
+                description: true,
+                questions: {
+                  orderBy: { sortOrder: "asc" },
+                  select: {
+                    key: true,
+                    type: true,
+                    label: true,
+                    description: true,
+                    required: true,
+                    constraints: true,
+                    visibleWhen: true,
+                  },
+                },
+              },
+            },
           },
         },
         versions: {
@@ -76,7 +112,7 @@ export class CfpPublicAccessRepository {
       return { status: "unknown" };
     }
 
-    const event: CfpPublicAccessEvent = { name: policy.event.name };
+    const event: CfpPublicAccessEvent = { id: policy.event.id, name: policy.event.name };
 
     if (policy.status === CfpPolicyStatus.CLOSED || policy.status === CfpPolicyStatus.ARCHIVED) {
       return { status: "closed", event };
@@ -97,17 +133,23 @@ export class CfpPublicAccessRepository {
       return { status: "restricted", event };
     }
 
+    const stored = policy.publishedFormVersion;
+    const parsed = parseCfpDefinition(cfpDefinitionInputFromStored(stored));
+    if (!parsed.ok) return { status: "unknown" };
+
     return {
       status: "open",
       publicId,
       event: { ...event, timezone: policy.event.timezone, theme: policy.event.theme },
       form: {
-        title: policy.publishedFormVersion.title,
-        welcomeTitle: policy.publishedFormVersion.welcomeTitle,
-        welcomeContent: policy.publishedFormVersion.welcomeContent,
-        instructions: policy.publishedFormVersion.instructions,
-        termsContent: policy.publishedFormVersion.termsContent,
-        consentRequired: policy.publishedFormVersion.consentRequired ?? false,
+        versionId: stored.id,
+        definition: parsed.definition,
+        title: stored.title,
+        welcomeTitle: stored.welcomeTitle,
+        welcomeContent: stored.welcomeContent,
+        instructions: stored.instructions,
+        termsContent: stored.termsContent,
+        consentRequired: stored.consentRequired ?? false,
       },
       opensAt: policyVersion?.submissionOpensAt ?? null,
       closesAt: policyVersion?.submissionClosesAt ?? null,
