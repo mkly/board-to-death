@@ -128,6 +128,28 @@ const outsiderTask = await database.speakerTaskAssignment.create({
     transitions: { create: { toStatus: "PENDING", occurredAt: new Date("2027-02-21T18:00:00.000Z") } },
   },
 });
+const rehearsalResource = await database.speakerResourcePage.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "technical-rehearsal",
+    versions: {
+      create: {
+        versionNumber: 1,
+        slug: "technical-rehearsal",
+        title: "Technical rehearsal",
+        summary: "Check your setup before the event.",
+        bodyMarkdown:
+          '# Before you arrive\n\nRead the [venue map](https://example.test/venue).\n\n<iframe src="https://www.youtube.com/embed/allowed-recording" title="Allowed recording"></iframe>\n\n<iframe src="https://www.youtube.com/embed/not-configured" title="Not configured"></iframe>',
+        allowedEmbedUrls: ["https://www.youtube.com/embed/allowed-recording"],
+        sortOrder: 0,
+        publishedAt: new Date("2027-02-24T18:00:00.000Z"),
+      },
+    },
+  },
+  include: { versions: true },
+});
+const rehearsalVersion = rehearsalResource.versions[0];
+if (!rehearsalVersion) throw new Error("Expected the technical rehearsal resource version.");
 await database.speakerResourcePage.create({
   data: {
     eventId: fixture.eventId,
@@ -139,17 +161,116 @@ await database.speakerResourcePage.create({
         title: "Speaker arrival guide",
         summary: "Where to check in and when to arrive.",
         bodyMarkdown: "# Arrival guide",
-        sortOrder: 0,
+        sortOrder: 1,
         publishedAt: new Date("2027-02-25T18:00:00.000Z"),
+      },
+    },
+  },
+});
+await database.speakerResourcePage.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "draft-resource",
+    versions: {
+      create: {
+        versionNumber: 1,
+        slug: "draft-resource",
+        title: "Draft resource",
+        bodyMarkdown: "Private draft guidance.",
+        sortOrder: 2,
+      },
+    },
+  },
+});
+await database.speakerResourcePage.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "unpublished-resource",
+    versions: {
+      create: {
+        versionNumber: 1,
+        slug: "unpublished-resource",
+        title: "Unpublished resource",
+        bodyMarkdown: "Withdrawn guidance.",
+        sortOrder: 3,
+        publishedAt: new Date("2027-02-20T18:00:00.000Z"),
+        unpublishedAt: new Date("2027-02-21T18:00:00.000Z"),
+      },
+    },
+  },
+});
+await database.speakerResourcePage.create({
+  data: {
+    eventId: fixture.eventId,
+    key: "archived-resource",
+    archivedAt: new Date("2027-02-22T18:00:00.000Z"),
+    versions: {
+      create: {
+        versionNumber: 1,
+        slug: "archived-resource",
+        title: "Archived resource",
+        bodyMarkdown: "Archived guidance.",
+        sortOrder: 4,
+        publishedAt: new Date("2027-02-20T18:00:00.000Z"),
+      },
+    },
+  },
+});
+
+const emptyResourceEvent = await database.event.create({
+  data: {
+    name: "Portal Without Resources",
+    slug: "portal-without-resources",
+    type: "CONFERENCE",
+    timezone: "America/Los_Angeles",
+    startsAt: new Date("2027-05-01T16:00:00.000Z"),
+    endsAt: new Date("2027-05-03T00:00:00.000Z"),
+  },
+});
+const emptyResourceSpeaker = await database.speaker.create({
+  data: {
+    eventId: emptyResourceEvent.id,
+    normalizedEmail: "no-resources@example.test",
+    profileVersions: {
+      create: {
+        versionNumber: 1,
+        email: "no-resources@example.test",
+        givenName: "No",
+        familyName: "Resources",
+      },
+    },
+  },
+});
+await database.event.create({
+  data: {
+    name: "Other Portal Resources",
+    slug: "other-portal-resources",
+    type: "CONFERENCE",
+    timezone: "America/Los_Angeles",
+    startsAt: new Date("2027-06-01T16:00:00.000Z"),
+    endsAt: new Date("2027-06-03T00:00:00.000Z"),
+    speakerResourcePages: {
+      create: {
+        key: "other-event-only",
+        versions: {
+          create: {
+            versionNumber: 1,
+            slug: "other-event-only",
+            title: "Other event only",
+            bodyMarkdown: "This must stay isolated.",
+            sortOrder: 0,
+            publishedAt: new Date("2027-05-20T18:00:00.000Z"),
+          },
+        },
       },
     },
   },
 });
 
 const auth = new SpeakerAuthService({ database });
-async function authHref(speakerId: string): Promise<string> {
-  const link = await auth.issueMagicLink({ eventId: fixture.eventId, speakerId });
-  const url = new URL(`/portal/${fixture.eventSlug}/auth`, baseURL);
+async function authHref(eventId: string, eventSlug: string, speakerId: string): Promise<string> {
+  const link = await auth.issueMagicLink({ eventId, speakerId });
+  const url = new URL(`/portal/${eventSlug}/auth`, baseURL);
   url.searchParams.set("speakerId", speakerId);
   url.searchParams.set("token", link.token);
   return url.toString();
@@ -190,8 +311,10 @@ if (!adminSessionCookie) throw new Error("Expected Better Auth to issue an admin
 process.stdout.write(
   JSON.stringify({
     eventSlug: fixture.eventSlug,
-    populatedAuthHref: await authHref(fixture.speakerId),
-    emptyAuthHref: await authHref(emptySpeaker.id),
+    populatedAuthHref: await authHref(fixture.eventId, fixture.eventSlug, fixture.speakerId),
+    emptyAuthHref: await authHref(fixture.eventId, fixture.eventSlug, emptySpeaker.id),
+    emptyResourceAuthHref: await authHref(emptyResourceEvent.id, emptyResourceEvent.slug, emptyResourceSpeaker.id),
+    rehearsalVersionId: rehearsalVersion.id,
     expiredSessionToken,
     ownSubmissionId: fixture.submissionId,
     outsiderSubmissionId: outsiderSubmission.id,

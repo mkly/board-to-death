@@ -38,6 +38,21 @@ describe("SanitizedMarkdown", () => {
     expect(iframes[0]?.getAttribute("src")).toContain("youtube.com");
   });
 
+  it("restricts safe-provider embeds to a resource's configured URLs", () => {
+    const { container } = render(
+      <SanitizedMarkdown
+        allowedEmbedUrls={["https://www.youtube.com/embed/allowed"]}
+        content={
+          '<iframe src="https://www.youtube.com/embed/allowed" title="allowed"></iframe><iframe src="https://www.youtube.com/embed/not-configured" title="not configured"></iframe>'
+        }
+      />,
+    );
+
+    const iframes = container.querySelectorAll("iframe");
+    expect(iframes).toHaveLength(1);
+    expect(iframes[0]?.getAttribute("title")).toBe("allowed");
+  });
+
   it("renders the same sanitized output for repeated (preview vs. published) mounts", () => {
     const content = 'Shared content with <a href="javascript:alert(1)">link</a>';
 
