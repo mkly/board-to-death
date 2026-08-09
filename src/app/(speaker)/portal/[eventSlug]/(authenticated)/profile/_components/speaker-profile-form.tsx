@@ -283,59 +283,59 @@ export function SpeakerProfileForm({
       </form>
 
       <aside className="flex flex-col gap-6">
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>Managed identity</CardTitle>
+            <CardDescription>
+              These required fields identify your speaker record and cannot be edited here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-3 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Legal or submitted name</dt>
+                <dd>
+                  {profile.givenName} {profile.familyName}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Preferred name</dt>
+                <dd>{profile.preferredName ?? "Not provided"}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
+
         {filesVisible ? (
           <Card size="sm">
             <CardHeader>
-              <CardTitle>Managed identity</CardTitle>
-              <CardDescription>
-                These required fields identify your speaker record and cannot be edited here.
-              </CardDescription>
+              <CardTitle>Files</CardTitle>
+              <CardDescription>Upload the headshot and speaker agreement the event team requested.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <dl className="grid gap-3 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">Legal or submitted name</dt>
-                  <dd>
-                    {profile.givenName} {profile.familyName}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Preferred name</dt>
-                  <dd>{profile.preferredName ?? "Not provided"}</dd>
-                </div>
-              </dl>
+            <CardContent className="flex flex-col gap-4">
+              <SpeakerFileControl
+                id="profile-file-headshot"
+                label="Headshot"
+                description="JPEG, PNG, or WEBP, up to 5 MB."
+                accept="image/jpeg,image/png,image/webp"
+                hasFile={Boolean(profile.photoObjectKey)}
+                downloadHref={`/portal/${encodeURIComponent(eventSlug)}/profile/files/headshot`}
+                uploadAction={uploadSpeakerProfileFile.bind(null, eventSlug, "headshot")}
+                removeAction={removeSpeakerProfileFile.bind(null, eventSlug, "headshot")}
+              />
+              <SpeakerFileControl
+                id="profile-file-agreement"
+                label="Speaker agreement"
+                description="PDF, up to 10 MB."
+                accept="application/pdf"
+                hasFile={Boolean(profile.agreementObjectKey)}
+                downloadHref={`/portal/${encodeURIComponent(eventSlug)}/profile/files/agreement`}
+                uploadAction={uploadSpeakerProfileFile.bind(null, eventSlug, "agreement")}
+                removeAction={removeSpeakerProfileFile.bind(null, eventSlug, "agreement")}
+              />
             </CardContent>
           </Card>
         ) : null}
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Files</CardTitle>
-            <CardDescription>Upload the headshot and speaker agreement the event team requested.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <SpeakerFileControl
-              id="profile-file-headshot"
-              label="Headshot"
-              description="JPEG, PNG, or WEBP, up to 5 MB."
-              accept="image/jpeg,image/png,image/webp"
-              hasFile={Boolean(profile.photoObjectKey)}
-              downloadHref={`/portal/${encodeURIComponent(eventSlug)}/profile/files/headshot`}
-              uploadAction={uploadSpeakerProfileFile.bind(null, eventSlug, "headshot")}
-              removeAction={removeSpeakerProfileFile.bind(null, eventSlug, "headshot")}
-            />
-            <SpeakerFileControl
-              id="profile-file-agreement"
-              label="Speaker agreement"
-              description="PDF, up to 10 MB."
-              accept="application/pdf"
-              hasFile={Boolean(profile.agreementObjectKey)}
-              downloadHref={`/portal/${encodeURIComponent(eventSlug)}/profile/files/agreement`}
-              uploadAction={uploadSpeakerProfileFile.bind(null, eventSlug, "agreement")}
-              removeAction={removeSpeakerProfileFile.bind(null, eventSlug, "agreement")}
-            />
-          </CardContent>
-        </Card>
       </aside>
     </div>
   );

@@ -192,7 +192,6 @@ export async function resolveParticipantPortal(
   return (
     portals.find((portal) => !portal.isDefault && portalMatchesParticipant(portal, traits)) ??
     portals.find((portal) => portal.isDefault) ??
-    portals[0] ??
     DEFAULT_PARTICIPANT_PORTAL
   );
 }
