@@ -233,6 +233,56 @@ test("renders an empty dashboard without exposing populated-speaker data", async
   await expect(page.getByText("Ada Lovelace")).toHaveCount(0);
 });
 
+test("creates an audience portal, previews its match, and enforces participant visibility", async ({
+  context,
+  page,
+}) => {
+  const fixture = await preparePortal();
+  const eventResult = await database.query<{ id: string }>(`SELECT id FROM events WHERE slug = $1`, [
+    fixture.eventSlug,
+  ]);
+  const eventId = eventResult.rows[0]?.id;
+  if (!eventId) throw new Error("Expected the portal fixture event.");
+
+  await context.addCookies([
+    { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
+    { name: "board_to_death_active_event", value: eventId, url: baseURL },
+  ]);
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/portals`);
+  await expect(page.getByRole("heading", { name: "Participant portals" })).toBeVisible();
+
+  await page.getByLabel("Name").fill("VIP speakers");
+  await page.getByLabel("Slug").fill("vip-speakers");
+  await page.getByLabel("Welcome message").fill("Welcome to your private speaker workspace.");
+  await page.getByRole("tab", { name: "Audience" }).click();
+  await page.getByRole("checkbox", { name: "speaker" }).check();
+  await page.getByRole("tab", { name: "Content" }).click();
+  await page.getByRole("checkbox", { name: "Resources" }).uncheck();
+  await page.getByRole("tab", { name: "Fields" }).click();
+  await page.getByLabel("Organization").click();
+  await page.getByRole("option", { name: "View only" }).click();
+  await page.getByLabel("Accessibility needs").click();
+  await page.getByRole("option", { name: "Hidden" }).click();
+  await page.getByRole("button", { name: "Save portal" }).click();
+  await expect(page.getByText("Portal created.")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await page.getByLabel("Preview participant").click();
+  await page.getByRole("option", { name: /Ada Lovelace/ }).click();
+  await expect(page.getByLabel("Preview", { exact: true }).getByText("VIP speakers", { exact: true })).toBeVisible();
+
+  await page.goto(fixture.populatedAuthHref);
+  await expect(page.getByText("Welcome to your private speaker workspace.")).toBeVisible();
+  await expect(page.getByText("VIP speakers", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Speaker portal" })).not.toContainText("Resources");
+  const hiddenResource = await page.goto(`/portal/${fixture.eventSlug}/resources`);
+  expect(hiddenResource?.status()).toBe(404);
+
+  await page.goto(`/portal/${fixture.eventSlug}/profile`);
+  await expect(page.getByLabel("Organization")).toBeDisabled();
+  await expect(page.getByLabel("Accessibility needs")).toBeHidden();
+});
+
 test("navigates ordered published resources and reflects publication changes", async ({ page }) => {
   const fixture = await preparePortal();
   await page.setViewportSize({ width: 390, height: 844 });

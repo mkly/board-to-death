@@ -58,9 +58,18 @@ function OptionalFieldDescription({ children }: { readonly children: string }) {
 
 export function SpeakerProfileForm({
   eventSlug,
+  fieldVisibility,
+  filesVisible,
   profile,
 }: {
   readonly eventSlug: string;
+  readonly fieldVisibility: Readonly<
+    Record<
+      "phone" | "pronouns" | "organization" | "jobTitle" | "biography" | "websiteUrl" | "accessibilityNeeds",
+      "editable" | "view" | "hidden"
+    >
+  >;
+  readonly filesVisible: boolean;
   readonly profile: EditableSpeakerProfile;
 }) {
   const action = updateSpeakerProfile.bind(null, eventSlug);
@@ -101,7 +110,11 @@ export function SpeakerProfileForm({
                     <Input id="profile-email" value={profile.email} disabled readOnly />
                     <FieldDescription>Required. Contact the event team to change this address.</FieldDescription>
                   </Field>
-                  <Field data-invalid={Boolean(firstError(state, "phone")) || undefined}>
+                  <Field
+                    className={fieldVisibility.phone === "hidden" ? "hidden" : undefined}
+                    data-disabled={fieldVisibility.phone === "view" || undefined}
+                    data-invalid={Boolean(firstError(state, "phone")) || undefined}
+                  >
                     <FieldLabel htmlFor="profile-phone">Phone number</FieldLabel>
                     <Input
                       id="profile-phone"
@@ -109,6 +122,8 @@ export function SpeakerProfileForm({
                       type="tel"
                       autoComplete="tel"
                       value={phone}
+                      disabled={fieldVisibility.phone !== "editable"}
+                      readOnly={fieldVisibility.phone !== "editable"}
                       onChange={(event) => setPhone(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "phone")) || undefined}
                     />
@@ -122,13 +137,19 @@ export function SpeakerProfileForm({
                 <FieldLegend>Public speaker profile</FieldLegend>
                 <FieldDescription>These details may appear in the published event program.</FieldDescription>
                 <FieldGroup>
-                  <Field data-invalid={Boolean(firstError(state, "pronouns")) || undefined}>
+                  <Field
+                    className={fieldVisibility.pronouns === "hidden" ? "hidden" : undefined}
+                    data-disabled={fieldVisibility.pronouns === "view" || undefined}
+                    data-invalid={Boolean(firstError(state, "pronouns")) || undefined}
+                  >
                     <FieldLabel htmlFor="profile-pronouns">Pronouns</FieldLabel>
                     <Input
                       id="profile-pronouns"
                       name="pronouns"
                       autoComplete="off"
                       value={pronouns}
+                      disabled={fieldVisibility.pronouns !== "editable"}
+                      readOnly={fieldVisibility.pronouns !== "editable"}
                       onChange={(event) => setPronouns(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "pronouns")) || undefined}
                     />
@@ -136,13 +157,19 @@ export function SpeakerProfileForm({
                     <FieldError>{firstError(state, "pronouns")}</FieldError>
                   </Field>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <Field data-invalid={Boolean(firstError(state, "organization")) || undefined}>
+                    <Field
+                      className={fieldVisibility.organization === "hidden" ? "hidden" : undefined}
+                      data-disabled={fieldVisibility.organization === "view" || undefined}
+                      data-invalid={Boolean(firstError(state, "organization")) || undefined}
+                    >
                       <FieldLabel htmlFor="profile-organization">Organization</FieldLabel>
                       <Input
                         id="profile-organization"
                         name="organization"
                         autoComplete="organization"
                         value={organization}
+                        disabled={fieldVisibility.organization !== "editable"}
+                        readOnly={fieldVisibility.organization !== "editable"}
                         onChange={(event) => setOrganization(event.target.value)}
                         aria-invalid={Boolean(firstError(state, "organization")) || undefined}
                       />
@@ -151,13 +178,19 @@ export function SpeakerProfileForm({
                       </OptionalFieldDescription>
                       <FieldError>{firstError(state, "organization")}</FieldError>
                     </Field>
-                    <Field data-invalid={Boolean(firstError(state, "jobTitle")) || undefined}>
+                    <Field
+                      className={fieldVisibility.jobTitle === "hidden" ? "hidden" : undefined}
+                      data-disabled={fieldVisibility.jobTitle === "view" || undefined}
+                      data-invalid={Boolean(firstError(state, "jobTitle")) || undefined}
+                    >
                       <FieldLabel htmlFor="profile-job-title">Title</FieldLabel>
                       <Input
                         id="profile-job-title"
                         name="jobTitle"
                         autoComplete="organization-title"
                         value={jobTitle}
+                        disabled={fieldVisibility.jobTitle !== "editable"}
+                        readOnly={fieldVisibility.jobTitle !== "editable"}
                         onChange={(event) => setJobTitle(event.target.value)}
                         aria-invalid={Boolean(firstError(state, "jobTitle")) || undefined}
                       />
@@ -165,20 +198,30 @@ export function SpeakerProfileForm({
                       <FieldError>{firstError(state, "jobTitle")}</FieldError>
                     </Field>
                   </div>
-                  <Field data-invalid={Boolean(firstError(state, "biography")) || undefined}>
+                  <Field
+                    className={fieldVisibility.biography === "hidden" ? "hidden" : undefined}
+                    data-disabled={fieldVisibility.biography === "view" || undefined}
+                    data-invalid={Boolean(firstError(state, "biography")) || undefined}
+                  >
                     <FieldLabel htmlFor="profile-biography">Biography</FieldLabel>
                     <Textarea
                       id="profile-biography"
                       name="biography"
                       rows={7}
                       value={biography}
+                      disabled={fieldVisibility.biography !== "editable"}
+                      readOnly={fieldVisibility.biography !== "editable"}
                       onChange={(event) => setBiography(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "biography")) || undefined}
                     />
                     <OptionalFieldDescription>Up to 5,000 characters.</OptionalFieldDescription>
                     <FieldError>{firstError(state, "biography")}</FieldError>
                   </Field>
-                  <Field data-invalid={Boolean(firstError(state, "websiteUrl")) || undefined}>
+                  <Field
+                    className={fieldVisibility.websiteUrl === "hidden" ? "hidden" : undefined}
+                    data-disabled={fieldVisibility.websiteUrl === "view" || undefined}
+                    data-invalid={Boolean(firstError(state, "websiteUrl")) || undefined}
+                  >
                     <FieldLabel htmlFor="profile-website">Website or social profile</FieldLabel>
                     <Input
                       id="profile-website"
@@ -188,6 +231,8 @@ export function SpeakerProfileForm({
                       autoComplete="url"
                       placeholder="https://example.com"
                       value={websiteUrl}
+                      disabled={fieldVisibility.websiteUrl !== "editable"}
+                      readOnly={fieldVisibility.websiteUrl !== "editable"}
                       onChange={(event) => setWebsiteUrl(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "websiteUrl")) || undefined}
                     />
@@ -203,13 +248,19 @@ export function SpeakerProfileForm({
                   Shared privately with the event team to help plan your participation.
                 </FieldDescription>
                 <FieldGroup>
-                  <Field data-invalid={Boolean(firstError(state, "accessibilityNeeds")) || undefined}>
+                  <Field
+                    className={fieldVisibility.accessibilityNeeds === "hidden" ? "hidden" : undefined}
+                    data-disabled={fieldVisibility.accessibilityNeeds === "view" || undefined}
+                    data-invalid={Boolean(firstError(state, "accessibilityNeeds")) || undefined}
+                  >
                     <FieldLabel htmlFor="profile-accessibility-needs">Accessibility needs</FieldLabel>
                     <Textarea
                       id="profile-accessibility-needs"
                       name="accessibilityNeeds"
                       rows={4}
                       value={accessibilityNeeds}
+                      disabled={fieldVisibility.accessibilityNeeds !== "editable"}
+                      readOnly={fieldVisibility.accessibilityNeeds !== "editable"}
                       onChange={(event) => setAccessibilityNeeds(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "accessibilityNeeds")) || undefined}
                     />
@@ -232,28 +283,30 @@ export function SpeakerProfileForm({
       </form>
 
       <aside className="flex flex-col gap-6">
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Managed identity</CardTitle>
-            <CardDescription>
-              These required fields identify your speaker record and cannot be edited here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid gap-3 text-sm">
-              <div>
-                <dt className="text-muted-foreground">Legal or submitted name</dt>
-                <dd>
-                  {profile.givenName} {profile.familyName}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Preferred name</dt>
-                <dd>{profile.preferredName ?? "Not provided"}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
+        {filesVisible ? (
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Managed identity</CardTitle>
+              <CardDescription>
+                These required fields identify your speaker record and cannot be edited here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-3 text-sm">
+                <div>
+                  <dt className="text-muted-foreground">Legal or submitted name</dt>
+                  <dd>
+                    {profile.givenName} {profile.familyName}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Preferred name</dt>
+                  <dd>{profile.preferredName ?? "Not provided"}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card size="sm">
           <CardHeader>

@@ -1,7 +1,7 @@
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
-import { getPortalViewer } from "../../_lib/portal-session";
+import { requirePortalContent } from "../../_lib/portal-session";
 import { SpeakerResources } from "./_components/speaker-resources";
 
 interface SpeakerResourcesPageProps {
@@ -10,7 +10,7 @@ interface SpeakerResourcesPageProps {
 
 export default async function SpeakerResourcesPage({ params }: SpeakerResourcesPageProps) {
   const { eventSlug } = await params;
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "resources");
   const resources = await new SpeakerPortalRepository(getDatabaseClient()).getResources(viewer);
 
   return <SpeakerResources eventSlug={eventSlug} resources={resources} />;

@@ -12,7 +12,7 @@ import type { UpdateSpeakerProfileInput } from "@/server/speakers/repositories";
 import { SpeakerRepository } from "@/server/speakers/repositories";
 import { createSpeakerFileService } from "@/server/speakers/speaker-file-storage";
 
-import { getPortalViewer, portalHref } from "../../_lib/portal-session";
+import { portalHref, requirePortalContent } from "../../_lib/portal-session";
 
 const optionalText = (label: string, maximum: number) =>
   z.string().trim().max(maximum, `${label} must be ${maximum} characters or fewer.`);
@@ -52,16 +52,21 @@ export async function updateSpeakerProfile(
   _previousState: SpeakerProfileActionState,
   formData: FormData,
 ): Promise<SpeakerProfileActionState> {
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer, portal } = await requirePortalContent(eventSlug, "profile");
+  const repository = new SpeakerRepository(getDatabaseClient());
+  const current = await repository.get(viewer.eventId, viewer.speakerId);
+  if (!current) redirect(portalHref(eventSlug, "/sign-in"));
+  const submittedOrCurrent = (field: keyof typeof portal.profileFieldVisibility) =>
+    portal.profileFieldVisibility[field] === "editable" ? formData.get(field) : (current.profile[field] ?? "");
   const parsed = profileSchema.safeParse({
     expectedVersionNumber: formData.get("expectedVersionNumber"),
-    phone: formData.get("phone"),
-    pronouns: formData.get("pronouns"),
-    organization: formData.get("organization"),
-    jobTitle: formData.get("jobTitle"),
-    biography: formData.get("biography"),
-    websiteUrl: formData.get("websiteUrl"),
-    accessibilityNeeds: formData.get("accessibilityNeeds"),
+    phone: submittedOrCurrent("phone"),
+    pronouns: submittedOrCurrent("pronouns"),
+    organization: submittedOrCurrent("organization"),
+    jobTitle: submittedOrCurrent("jobTitle"),
+    biography: submittedOrCurrent("biography"),
+    websiteUrl: submittedOrCurrent("websiteUrl"),
+    accessibilityNeeds: submittedOrCurrent("accessibilityNeeds"),
   });
   if (!parsed.success) {
     return {
@@ -72,7 +77,7 @@ export async function updateSpeakerProfile(
   }
 
   try {
-    const updated = await new SpeakerRepository(getDatabaseClient()).updateProfile(
+    const updated = await repository.updateProfile(
       viewer.eventId,
       viewer.speakerId,
       {
@@ -127,7 +132,7 @@ export async function uploadSpeakerProfileFile(
   _previousState: SpeakerFileActionState,
   formData: FormData,
 ): Promise<SpeakerFileActionState> {
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "files");
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { status: "error", message: "Choose a file to upload." };
@@ -177,7 +182,7 @@ export async function removeSpeakerProfileFile(
   _previousState: SpeakerFileActionState,
   _formData: FormData,
 ): Promise<SpeakerFileActionState> {
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "files");
   const repository = new SpeakerRepository(getDatabaseClient());
   const speaker = await repository.get(viewer.eventId, viewer.speakerId);
   if (!speaker) redirect(portalHref(eventSlug, "/sign-in"));

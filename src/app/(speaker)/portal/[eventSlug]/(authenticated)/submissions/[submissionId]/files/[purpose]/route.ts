@@ -2,7 +2,7 @@ import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerRepository } from "@/server/speakers/repositories";
 import { createSpeakerFileService } from "@/server/speakers/speaker-file-storage";
 
-import { getPortalViewer } from "../../../../../_lib/portal-session";
+import { requirePortalContent } from "../../../../../_lib/portal-session";
 
 type SubmissionFilePurpose = "slides" | "supportingDocument";
 
@@ -22,7 +22,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   const { eventSlug, submissionId, purpose } = await context.params;
   if (!isSubmissionFilePurpose(purpose)) return notFound();
 
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer } = await requirePortalContent(eventSlug, "files");
   const participant = await new SpeakerRepository(getDatabaseClient()).getSubmissionParticipant(
     viewer.eventId,
     submissionId,

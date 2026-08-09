@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { Prisma } from "@/generated/prisma/client";
+import { parsePortalFormDefinition } from "@/lib/portal-forms";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { speakerTaskResponseKind } from "@/server/speakers";
 
-import { getPortalViewer, portalHref } from "../../../_lib/portal-session";
+import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 import { TaskResponseForm } from "./_components/task-response-form";
 import { saveTaskResponse, submitSpeakerTask } from "./actions";
 
@@ -39,13 +40,14 @@ function formatDate(date: Date, timezone: string): string {
 
 export default async function SpeakerTaskPage({ params }: SpeakerTaskPageProps) {
   const { assignmentId, eventSlug } = await params;
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer, portal } = await requirePortalContent(eventSlug, "tasks");
   const repository = new SpeakerPortalRepository(getDatabaseClient());
   const [task, dashboard] = await Promise.all([
     repository.getTask(viewer, assignmentId),
     repository.getDashboard(viewer),
   ]);
   if (!task || !dashboard) notFound();
+  if (!portal.contentVisibility.forms && parsePortalFormDefinition(task.definitionVersion.responseSchema)) notFound();
 
   const kind = speakerTaskResponseKind(task.definitionVersion.responseRequired, task.definitionVersion.responseSchema);
   const open = task.status === "PENDING" || task.status === "REVISION_REQUESTED";

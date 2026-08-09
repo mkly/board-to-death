@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
-import { getPortalViewer } from "../../_lib/portal-session";
+import { requirePortalContent } from "../../_lib/portal-session";
 import { SpeakerProfileForm } from "./_components/speaker-profile-form";
 
 interface SpeakerProfilePageProps {
@@ -17,7 +17,7 @@ interface SpeakerProfilePageProps {
 export default async function SpeakerProfilePage({ params, searchParams }: SpeakerProfilePageProps) {
   const { eventSlug } = await params;
   const { updated } = await searchParams;
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer, portal } = await requirePortalContent(eventSlug, "profile");
   const profile = await new SpeakerPortalRepository(getDatabaseClient()).getProfile(viewer);
   if (!profile) notFound();
 
@@ -25,7 +25,9 @@ export default async function SpeakerProfilePage({ params, searchParams }: Speak
     <>
       <div className="flex flex-col gap-2">
         <p className="text-muted-foreground text-sm">Speaker portal</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-tight sm:text-3xl">My profile</h1>
+        <h1 className="font-heading font-semibold text-2xl tracking-tight sm:text-3xl">
+          {portal.sectionTitles.profile}
+        </h1>
         <p className="max-w-2xl text-muted-foreground text-sm">
           Update the contact, biography, and accessibility details the event team is permitted to collect.
         </p>
@@ -37,7 +39,12 @@ export default async function SpeakerProfilePage({ params, searchParams }: Speak
           <AlertDescription>Your profile was updated.</AlertDescription>
         </Alert>
       ) : null}
-      <SpeakerProfileForm eventSlug={eventSlug} profile={profile} />
+      <SpeakerProfileForm
+        eventSlug={eventSlug}
+        profile={profile}
+        fieldVisibility={portal.profileFieldVisibility}
+        filesVisible={portal.contentVisibility.files}
+      />
     </>
   );
 }

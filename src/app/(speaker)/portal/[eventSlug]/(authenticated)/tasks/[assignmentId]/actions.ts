@@ -11,7 +11,7 @@ import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { SpeakerOnboardingRepository, speakerTaskResponseKind } from "@/server/speakers";
 
-import { getPortalViewer, portalHref } from "../../../_lib/portal-session";
+import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 
 const MAX_RESPONSE_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_RESPONSE_FILE_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain"]);
@@ -51,7 +51,7 @@ export async function submitSpeakerTask(
 ): Promise<TaskSubmissionState> {
   let uploadedKey: string | undefined;
   try {
-    const viewer = await getPortalViewer(eventSlug);
+    const { viewer, portal: portalConfig } = await requirePortalContent(eventSlug, "tasks");
     const database = getDatabaseClient();
     const portal = new SpeakerPortalRepository(database);
     const task = await portal.getTask(viewer, assignmentId);
@@ -62,6 +62,9 @@ export async function submitSpeakerTask(
       task.definitionVersion.responseRequired,
       task.definitionVersion.responseSchema,
     );
+    if (!portalConfig.contentVisibility.forms && parsePortalFormDefinition(task.definitionVersion.responseSchema)) {
+      throw new RepositoryError("not-found", "The speaker task was not found.");
+    }
     let response: Prisma.InputJsonValue | undefined;
     if (kind === "TEXT") {
       const value = formData.get("response");
@@ -104,10 +107,10 @@ export async function submitSpeakerTask(
     return { status: "success", message: "Task submitted for review." };
   } catch (error) {
     if (uploadedKey) {
-      const viewer = await getPortalViewer(eventSlug).catch(() => null);
-      if (viewer) {
+      const context = await requirePortalContent(eventSlug, "tasks").catch(() => null);
+      if (context) {
         await speakerFiles()
-          .remove(uploadedKey, { role: "speaker", ...viewer })
+          .remove(uploadedKey, { role: "speaker", ...context.viewer })
           .catch(() => undefined);
       }
     }
@@ -121,12 +124,14 @@ export async function saveTaskResponse(
   _previousState: TaskFormState,
   formData: FormData,
 ): Promise<TaskFormState> {
-  const viewer = await getPortalViewer(eventSlug);
+  const { viewer, portal: portalConfig } = await requirePortalContent(eventSlug, "tasks");
   const database = getDatabaseClient();
   const portal = new SpeakerPortalRepository(database);
   const task = await portal.getTask(viewer, assignmentId);
   const form = parsePortalFormDefinition(task?.definitionVersion.responseSchema ?? null);
-  if (!task || !form) return { ok: false, message: "This response form is not available." };
+  if (!task || !form || !portalConfig.contentVisibility.forms) {
+    return { ok: false, message: "This response form is not available." };
+  }
   if (task.status !== "PENDING" && task.status !== "REVISION_REQUESTED") {
     return { ok: false, message: "This response has already been submitted." };
   }
