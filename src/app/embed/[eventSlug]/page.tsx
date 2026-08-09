@@ -17,6 +17,7 @@ import { PublishedProgramRepository, type PublishedProgramSnapshot } from "@/ser
 
 import { EmbedFrameBridge } from "../_components/embed-frame-bridge";
 import { AgendaEmbed } from "./_components/agenda-embed";
+import { type ItinerarySession, ItineraryWorkspace } from "./_components/itinerary-workspace";
 import { PublishedSessionList, type PublishedSessionListItem } from "./_components/published-session-list";
 import { PublishedSpeakerList, type PublishedSpeakerListItem } from "./_components/published-speaker-list";
 
@@ -141,6 +142,61 @@ async function publishedSessionList(
   };
 }
 
+async function publishedItinerary(eventSlug: string): Promise<
+  | {
+      readonly status: "available";
+      readonly eventId: string;
+      readonly eventName: string;
+      readonly timezone: string;
+      readonly sessions: readonly ItinerarySession[];
+    }
+  | { readonly status: "unavailable" }
+> {
+  const publication = await new PublishedProgramRepository(getDatabaseClient()).findPublic(eventSlug);
+  if (publication.status !== "published") return { status: "unavailable" };
+
+  const { snapshot } = publication.version;
+  const sessionsById = new Map(snapshot.sessions.map((session) => [session.id, session]));
+  const roomsById = new Map(snapshot.rooms.map((room) => [room.id, room]));
+  const tracksById = new Map(snapshot.tracks.map((track) => [track.id, track]));
+  const speakersById = new Map(snapshot.speakers.map((speaker) => [speaker.id, speaker]));
+
+  return {
+    status: "available",
+    eventId: snapshot.event.id,
+    eventName: snapshot.event.name,
+    timezone: snapshot.event.timezone,
+    // Placements are the schedulable unit: a session placed twice stays two
+    // independently selectable entries, and an unplaced session is not
+    // something an attendee can put on a timeline at all.
+    sessions: snapshot.placements
+      .flatMap((placement) => {
+        const session = sessionsById.get(placement.sessionId);
+        if (!session) return [];
+        return [
+          {
+            id: placement.id,
+            sessionId: session.id,
+            title: session.title,
+            description: session.description,
+            startsAt: placement.startsAt,
+            endsAt: placement.endsAt,
+            room: roomsById.get(placement.roomId)?.name ?? null,
+            tracks: placement.trackIds.flatMap((trackId) => {
+              const track = tracksById.get(trackId);
+              return track ? [{ id: track.id, name: track.name }] : [];
+            }),
+            speakers: [...new Set([...session.speakerIds, ...placement.speakerIds])].flatMap((speakerId) => {
+              const speaker = speakersById.get(speakerId);
+              return speaker ? [speakerName(speaker)] : [];
+            }),
+          },
+        ];
+      })
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+  };
+}
+
 const AGENDA_UNAVAILABLE_COPY = {
   "event-not-found": {
     title: "Event not found",
@@ -256,6 +312,7 @@ export default async function PublishedEmbedPreview({
   const speakerList =
     configuration.kind === "speaker-list" ? await publishedSpeakerList(eventSlug, configuration) : null;
   const sessionList = configuration.kind === "session-list" ? await publishedSessionList(eventSlug) : null;
+  const itinerary = configuration.kind === "itinerary" ? await publishedItinerary(eventSlug) : null;
   let content: ReactNode;
   if (speakerList?.status === "available") {
     content = (
@@ -300,6 +357,31 @@ export default async function PublishedEmbedPreview({
             </CardTitle>
           </div>
           <CardDescription>This event does not currently have a published session list.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  } else if (itinerary?.status === "available") {
+    content = (
+      <ItineraryWorkspace
+        density={configuration.density}
+        enabledFilters={configuration.filters}
+        eventName={itinerary.eventName}
+        sessions={itinerary.sessions}
+        storageKey={`board-to-death:itinerary:${itinerary.eventId}`}
+        timezone={itinerary.timezone}
+      />
+    );
+  } else if (configuration.kind === "itinerary") {
+    content = (
+      <Card className="mx-auto w-full max-w-4xl" size={configuration.density === "compact" ? "sm" : "default"}>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CalendarDays aria-hidden="true" />
+            <CardTitle>
+              <h1>Itinerary unavailable</h1>
+            </CardTitle>
+          </div>
+          <CardDescription>This event does not currently have a published schedule.</CardDescription>
         </CardHeader>
       </Card>
     );
