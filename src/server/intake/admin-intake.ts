@@ -121,21 +121,36 @@ function definitionFromStored(version: StoredFormVersion): CfpFormDefinition {
   return parsed.definition;
 }
 
-function statusTimestamps(status: CfpSubmissionStatus, now: Date) {
-  const submittedAt = status === CfpSubmissionStatus.DRAFT ? null : now;
-  const reviewStartedAt = status === CfpSubmissionStatus.DRAFT || status === CfpSubmissionStatus.SUBMITTED ? null : now;
-  const decidedAt =
-    status === CfpSubmissionStatus.WAITLISTED ||
-    status === CfpSubmissionStatus.ACCEPTED ||
-    status === CfpSubmissionStatus.REJECTED ||
-    status === CfpSubmissionStatus.CONFIRMED
-      ? now
-      : null;
+interface StatusTimestamps {
+  readonly submittedAt: Date | null;
+  readonly reviewStartedAt: Date | null;
+  readonly decidedAt: Date | null;
+  readonly confirmedAt: Date | null;
+}
+
+/**
+ * The milestone timestamps a status implies, keeping the ones an earlier intake
+ * already recorded. Re-importing an unchanged status must not restamp when the
+ * abstract was submitted or decided, or the audit trail reports today's import
+ * as the day the decision happened.
+ */
+function statusTimestamps(status: CfpSubmissionStatus, now: Date, previous?: StatusTimestamps): StatusTimestamps {
+  const reached = (already: Date | null | undefined, isReached: boolean) =>
+    isReached ? (already ?? now) : null;
   return {
-    submittedAt,
-    reviewStartedAt,
-    decidedAt,
-    confirmedAt: status === CfpSubmissionStatus.CONFIRMED ? now : null,
+    submittedAt: reached(previous?.submittedAt, status !== CfpSubmissionStatus.DRAFT),
+    reviewStartedAt: reached(
+      previous?.reviewStartedAt,
+      status !== CfpSubmissionStatus.DRAFT && status !== CfpSubmissionStatus.SUBMITTED,
+    ),
+    decidedAt: reached(
+      previous?.decidedAt,
+      status === CfpSubmissionStatus.WAITLISTED ||
+        status === CfpSubmissionStatus.ACCEPTED ||
+        status === CfpSubmissionStatus.REJECTED ||
+        status === CfpSubmissionStatus.CONFIRMED,
+    ),
+    confirmedAt: reached(previous?.confirmedAt, status === CfpSubmissionStatus.CONFIRMED),
   };
 }
 
@@ -301,7 +316,7 @@ export class AdminIntakeRepository {
         if (input.previewOnly) return { id: existing?.id ?? "", outcome: existing ? "updated" : "created" };
 
         const now = new Date();
-        const timestamps = statusTimestamps(input.status, now);
+        const timestamps = statusTimestamps(input.status, now, existing ?? undefined);
         const revisionKind =
           input.status === CfpSubmissionStatus.DRAFT
             ? CfpSubmissionRevisionKind.DRAFT
@@ -496,14 +511,22 @@ export class AdminIntakeRepository {
         ? await repository.update(input.eventId, existing.id, normalizedPayload)
         : await repository.createGuaranteed({ eventId: input.eventId, ...normalizedPayload });
       const now = new Date();
-      await this.#client.programSession.update({
-        where: { id: session.id },
-        data: {
-          intakeClientIdentifier: identifier,
-          intakePayloadHash: hash,
-          ...intakeAudit(input.source, actorId, now, !existing),
-        },
-      });
+      try {
+        await this.#client.programSession.update({
+          where: { id: session.id },
+          data: {
+            intakeClientIdentifier: identifier,
+            intakePayloadHash: hash,
+            ...intakeAudit(input.source, actorId, now, !existing),
+          },
+        });
+      } catch (error) {
+        // The session and its intake identity are written by two statements, so a
+        // racing import that claims the identifier first would otherwise strand an
+        // untracked session that no retry can ever match. Undo our own create.
+        if (!existing) await this.#client.programSession.delete({ where: { id: session.id } }).catch(() => {});
+        throw error;
+      }
       return { id: session.id, outcome: existing ? "updated" : "created" };
     } catch (error) {
       return mapDatabaseError(error);
