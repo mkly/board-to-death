@@ -21,6 +21,7 @@ export interface ProgramSessionVersionInput {
   readonly trackId?: string | null;
   readonly speakerIds?: readonly string[];
   readonly participants?: readonly ProgramSessionParticipantInput[];
+  readonly parentSessionId?: string | null;
 }
 
 export interface ProgramSessionParticipantInput {
@@ -44,6 +45,7 @@ export interface UpdateProgramSessionInput {
   readonly trackId?: string | null;
   readonly speakerIds?: readonly string[];
   readonly participants?: readonly ProgramSessionParticipantInput[];
+  readonly parentSessionId?: string | null;
 }
 
 export interface PersistedProgramSessionVersion {
@@ -63,6 +65,7 @@ export interface PersistedProgramSession {
   readonly eventId: string;
   readonly kind: ProgramSessionKind;
   readonly sourceSubmissionId: string | null;
+  readonly parentSessionId: string | null;
   readonly archivedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -78,6 +81,8 @@ const programSessionInclude = {
 } as const satisfies Prisma.ProgramSessionInclude;
 
 type StoredProgramSession = Prisma.ProgramSessionGetPayload<{ include: typeof programSessionInclude }>;
+
+export const MAX_SUBSESSIONS_PER_PARENT = 20;
 
 interface ValidatedVersion {
   readonly title: string;
@@ -183,6 +188,7 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
     eventId: stored.eventId,
     kind: stored.kind,
     sourceSubmissionId: stored.sourceSubmissionId,
+    parentSessionId: stored.parentSessionId,
     archivedAt: stored.archivedAt,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
@@ -255,6 +261,8 @@ export class ProgramSessionRepository {
         };
         if (input.participants !== undefined) participantInput = { participants: input.participants };
         else if (input.speakerIds !== undefined) participantInput = { speakerIds: input.speakerIds };
+        const parentSessionId = input.parentSessionId === undefined ? current.parentSessionId : input.parentSessionId;
+        await this.requireParent(transaction, eventId, sessionId, parentSessionId);
         const version = validateVersion({
           title: input.title ?? previous.title,
           description: input.description === undefined ? previous.description : input.description,
@@ -263,7 +271,15 @@ export class ProgramSessionRepository {
           ...participantInput,
         });
         await requireVersionReferences(transaction, eventId, version);
+        if (parentSessionId !== current.parentSessionId) {
+          await transaction.programSession.update({
+            where: { eventId_id: { eventId, id: sessionId } },
+            data: { parentSessionId },
+          });
+        }
         await this.createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
+        if (parentSessionId)
+          await this.attachParticipantsToParent(transaction, eventId, parentSessionId, version.participants);
       });
       return await this.require(eventId, sessionId);
     } catch (error) {
@@ -273,6 +289,10 @@ export class ProgramSessionRepository {
 
   async archive(eventId: string, sessionId: string, archivedAt: Date = new Date()): Promise<PersistedProgramSession> {
     if (!Number.isFinite(archivedAt.getTime())) invalid("archivedAt must be a valid date.");
+    const activeSubsessions = await this.client.programSession.count({
+      where: { eventId, parentSessionId: sessionId, archivedAt: null },
+    });
+    if (activeSubsessions > 0) invalid("Move or archive this session's subsessions before archiving it.");
     const updated = await this.client.programSession.updateMany({
       where: { eventId, id: sessionId },
       data: { archivedAt },
@@ -326,11 +346,20 @@ export class ProgramSessionRepository {
       const version = validateVersion(input);
       const sessionId = await this.client.$transaction(async (transaction) => {
         await requireVersionReferences(transaction, input.eventId, version);
+        await this.requireParent(transaction, input.eventId, null, input.parentSessionId ?? null);
         const session = await transaction.programSession.create({
-          data: { eventId: input.eventId, kind },
+          data: { eventId: input.eventId, kind, parentSessionId: input.parentSessionId ?? null },
           select: { id: true },
         });
         await this.createVersion(transaction, input.eventId, session.id, 1, version);
+        if (input.parentSessionId) {
+          await this.attachParticipantsToParent(
+            transaction,
+            input.eventId,
+            input.parentSessionId,
+            version.participants,
+          );
+        }
         return session.id;
       });
       return await this.require(input.eventId, sessionId);
@@ -369,6 +398,84 @@ export class ProgramSessionRepository {
         })),
       });
     }
+  }
+
+  private async requireParent(
+    transaction: Prisma.TransactionClient,
+    eventId: string,
+    sessionId: string | null,
+    parentSessionId: string | null,
+  ): Promise<void> {
+    if (!parentSessionId) return;
+    if (parentSessionId === sessionId) invalid("A session cannot be its own parent.");
+    const [parent, childCount, hasChildren] = await Promise.all([
+      transaction.programSession.findFirst({
+        where: { eventId, id: parentSessionId, archivedAt: null },
+        select: { id: true, parentSessionId: true, agendaPlacement: { select: { startsAt: true, endsAt: true } } },
+      }),
+      transaction.programSession.count({
+        where: { eventId, parentSessionId, archivedAt: null, ...(sessionId ? { id: { not: sessionId } } : {}) },
+      }),
+      sessionId
+        ? transaction.programSession.count({ where: { eventId, parentSessionId: sessionId, archivedAt: null } })
+        : Promise.resolve(0),
+    ]);
+    if (!parent) throw new RepositoryError("not-found", "The active event-owned parent session was not found.");
+    if (parent.parentSessionId) invalid("Subsessions cannot contain nested subsessions.");
+    if (hasChildren > 0) invalid("A session with subsessions cannot become a subsession.");
+    if (childCount >= MAX_SUBSESSIONS_PER_PARENT) {
+      invalid(`A parent session can contain at most ${MAX_SUBSESSIONS_PER_PARENT} subsessions.`);
+    }
+    if (sessionId) {
+      const childPlacement = await transaction.agendaPlacement.findFirst({
+        where: { eventId, sessionId },
+        select: { startsAt: true, endsAt: true },
+      });
+      if (childPlacement && !parent.agendaPlacement) {
+        invalid("Schedule the parent session before converting a placed session to a subsession.");
+      }
+      if (
+        childPlacement &&
+        parent.agendaPlacement &&
+        (childPlacement.startsAt < parent.agendaPlacement.startsAt ||
+          childPlacement.endsAt > parent.agendaPlacement.endsAt)
+      ) {
+        invalid("The existing placement must fit inside the parent session window.");
+      }
+    }
+  }
+
+  private async attachParticipantsToParent(
+    transaction: Prisma.TransactionClient,
+    eventId: string,
+    parentSessionId: string,
+    participants: readonly ProgramSessionParticipantInput[],
+  ): Promise<void> {
+    if (participants.length === 0) return;
+    const parent = await transaction.programSession.findFirst({
+      where: { eventId, id: parentSessionId, archivedAt: null },
+      select: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          take: 1,
+          include: { participants: { orderBy: { sortOrder: "asc" } } },
+        },
+      },
+    });
+    const previous = parent?.versions[0];
+    if (!previous) throw new RepositoryError("not-found", "The active parent session has no version.");
+    const merged = previous.participants.map(({ speakerId, role }) => ({ speakerId, role }));
+    for (const participant of participants) {
+      if (!merged.some(({ speakerId }) => speakerId === participant.speakerId)) merged.push({ ...participant });
+    }
+    if (merged.length === previous.participants.length) return;
+    await this.createVersion(transaction, eventId, parentSessionId, previous.versionNumber + 1, {
+      title: previous.title,
+      description: previous.description,
+      durationMinutes: previous.durationMinutes,
+      trackId: previous.trackId,
+      participants: merged,
+    });
   }
 
   private async require(eventId: string, sessionId: string): Promise<PersistedProgramSession> {

@@ -36,6 +36,7 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
     ]),
   );
   const trackNames = new Map(tracks.map((track) => [track.id, track.name]));
+  const sessionTitles = new Map(sessions.map((session) => [session.id, session.version.title]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,6 +67,10 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
           durationMinutes: session.version.durationMinutes,
           trackId: session.version.trackId,
           trackName: session.version.trackId ? (trackNames.get(session.version.trackId) ?? "Unknown track") : null,
+          parentSessionId: session.parentSessionId,
+          parentSessionTitle: session.parentSessionId
+            ? (sessionTitles.get(session.parentSessionId) ?? "Unknown parent")
+            : null,
           participants: session.version.participants.map(({ speakerId, role }) => ({
             speakerId,
             speakerName: speakerNames.get(speakerId) ?? "Unknown speaker",

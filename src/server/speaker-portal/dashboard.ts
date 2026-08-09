@@ -138,6 +138,13 @@ export class SpeakerPortalRepository {
         take: LIST_BOUNDS.speakerPortalSessions,
         select: {
           id: true,
+          parentSessionId: true,
+          parentSession: {
+            select: {
+              id: true,
+              versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { title: true } },
+            },
+          },
           agendaPlacement: { select: { startsAt: true, endsAt: true, room: { select: { name: true } } } },
           versions: {
             orderBy: { versionNumber: "desc" },
@@ -170,6 +177,28 @@ export class SpeakerPortalRepository {
       this.listResources(identity.eventId),
     ]);
 
+    const visibleSessions = storedSessions.flatMap((session) => {
+      const version = session.versions[0];
+      if (!version?.participants.some(({ speakerId }) => speakerId === identity.speakerId)) return [];
+      return [
+        {
+          id: session.id,
+          parentSessionId: session.parentSessionId,
+          parentSessionTitle: session.parentSession?.versions[0]?.title ?? null,
+          agendaPlacement: session.agendaPlacement,
+          title: version.title,
+          description: version.description,
+          durationMinutes: version.durationMinutes,
+        },
+      ];
+    });
+    const startedAt = (session: (typeof visibleSessions)[number]) =>
+      session.agendaPlacement?.startsAt.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const startedAtById = new Map(visibleSessions.map((session) => [session.id, startedAt(session)]));
+    const rootIdOf = (session: (typeof visibleSessions)[number]) => session.parentSessionId ?? session.id;
+    const rootStartedAt = (session: (typeof visibleSessions)[number]) =>
+      startedAtById.get(rootIdOf(session)) ?? startedAt(session);
+
     return {
       event: speaker.event,
       profile: { ...profile, displayName: displayName(profile) },
@@ -178,18 +207,15 @@ export class SpeakerPortalRepository {
         title: formVersion.title,
         categories: categories.map(({ category }) => category),
       })),
-      sessions: storedSessions.flatMap((session) => {
-        const version = session.versions[0];
-        if (!version?.participants.some(({ speakerId }) => speakerId === identity.speakerId)) return [];
-        return [
-          {
-            id: session.id,
-            agendaPlacement: session.agendaPlacement,
-            title: version.title,
-            description: version.description,
-            durationMinutes: version.durationMinutes,
-          },
-        ];
+      sessions: visibleSessions.toSorted((left, right) => {
+        const rootOrder = rootStartedAt(left) - rootStartedAt(right);
+        if (rootOrder !== 0) return rootOrder;
+        const leftRoot = rootIdOf(left);
+        const rightRoot = rootIdOf(right);
+        if (leftRoot !== rightRoot) return leftRoot.localeCompare(rightRoot);
+        if (left.parentSessionId === null) return -1;
+        if (right.parentSessionId === null) return 1;
+        return startedAt(left) - startedAt(right);
       }),
       tasks,
       resources,

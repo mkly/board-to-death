@@ -23,6 +23,8 @@ interface AgendaEmbedPlacement {
   readonly sessionId: string;
   readonly title: string;
   readonly description: string | null;
+  readonly parentSessionId: string | null;
+  readonly parentSessionTitle: string | null;
   readonly startsAt: string;
   readonly endsAt: string;
   readonly room: { readonly id: string; readonly name: string };
@@ -91,19 +93,29 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
     () => [...new Set(placements.map((placement) => dayKey(placement.startsAt, event.timezone)))],
     [event.timezone, placements],
   );
-  const visiblePlacements = useMemo(
-    () =>
-      placements.filter(
-        (placement) =>
-          (!enabledFilters.has("search") || search === "" || matchesSearch(placement, search)) &&
-          (!enabledFilters.has("room") || roomId === "all" || placement.room.id === roomId) &&
-          (!enabledFilters.has("track") ||
-            trackId === "all" ||
-            placement.tracks.some((track) => track.id === trackId)) &&
-          (!enabledFilters.has("day") || day === "all" || dayKey(placement.startsAt, event.timezone) === day),
-      ),
-    [day, enabledFilters, event.timezone, placements, roomId, search, trackId],
-  );
+  const visiblePlacements = useMemo(() => {
+    const filtered = placements.filter(
+      (placement) =>
+        (!enabledFilters.has("search") || search === "" || matchesSearch(placement, search)) &&
+        (!enabledFilters.has("room") || roomId === "all" || placement.room.id === roomId) &&
+        (!enabledFilters.has("track") || trackId === "all" || placement.tracks.some((track) => track.id === trackId)) &&
+        (!enabledFilters.has("day") || day === "all" || dayKey(placement.startsAt, event.timezone) === day),
+    );
+    const bySessionId = new Map(filtered.map((placement) => [placement.sessionId, placement]));
+    return filtered.toSorted((left, right) => {
+      const leftRoot =
+        left.parentSessionId && bySessionId.has(left.parentSessionId) ? left.parentSessionId : left.sessionId;
+      const rightRoot =
+        right.parentSessionId && bySessionId.has(right.parentSessionId) ? right.parentSessionId : right.sessionId;
+      const rootTime = (bySessionId.get(leftRoot)?.startsAt ?? left.startsAt).localeCompare(
+        bySessionId.get(rightRoot)?.startsAt ?? right.startsAt,
+      );
+      if (rootTime !== 0) return rootTime;
+      if (left.parentSessionId === null) return -1;
+      if (right.parentSessionId === null) return 1;
+      return left.startsAt.localeCompare(right.startsAt);
+    });
+  }, [day, enabledFilters, event.timezone, placements, roomId, search, trackId]);
   const groupedPlacements = useMemo(
     () =>
       visiblePlacements.reduce<Map<string, AgendaEmbedPlacement[]>>((groups, placement) => {
@@ -325,7 +337,8 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
                       <Card
                         id={`session-${placement.sessionId}`}
                         size={configuration.density === "compact" ? "sm" : "default"}
-                        className="h-full scroll-mt-4"
+                        className={cn("h-full scroll-mt-4", placement.parentSessionId && "ml-4")}
+                        data-parent-session={placement.parentSessionId ?? undefined}
                       >
                         <CardHeader>
                           <CardTitle>
@@ -333,6 +346,11 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
                               {placement.title}
                             </a>
                           </CardTitle>
+                          {placement.parentSessionTitle ? (
+                            <Badge variant="outline" className="w-fit">
+                              Subsession of {placement.parentSessionTitle}
+                            </Badge>
+                          ) : null}
                           <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="inline-flex items-center gap-1">
                               <Clock3 aria-hidden="true" />

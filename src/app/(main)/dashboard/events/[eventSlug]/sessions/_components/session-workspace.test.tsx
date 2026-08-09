@@ -37,6 +37,8 @@ const sessions: readonly SessionWorkspaceSession[] = [
     durationMinutes: 60,
     trackId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     trackName: "Game design",
+    parentSessionId: null,
+    parentSessionTitle: null,
     participants: [
       {
         speakerId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -55,6 +57,8 @@ const sessions: readonly SessionWorkspaceSession[] = [
     durationMinutes: 45,
     trackId: null,
     trackName: null,
+    parentSessionId: null,
+    parentSessionTitle: null,
     participants: [],
     versionNumber: 1,
   },
@@ -67,6 +71,8 @@ const sessions: readonly SessionWorkspaceSession[] = [
     durationMinutes: 30,
     trackId: null,
     trackName: null,
+    parentSessionId: null,
+    parentSessionTitle: null,
     participants: [],
     versionNumber: 3,
   },

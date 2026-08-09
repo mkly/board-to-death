@@ -54,6 +54,8 @@ import { type AgendaFilter, AgendaViews } from "./agenda-views";
 export interface AgendaWorkspaceSession {
   readonly id: string;
   readonly title: string;
+  readonly parentSessionId: string | null;
+  readonly parentSessionTitle: string | null;
   readonly durationMinutes: number;
   readonly trackId: string | null;
   readonly trackName: string | null;

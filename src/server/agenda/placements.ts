@@ -128,7 +128,11 @@ async function requirePlacementReferences(
   });
   const session = await transaction.programSession.findFirst({
     where: { eventId, id: sessionId, archivedAt: null },
-    select: { id: true },
+    select: {
+      id: true,
+      parentSessionId: true,
+      parentSession: { select: { agendaPlacement: { select: { startsAt: true, endsAt: true } } } },
+    },
   });
   const room = await transaction.room.findFirst({
     where: { eventId, id: placement.roomId },
@@ -139,6 +143,10 @@ async function requirePlacementReferences(
   });
   const speakerCount = await transaction.speaker.count({
     where: { eventId, id: { in: [...placement.speakerIds] } },
+  });
+  const subsessionPlacements = await transaction.agendaPlacement.findMany({
+    where: { eventId, session: { parentSessionId: sessionId, archivedAt: null } },
+    select: { startsAt: true, endsAt: true },
   });
   if (!event) throw new RepositoryError("not-found", "The event was not found.");
   if (!session) throw new RepositoryError("not-found", "The active event-owned session was not found.");
@@ -152,6 +160,16 @@ async function requirePlacementReferences(
   if (placement.startsAt < event.startsAt || placement.endsAt > event.endsAt) {
     invalid("The agenda placement must stay within the event bounds.");
   }
+  if (session.parentSessionId) {
+    const parentPlacement = session.parentSession?.agendaPlacement;
+    if (!parentPlacement) invalid("Schedule the parent session before placing a subsession.");
+    if (placement.startsAt < parentPlacement.startsAt || placement.endsAt > parentPlacement.endsAt) {
+      invalid("A subsession placement must stay within its parent session window.");
+    }
+  }
+  if (subsessionPlacements.some((child) => child.startsAt < placement.startsAt || child.endsAt > placement.endsAt)) {
+    invalid("This placement must still contain every scheduled subsession of its session.");
+  }
   return event;
 }
 
@@ -160,6 +178,7 @@ async function enforceConflictPolicy(
   eventId: string,
   event: { readonly startsAt: Date; readonly endsAt: Date; readonly timezone: string },
   candidate: { readonly id: string } & ValidatedPlacement,
+  candidateSessionId: string,
   excludedPlacementId: string | null,
   options: AgendaConflictOptions,
 ): Promise<void> {
@@ -171,6 +190,17 @@ async function enforceConflictPolicy(
       speakers: { orderBy: { sortOrder: "asc" } },
     },
   });
+  const placementSessionIds = new Map(current.map((placement) => [placement.id, placement.sessionId]));
+  placementSessionIds.set(candidate.id, candidateSessionId);
+  const sessionIds = [...placementSessionIds.values()];
+  const sessionParents = new Map(
+    (
+      await transaction.programSession.findMany({
+        where: { eventId, id: { in: sessionIds } },
+        select: { id: true, parentSessionId: true },
+      })
+    ).map((session) => [session.id, session.parentSessionId]),
+  );
   const conflicts = validateAgendaConflicts(event, [
     ...current.map((placement) => ({
       id: placement.id,
@@ -181,7 +211,15 @@ async function enforceConflictPolicy(
       speakerIds: placement.speakers.map(({ speakerId }) => speakerId),
     })),
     candidate,
-  ]).filter(({ placementIds }) => placementIds.includes(candidate.id));
+  ]).filter(({ placementIds }) => {
+    if (!placementIds.includes(candidate.id)) return false;
+    if (placementIds.length !== 2) return true;
+    const [leftPlacementId, rightPlacementId] = placementIds;
+    const leftSessionId = placementSessionIds.get(leftPlacementId);
+    const rightSessionId = placementSessionIds.get(rightPlacementId);
+    if (!leftSessionId || !rightSessionId) return true;
+    return sessionParents.get(leftSessionId) !== rightSessionId && sessionParents.get(rightSessionId) !== leftSessionId;
+  });
 
   if (conflicts.length > 0 && !(policy === "explicit-confirm" && options.conflictsConfirmed === true)) {
     throw new AgendaConflictError(conflicts, policy);
@@ -236,6 +274,7 @@ export class AgendaPlacementRepository {
           input.eventId,
           event,
           { id: candidateId, ...placement },
+          input.sessionId,
           null,
           options,
         );
@@ -287,6 +326,7 @@ export class AgendaPlacementRepository {
           eventId,
           event,
           { id: placementId, ...placement },
+          current.sessionId,
           placementId,
           options,
         );
@@ -317,9 +357,15 @@ export class AgendaPlacementRepository {
       invalid("expectedVersion must be a positive integer.");
     const existing = await this.client.agendaPlacement.findFirst({
       where: { eventId, id: placementId },
-      select: { id: true },
+      select: { id: true, sessionId: true },
     });
     if (!existing) throw new RepositoryError("not-found", "The event-owned agenda placement was not found.");
+    const placedSubsessions = await this.client.agendaPlacement.count({
+      where: { eventId, session: { parentSessionId: existing.sessionId, archivedAt: null } },
+    });
+    if (placedSubsessions > 0) {
+      invalid("Remove this session's subsession placements before removing its own.");
+    }
     const removed = await this.client.agendaPlacement.deleteMany({
       where: { eventId, id: placementId, version: expectedVersion },
     });

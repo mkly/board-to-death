@@ -23,6 +23,7 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { parsePortalFormDefinition } from "@/lib/portal-forms";
+import { cn } from "@/lib/utils";
 import type { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
 import { portalHref } from "../../_lib/portal-session";
@@ -294,8 +295,17 @@ export function PortalDashboard({ dashboard }: { readonly dashboard: SpeakerPort
               ) : (
                 <ul className="flex flex-col gap-3">
                   {sessions.map((session) => (
-                    <li key={session.id} className="rounded-lg border p-4">
+                    <li
+                      key={session.id}
+                      className={cn("rounded-lg border p-4", session.parentSessionId && "ml-4")}
+                      data-parent-session={session.parentSessionId ?? undefined}
+                    >
                       <p className="font-medium">{session.title}</p>
+                      {session.parentSessionTitle ? (
+                        <Badge variant="outline" className="mt-1">
+                          Subsession of {session.parentSessionTitle}
+                        </Badge>
+                      ) : null}
                       <p className="mt-1 text-muted-foreground text-sm">
                         {session.agendaPlacement
                           ? `${formatDateTime(session.agendaPlacement.startsAt, event.timezone)} · ${session.agendaPlacement.room.name}`
