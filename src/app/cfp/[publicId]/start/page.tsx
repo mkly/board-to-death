@@ -7,6 +7,7 @@ import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { PublicCfpForm } from "./_components/public-cfp-form";
+import { randomUUID } from "node:crypto";
 
 interface PublicCfpStartPageProps {
   readonly params: Promise<{ readonly publicId: string }>;
@@ -32,7 +33,7 @@ export default async function PublicCfpStartPage({ params }: PublicCfpStartPageP
           </p>
         </header>
 
-        <PublicCfpForm definition={lookup.form.definition} publicId={publicId} />
+        <PublicCfpForm definition={lookup.form.definition} publicId={publicId} submissionKey={randomUUID()} />
 
         <Button asChild className="self-start" variant="ghost">
           <Link href={publicCfpHref(publicId)}>Back to CFP details</Link>

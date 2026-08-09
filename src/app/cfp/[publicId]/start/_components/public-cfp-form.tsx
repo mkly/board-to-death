@@ -20,6 +20,7 @@ import { PublicCfpSpeakers } from "./public-cfp-speakers";
 interface PublicCfpFormProps {
   readonly publicId: string;
   readonly definition: CfpFormDefinition;
+  readonly submissionKey: string;
 }
 
 type ClientAnswer = boolean | string | readonly string[];
@@ -46,7 +47,7 @@ function errorsFor(state: PublicCfpFormActionState, questionId: string) {
   return state.errors?.[questionId]?.map((message) => ({ message }));
 }
 
-export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
+export function PublicCfpForm({ publicId, definition, submissionKey }: PublicCfpFormProps) {
   const action = submitPublicCfpForm.bind(null, publicId);
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const [answers, setAnswers] = useState<Readonly<Record<string, ClientAnswer>>>({});
@@ -150,10 +151,10 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
     return (
       <Alert>
         <AlertTitle>
-          <h2>Responses saved</h2>
+          <h2>Proposal submitted</h2>
         </AlertTitle>
         <AlertDescription>
-          Your submission draft is ready. Keep this reference for the next step: {state.submissionId}
+          Your proposal is now ready for review. Keep this reference: {state.submissionId}
         </AlertDescription>
       </Alert>
     );
@@ -161,9 +162,10 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
 
   return (
     <form action={formAction} className="flex flex-col gap-4" onSubmit={submitForm}>
+      <input name="submissionKey" type="hidden" value={submissionKey} />
       {state.status === "error" && state.message ? (
         <Alert variant="destructive">
-          <AlertTitle>We could not save your responses</AlertTitle>
+          <AlertTitle>We could not submit your proposal</AlertTitle>
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}
@@ -245,7 +247,7 @@ export function PublicCfpForm({ publicId, definition }: PublicCfpFormProps) {
 
       <Button className="self-start" disabled={pending} size="lg" type="submit">
         {pending ? <Spinner data-icon="inline-start" /> : null}
-        {pending ? "Saving responses…" : "Save responses"}
+        {pending ? "Submitting proposal…" : "Submit proposal"}
       </Button>
     </form>
   );

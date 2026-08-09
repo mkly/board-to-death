@@ -42,6 +42,10 @@ export interface CreateCfpSubmissionDraftInput {
   readonly participants?: readonly CfpSubmissionParticipantInput[];
 }
 
+export interface CreateFinalizedCfpSubmissionInput extends CreateCfpSubmissionDraftInput {
+  readonly idempotencyKey: string;
+}
+
 export interface SaveCfpSubmissionDraftInput {
   readonly answers: readonly CfpSubmissionAnswerInput[];
   readonly categoryIds?: readonly string[];
@@ -464,6 +468,101 @@ async function requireCategories(
   }
 }
 
+async function createSubmission(
+  transaction: Prisma.TransactionClient,
+  input: CreateCfpSubmissionDraftInput,
+  options: { readonly finalized: boolean; readonly submissionId?: string },
+): Promise<string> {
+  const formVersion = await transaction.cfpFormVersion.findFirst({
+    where: { id: input.formVersionId, form: { eventId: input.eventId } },
+    include: formVersionInclude,
+  });
+  if (!formVersion) throw new RepositoryError("not-found", "The event-owned CFP form version was not found.");
+  const definition = definitionFromStored(formVersion);
+  const participantProfiles = participantData(input.participants, definition);
+  const categoryIds = input.categoryIds ?? [];
+  await requireCategories(transaction, input.eventId, categoryIds);
+  const speakerIds: string[] = [];
+  for (const profile of participantProfiles) {
+    const existing = await transaction.speaker.findUnique({
+      where: { eventId_normalizedEmail: { eventId: input.eventId, normalizedEmail: profile.email } },
+      include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    if (existing) {
+      const latestVersion = existing.profileVersions[0]?.versionNumber ?? 0;
+      await transaction.speaker.update({
+        where: { id: existing.id },
+        data: { profileVersions: { create: { versionNumber: latestVersion + 1, ...profile } } },
+      });
+      speakerIds.push(existing.id);
+    } else {
+      const speaker = await transaction.speaker.create({
+        data: {
+          eventId: input.eventId,
+          normalizedEmail: profile.email,
+          profileVersions: { create: { versionNumber: 1, ...profile } },
+        },
+        select: { id: true },
+      });
+      speakerIds.push(speaker.id);
+    }
+  }
+
+  const submittedAt = options.finalized ? new Date() : null;
+  const submission = await transaction.cfpSubmission.create({
+    data: {
+      ...(options.submissionId ? { id: options.submissionId } : {}),
+      eventId: input.eventId,
+      formVersionId: input.formVersionId,
+      kind: input.kind,
+      status: options.finalized ? CfpSubmissionStatus.SUBMITTED : CfpSubmissionStatus.DRAFT,
+      submittedAt,
+      categories: {
+        create: categoryIds.map((categoryId, sortOrder) => ({ categoryId, sortOrder })),
+      },
+      participants: {
+        create: speakerIds.map((speakerId, sortOrder) => ({ speakerId, sortOrder })),
+      },
+      revisions: {
+        create: {
+          versionNumber: 1,
+          kind: options.finalized ? CfpSubmissionRevisionKind.FINAL : CfpSubmissionRevisionKind.DRAFT,
+          formVersionId: input.formVersionId,
+          definitionSnapshot: inputJson(definition),
+          answers: { create: answerData(input.answers, definition) },
+        },
+      },
+      transitions: {
+        create: {
+          fromStatus: null,
+          toStatus: options.finalized ? CfpSubmissionStatus.SUBMITTED : CfpSubmissionStatus.DRAFT,
+          actor: CfpSubmissionTransitionActor.SYSTEM,
+          ...(submittedAt ? { occurredAt: submittedAt } : {}),
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return submission.id;
+}
+
+function matchesFinalizedSubmission(
+  submission: {
+    readonly eventId: string;
+    readonly formVersionId: string;
+    readonly kind: CfpSubmissionKind;
+    readonly submittedAt: Date | null;
+  },
+  input: CreateFinalizedCfpSubmissionInput,
+): boolean {
+  return (
+    submission.eventId === input.eventId &&
+    submission.formVersionId === input.formVersionId &&
+    submission.kind === input.kind &&
+    submission.submittedAt !== null
+  );
+}
+
 function fromStored(submission: StoredSubmission): PersistedCfpSubmission {
   return {
     id: submission.id,
@@ -579,75 +678,45 @@ export class CfpSubmissionRepository {
 
   async createDraft(input: CreateCfpSubmissionDraftInput): Promise<PersistedCfpSubmission> {
     try {
+      const submissionId = await this.client.$transaction((transaction) =>
+        createSubmission(transaction, input, { finalized: false }),
+      );
+      return await this.require(input.eventId, submissionId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async createFinalized(input: CreateFinalizedCfpSubmissionInput): Promise<PersistedCfpSubmission> {
+    if (!isUuid(input.idempotencyKey)) invalid("idempotencyKey must be a UUID.");
+    try {
       const submissionId = await this.client.$transaction(async (transaction) => {
-        const formVersion = await transaction.cfpFormVersion.findFirst({
-          where: { id: input.formVersionId, form: { eventId: input.eventId } },
-          include: formVersionInclude,
+        const existing = await transaction.cfpSubmission.findUnique({
+          where: { id: input.idempotencyKey },
+          select: { eventId: true, formVersionId: true, kind: true, submittedAt: true },
         });
-        if (!formVersion) throw new RepositoryError("not-found", "The event-owned CFP form version was not found.");
-        const definition = definitionFromStored(formVersion);
-        const participantProfiles = participantData(input.participants, definition);
-        const categoryIds = input.categoryIds ?? [];
-        await requireCategories(transaction, input.eventId, categoryIds);
-        const speakerIds: string[] = [];
-        for (const profile of participantProfiles) {
-          const existing = await transaction.speaker.findUnique({
-            where: { eventId_normalizedEmail: { eventId: input.eventId, normalizedEmail: profile.email } },
-            include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },
-          });
-          if (existing) {
-            const latestVersion = existing.profileVersions[0]?.versionNumber ?? 0;
-            await transaction.speaker.update({
-              where: { id: existing.id },
-              data: { profileVersions: { create: { versionNumber: latestVersion + 1, ...profile } } },
-            });
-            speakerIds.push(existing.id);
-          } else {
-            const speaker = await transaction.speaker.create({
-              data: {
-                eventId: input.eventId,
-                normalizedEmail: profile.email,
-                profileVersions: { create: { versionNumber: 1, ...profile } },
-              },
-              select: { id: true },
-            });
-            speakerIds.push(speaker.id);
+        if (existing) {
+          if (!matchesFinalizedSubmission(existing, input)) {
+            invalid("The idempotency key belongs to a different submission.");
           }
+          return input.idempotencyKey;
         }
-        const submission = await transaction.cfpSubmission.create({
-          data: {
-            eventId: input.eventId,
-            formVersionId: input.formVersionId,
-            kind: input.kind,
-            categories: {
-              create: categoryIds.map((categoryId, sortOrder) => ({ categoryId, sortOrder })),
-            },
-            participants: {
-              create: speakerIds.map((speakerId, sortOrder) => ({ speakerId, sortOrder })),
-            },
-            revisions: {
-              create: {
-                versionNumber: 1,
-                kind: CfpSubmissionRevisionKind.DRAFT,
-                formVersionId: input.formVersionId,
-                definitionSnapshot: inputJson(definition),
-                answers: { create: answerData(input.answers, definition) },
-              },
-            },
-            transitions: {
-              create: {
-                fromStatus: null,
-                toStatus: CfpSubmissionStatus.DRAFT,
-                actor: CfpSubmissionTransitionActor.SYSTEM,
-              },
-            },
-          },
-          select: { id: true },
+        return createSubmission(transaction, input, {
+          finalized: true,
+          submissionId: input.idempotencyKey,
         });
-        return submission.id;
       });
       return await this.require(input.eventId, submissionId);
     } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && String(error.code) === "P2002") {
+        const replay = await this.client.cfpSubmission.findUnique({
+          where: { id: input.idempotencyKey },
+          select: { eventId: true, formVersionId: true, kind: true, submittedAt: true },
+        });
+        if (replay && matchesFinalizedSubmission(replay, input)) {
+          return this.require(input.eventId, input.idempotencyKey);
+        }
+      }
       return mapDatabaseError(error);
     }
   }
