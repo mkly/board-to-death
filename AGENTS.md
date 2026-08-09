@@ -90,7 +90,7 @@ Run it as your normal Incus user; it uses `sudo` only for `distrobuilder`,
 which requires root and does not run inside a container. The previous image
 is kept under a dated `board-to-death-prev-*` alias for rollback.
 
-Once imported, warm a box against it with `INCUS_IMAGE=board-to-death`.
+Once imported, warm a box against it with `CRABBOX_INCUS_IMAGE=board-to-death`.
 
 ### Lease storage pool
 
