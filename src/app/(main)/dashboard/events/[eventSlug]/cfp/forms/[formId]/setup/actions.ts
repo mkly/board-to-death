@@ -29,6 +29,25 @@ const welcomeSchema = z.object({
   instructions: z.string().trim().min(10, "Enter at least 10 characters of instructions.").max(4_000),
 });
 
+const speakerSchema = z
+  .object({
+    step: z.literal("speakers"),
+    minimumSpeakerCount: z.coerce.number().int().min(1, "Require at least one speaker.").max(20),
+    maximumSpeakerCount: z.coerce.number().int().min(1, "Allow at least one speaker.").max(20),
+    biographyRequired: z.boolean(),
+    contactRequired: z.boolean(),
+    consentRequired: z.boolean(),
+  })
+  .superRefine(({ maximumSpeakerCount, minimumSpeakerCount }, context) => {
+    if (minimumSpeakerCount > maximumSpeakerCount) {
+      context.addIssue({
+        code: "custom",
+        path: ["maximumSpeakerCount"],
+        message: "Maximum speakers must be greater than or equal to minimum speakers.",
+      });
+    }
+  });
+
 const termsSchema = z
   .object({
     step: z.literal("terms"),
@@ -45,7 +64,7 @@ const termsSchema = z
     }
   });
 
-type SetupStep = "setup" | "welcome" | "terms";
+type SetupStep = "setup" | "speakers" | "welcome" | "terms";
 
 export interface SaveCfpSetupState {
   readonly status: "idle" | "success" | "error";
@@ -76,6 +95,16 @@ function validationInput(formData: FormData) {
       instructions: value(formData, "instructions"),
     });
   }
+  if (step === "speakers") {
+    return speakerSchema.safeParse({
+      step,
+      minimumSpeakerCount: value(formData, "minimumSpeakerCount"),
+      maximumSpeakerCount: value(formData, "maximumSpeakerCount"),
+      biographyRequired: value(formData, "biographyRequired") === "true",
+      contactRequired: value(formData, "contactRequired") === "true",
+      consentRequired: value(formData, "speakerConsentRequired") === "true",
+    });
+  }
   return termsSchema.safeParse({
     step,
     termsContent: value(formData, "termsContent"),
@@ -85,7 +114,11 @@ function validationInput(formData: FormData) {
 
 function updatedDefinition(
   definition: CfpFormDefinition,
-  input: z.infer<typeof setupSchema> | z.infer<typeof welcomeSchema> | z.infer<typeof termsSchema>,
+  input:
+    | z.infer<typeof setupSchema>
+    | z.infer<typeof speakerSchema>
+    | z.infer<typeof welcomeSchema>
+    | z.infer<typeof termsSchema>,
 ): CfpFormDefinition {
   if (input.step === "setup") {
     return {
@@ -101,6 +134,18 @@ function updatedDefinition(
       welcomeTitle: input.welcomeTitle,
       welcomeContent: input.welcomeContent,
       instructions: input.instructions,
+    };
+  }
+  if (input.step === "speakers") {
+    return {
+      ...definition,
+      minimumSpeakerCount: input.minimumSpeakerCount,
+      maximumSpeakerCount: input.maximumSpeakerCount,
+      requiredSpeakerFields: [
+        ...(input.biographyRequired ? (["biography"] as const) : []),
+        ...(input.contactRequired ? (["contact"] as const) : []),
+        ...(input.consentRequired ? (["consent"] as const) : []),
+      ],
     };
   }
   return {

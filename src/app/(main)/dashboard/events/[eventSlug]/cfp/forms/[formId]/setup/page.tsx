@@ -42,8 +42,8 @@ export default async function CfpFormSetupPage({
           {form.definition.title}
         </h1>
         <p className="max-w-2xl text-muted-foreground text-sm">
-          Configure the applicant-facing setup, welcome message, and consent terms. Each save creates a new draft
-          version.
+          Configure applicant access, speaker requirements, welcome content, and consent terms. Each save creates a new
+          draft version.
         </p>
       </header>
       <CfpSetupWorkspace definition={form.definition} eventSlug={event.slug} formId={form.formId} />

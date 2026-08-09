@@ -47,6 +47,9 @@ function definition(title = "Board Game Design CFP"): CfpFormDefinition {
     instructions: "Include the audience level, format, and practical takeaways in your proposal.",
     termsContent: "I agree that accepted sessions may be recorded and published.",
     consentRequired: true,
+    minimumSpeakerCount: 1,
+    maximumSpeakerCount: 4,
+    requiredSpeakerFields: ["biography", "contact", "consent"],
     customQuestionTypes: ["game_complexity"],
     categories: [{ id: "design", label: "Game design" }],
     sections: [
