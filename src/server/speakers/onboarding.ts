@@ -433,7 +433,11 @@ export class SpeakerOnboardingRepository {
       await this.client.$transaction(async (transaction) => {
         const assignment = await transaction.speakerTaskAssignment.findFirst({
           where: { eventId, id: assignmentId, ...(speakerId ? { speakerId } : {}) },
-          include: { definitionVersion: true, submissions: { orderBy: { attemptNumber: "desc" }, take: 1 } },
+          include: {
+            definitionVersion: true,
+            submissions: { orderBy: { attemptNumber: "desc" }, take: 1 },
+            transitions: { where: { toStatus: "SUBMITTED" }, select: { id: true } },
+          },
         });
         if (!assignment) throw new RepositoryError("not-found", "The event-owned task assignment was not found.");
         if (assignment.status === "SUBMITTED") return;
@@ -450,17 +454,66 @@ export class SpeakerOnboardingRepository {
           data: { status: "SUBMITTED", submittedAt: occurredAt },
         });
         if (claimed.count === 0) return;
-        await transaction.speakerTaskSubmission.create({
-          data: {
-            assignmentId,
-            attemptNumber: (assignment.submissions[0]?.attemptNumber ?? 0) + 1,
-            response: normalizedResponse,
-            submittedAt: occurredAt,
-          },
-        });
+        const latest = assignment.submissions[0];
+        const hasDraft = assignment.transitions.length < (latest?.attemptNumber ?? 0);
+        if (latest && hasDraft) {
+          await transaction.speakerTaskSubmission.update({
+            where: { id: latest.id },
+            data: { response: normalizedResponse, submittedAt: occurredAt },
+          });
+        } else {
+          await transaction.speakerTaskSubmission.create({
+            data: {
+              assignmentId,
+              attemptNumber: (latest?.attemptNumber ?? 0) + 1,
+              response: normalizedResponse,
+              submittedAt: occurredAt,
+            },
+          });
+        }
         await transaction.speakerTaskAssignmentTransition.create({
           data: { assignmentId, fromStatus: assignment.status, toStatus: "SUBMITTED", occurredAt },
         });
+      });
+      return await this.requireAssignment(eventId, assignmentId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async saveDraft(
+    eventId: string,
+    assignmentId: string,
+    response: Prisma.InputJsonValue,
+  ): Promise<PersistedSpeakerTaskAssignment> {
+    const occurredAt = this.now();
+    try {
+      await this.client.$transaction(async (transaction) => {
+        const assignment = await transaction.speakerTaskAssignment.findFirst({
+          where: { eventId, id: assignmentId },
+          include: {
+            submissions: { orderBy: { attemptNumber: "desc" }, take: 1 },
+            transitions: { where: { toStatus: "SUBMITTED" }, select: { id: true } },
+          },
+        });
+        if (!assignment) throw new RepositoryError("not-found", "The event-owned task assignment was not found.");
+        if (assignment.status !== "PENDING" && assignment.status !== "REVISION_REQUESTED") {
+          invalid("Only pending or revision-requested assignments can save a draft.");
+        }
+        const latest = assignment.submissions[0];
+        const hasDraft = assignment.transitions.length < (latest?.attemptNumber ?? 0);
+        if (latest && hasDraft) {
+          await transaction.speakerTaskSubmission.update({ where: { id: latest.id }, data: { response } });
+        } else {
+          await transaction.speakerTaskSubmission.create({
+            data: {
+              assignmentId,
+              attemptNumber: (latest?.attemptNumber ?? 0) + 1,
+              response,
+              submittedAt: occurredAt,
+            },
+          });
+        }
       });
       return await this.requireAssignment(eventId, assignmentId);
     } catch (error) {

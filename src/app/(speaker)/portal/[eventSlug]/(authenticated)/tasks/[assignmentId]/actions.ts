@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
 import type { Prisma } from "@/generated/prisma/client";
+import { answersFromFormData, parsePortalFormDefinition, validatePortalFormAnswers } from "@/lib/portal-forms";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
@@ -18,6 +19,13 @@ const ALLOWED_RESPONSE_FILE_TYPES = new Set(["application/pdf", "image/jpeg", "i
 export interface TaskSubmissionState {
   readonly message: string;
   readonly status: "error" | "idle" | "success";
+}
+
+export interface TaskFormState {
+  readonly ok: boolean;
+  readonly message: string;
+  readonly errors?: Readonly<Record<string, string>>;
+  readonly submitted?: boolean;
 }
 
 function speakerFiles(): SpeakerFileService {
@@ -104,5 +112,49 @@ export async function submitSpeakerTask(
       }
     }
     return failure(error);
+  }
+}
+
+export async function saveTaskResponse(
+  eventSlug: string,
+  assignmentId: string,
+  _previousState: TaskFormState,
+  formData: FormData,
+): Promise<TaskFormState> {
+  const viewer = await getPortalViewer(eventSlug);
+  const database = getDatabaseClient();
+  const portal = new SpeakerPortalRepository(database);
+  const task = await portal.getTask(viewer, assignmentId);
+  const form = parsePortalFormDefinition(task?.definitionVersion.responseSchema ?? null);
+  if (!task || !form) return { ok: false, message: "This response form is not available." };
+  if (task.status !== "PENDING" && task.status !== "REVISION_REQUESTED") {
+    return { ok: false, message: "This response has already been submitted." };
+  }
+
+  const answers = answersFromFormData(form, formData);
+  const intent = formData.get("intent") === "submit" ? "submit" : "draft";
+  if (intent === "submit") {
+    const errors = validatePortalFormAnswers(form, answers);
+    if (Object.keys(errors).length > 0) return { ok: false, message: "Complete the required fields.", errors };
+  }
+
+  try {
+    const onboarding = new SpeakerOnboardingRepository(database);
+    if (intent === "submit") {
+      await onboarding.submit(viewer.eventId, assignmentId, answers as Prisma.InputJsonValue, viewer.speakerId);
+      await portal.queueTaskConfirmation(viewer, assignmentId);
+    } else {
+      await onboarding.saveDraft(viewer.eventId, assignmentId, answers as Prisma.InputJsonValue);
+    }
+    revalidatePath(portalHref(eventSlug));
+    revalidatePath(portalHref(eventSlug, `/tasks/${assignmentId}`));
+    revalidatePath(`/dashboard/events/${eventSlug}/onboarding`);
+    return intent === "submit"
+      ? { ok: true, submitted: true, message: form.confirmation.message }
+      : { ok: true, message: "Draft saved." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { ok: false, message: error.message };
+    console.error(error);
+    return { ok: false, message: "The response could not be saved. Try again." };
   }
 }

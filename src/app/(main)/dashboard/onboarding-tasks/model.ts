@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { parsePortalFormDefinition } from "@/lib/portal-forms";
 import type { PersistedSpeakerTaskDefinition } from "@/server/speakers";
 
 import type { TaskDefinitionView, TaskResponseType } from "./types";
@@ -8,6 +9,7 @@ function objectValue(value: Prisma.JsonValue): Prisma.JsonObject | null {
 }
 
 function responseType(value: Prisma.JsonValue | null): TaskResponseType {
+  if (parsePortalFormDefinition(value)) return "FORM";
   const schema = value === null ? null : objectValue(value);
   if (schema?.type === "string") return "TEXT";
   if (schema?.type === "object") return "FILE";
@@ -19,6 +21,7 @@ export function taskDefinitionView(definition: PersistedSpeakerTaskDefinition): 
   if (!latest) throw new Error(`Task definition ${definition.id} has no versions.`);
   const applicability = objectValue(latest.applicability);
   const rawSessionKinds = applicability?.sessionKinds;
+  const form = parsePortalFormDefinition(latest.responseSchema);
   return {
     id: definition.id,
     key: definition.key,
@@ -33,5 +36,9 @@ export function taskDefinitionView(definition: PersistedSpeakerTaskDefinition): 
       : [],
     defaultDueOffsetDays: latest.defaultDueOffsetDays,
     responseType: latest.responseRequired ? responseType(latest.responseSchema) : "NONE",
+    sections: form?.sections ?? [],
+    confirmationSubject: form?.confirmation.subject ?? "Response received",
+    confirmationMessage: form?.confirmation.message ?? "Thank you. Your response was submitted.",
+    sendConfirmationEmail: form?.confirmation.sendEmail ?? false,
   };
 }

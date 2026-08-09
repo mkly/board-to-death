@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Copy,
   FileUp,
+  ListChecks,
   MessageSquareText,
   Pencil,
   Plus,
@@ -71,7 +72,20 @@ const RESPONSE_LABELS: Record<TaskResponseType, string> = {
   NONE: "No response",
   TEXT: "Written response",
   FILE: "File upload",
+  FORM: "Response form",
 };
+
+function formDefinitionValue(definition?: TaskDefinitionView): string {
+  return (definition?.sections ?? [])
+    .flatMap((section) => [
+      `[${section.title}${section.instructions ? ` :: ${section.instructions}` : ""}]`,
+      ...section.fields.map(
+        (field) =>
+          `${field.label} | ${field.type} | ${field.required ? "required" : "optional"} | ${field.reusableKey ?? ""}`,
+      ),
+    ])
+    .join("\n");
+}
 
 function firstError(errors: FieldErrors, field: string): string | undefined {
   return errors?.[field]?.[0];
@@ -88,6 +102,7 @@ function DefinitionForm({
   readonly pending: boolean;
   readonly onSubmit: (formData: FormData) => Promise<void>;
 }) {
+  const [responseType, setResponseType] = useState<TaskResponseType>(definition?.responseType ?? "NONE");
   let submitLabel = "Create task";
   if (pending) submitLabel = "Saving…";
   else if (definition) submitLabel = "Save changes";
@@ -143,7 +158,11 @@ function DefinitionForm({
           </Field>
           <Field data-invalid={Boolean(firstError(errors, "responseType"))}>
             <FieldLabel htmlFor="task-response-type">Required response</FieldLabel>
-            <Select name="responseType" defaultValue={definition?.responseType ?? "NONE"}>
+            <Select
+              name="responseType"
+              value={responseType}
+              onValueChange={(value) => setResponseType(value as TaskResponseType)}
+            >
               <SelectTrigger
                 id="task-response-type"
                 className="w-full"
@@ -164,6 +183,64 @@ function DefinitionForm({
             <FieldError>{firstError(errors, "responseType")}</FieldError>
           </Field>
         </div>
+        {responseType === "FORM" ? (
+          <>
+            <Field data-invalid={Boolean(firstError(errors, "formDefinition"))}>
+              <FieldLabel htmlFor="task-form-definition">Sections and fields</FieldLabel>
+              <Textarea
+                id="task-form-definition"
+                name="formDefinition"
+                defaultValue={
+                  formDefinitionValue(definition) ||
+                  "[Contact details :: Tell us how attendees can reach you]\nPublic email | email | required | public-email\nBiography | textarea | required | biography"
+                }
+                aria-invalid={Boolean(firstError(errors, "formDefinition"))}
+                rows={8}
+                required
+              />
+              <FieldDescription>
+                Start sections with [Title :: optional instructions]. Add fields as Label | text, textarea, email, or
+                checkbox | required or optional | optional reusable key.
+              </FieldDescription>
+              <FieldError>{firstError(errors, "formDefinition")}</FieldError>
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="task-confirmation-subject">Confirmation subject</FieldLabel>
+                <Input
+                  id="task-confirmation-subject"
+                  name="confirmationSubject"
+                  defaultValue={definition?.confirmationSubject ?? "Response received"}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="task-confirmation-message">Confirmation message</FieldLabel>
+                <Input
+                  id="task-confirmation-message"
+                  name="confirmationMessage"
+                  defaultValue={definition?.confirmationMessage ?? "Thank you. Your response was submitted."}
+                />
+              </Field>
+            </div>
+            <Field orientation="horizontal">
+              <div className="flex flex-col gap-1">
+                <FieldLabel htmlFor="task-confirmation-email">Send confirmation email</FieldLabel>
+                <FieldDescription>Only the first successful submission triggers confirmation.</FieldDescription>
+              </div>
+              <Switch
+                id="task-confirmation-email"
+                name="sendConfirmationEmail"
+                defaultChecked={definition?.sendConfirmationEmail}
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <input type="hidden" name="formDefinition" value="" />
+            <input type="hidden" name="confirmationSubject" value="" />
+            <input type="hidden" name="confirmationMessage" value="" />
+          </>
+        )}
         <Field data-invalid={Boolean(firstError(errors, "sessionKinds"))}>
           <FieldLabel htmlFor="task-session-kinds">Session kinds</FieldLabel>
           <Input
@@ -195,7 +272,7 @@ function DefinitionForm({
 }
 
 function ResponseBadge({ type }: { readonly type: TaskResponseType }) {
-  const icons = { FILE: FileUp, NONE: ClipboardCheck, TEXT: MessageSquareText } as const;
+  const icons = { FILE: FileUp, FORM: ListChecks, NONE: ClipboardCheck, TEXT: MessageSquareText } as const;
   const Icon = icons[type];
   return (
     <Badge variant="secondary">

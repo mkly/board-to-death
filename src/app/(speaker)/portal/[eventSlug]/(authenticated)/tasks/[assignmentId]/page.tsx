@@ -15,7 +15,7 @@ import { speakerTaskResponseKind } from "@/server/speakers";
 
 import { getPortalViewer, portalHref } from "../../../_lib/portal-session";
 import { TaskResponseForm } from "./_components/task-response-form";
-import { submitSpeakerTask } from "./actions";
+import { saveTaskResponse, submitSpeakerTask } from "./actions";
 
 interface SpeakerTaskPageProps {
   readonly params: Promise<{ readonly assignmentId: string; readonly eventSlug: string }>;
@@ -104,6 +104,9 @@ export default async function SpeakerTaskPage({ params }: SpeakerTaskPageProps) 
                 action={submitSpeakerTask.bind(null, eventSlug, assignmentId)}
                 kind={kind}
                 defaultText={typeof latestResponse === "string" ? latestResponse : undefined}
+                formAction={saveTaskResponse.bind(null, eventSlug, assignmentId)}
+                formDefinition={task.form ?? undefined}
+                formAnswers={task.answers}
               />
             ) : (
               <Alert>

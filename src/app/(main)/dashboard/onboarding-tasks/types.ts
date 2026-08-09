@@ -1,4 +1,6 @@
-export type TaskResponseType = "NONE" | "TEXT" | "FILE";
+import type { PortalFormSection } from "@/lib/portal-forms";
+
+export type TaskResponseType = "NONE" | "TEXT" | "FILE" | "FORM";
 
 export interface EventOption {
   readonly id: string;
@@ -17,6 +19,10 @@ export interface TaskDefinitionView {
   readonly sessionKinds: readonly string[];
   readonly defaultDueOffsetDays: number | null;
   readonly responseType: TaskResponseType;
+  readonly sections: readonly PortalFormSection[];
+  readonly confirmationSubject: string;
+  readonly confirmationMessage: string;
+  readonly sendConfirmationEmail: boolean;
 }
 
 export interface OnboardingSnapshot {

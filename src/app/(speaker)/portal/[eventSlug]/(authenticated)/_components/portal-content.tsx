@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
+import { parsePortalFormDefinition } from "@/lib/portal-forms";
 import type { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
 import { portalHref } from "../../_lib/portal-session";
@@ -125,6 +126,15 @@ function CardFooterLink({ href, label }: { readonly href: string; readonly label
       </Button>
     </CardFooter>
   );
+}
+
+function hasBrokenFormDefinition(responseSchema: unknown): boolean {
+  const schema = responseSchema;
+  const kind =
+    typeof schema === "object" && schema !== null && !Array.isArray(schema)
+      ? (schema as Record<string, unknown>).kind
+      : undefined;
+  return kind === "portal-form" && !parsePortalFormDefinition(schema);
 }
 
 function formatDate(date: Date, timezone: string): string {
@@ -254,9 +264,11 @@ export function PortalDashboard({ dashboard }: { readonly dashboard: SpeakerPort
                         {taskStatusLabels[task.status]}
                       </Badge>
                     </div>
-                    <Button asChild variant="outline" size="sm" className="mt-3 w-fit">
-                      <Link href={portalHref(event.slug, `/tasks/${task.id}`)}>View task</Link>
-                    </Button>
+                    {hasBrokenFormDefinition(task.definitionVersion.responseSchema) ? null : (
+                      <Button asChild variant="outline" size="sm" className="mt-3 w-fit">
+                        <Link href={portalHref(event.slug, `/tasks/${task.id}`)}>View task</Link>
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>

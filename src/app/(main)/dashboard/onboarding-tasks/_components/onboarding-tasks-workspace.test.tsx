@@ -58,6 +58,10 @@ const populatedSnapshot: OnboardingSnapshot = {
       sessionKinds: ["TALK"],
       defaultDueOffsetDays: 7,
       responseType: "TEXT",
+      sections: [],
+      confirmationSubject: "",
+      confirmationMessage: "",
+      sendConfirmationEmail: false,
     },
     {
       id: "task-2",
@@ -71,6 +75,10 @@ const populatedSnapshot: OnboardingSnapshot = {
       sessionKinds: [],
       defaultDueOffsetDays: null,
       responseType: "FILE",
+      sections: [],
+      confirmationSubject: "",
+      confirmationMessage: "",
+      sendConfirmationEmail: false,
     },
   ],
 };
