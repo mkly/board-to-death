@@ -36,8 +36,8 @@ async function createEvent(slug: string): Promise<string> {
   return event.id;
 }
 
-async function createSubmission(eventId: string): Promise<string> {
-  const form = await forms.create({ eventId, key: "main-cfp", definition });
+async function createSubmission(eventId: string, key = "main-cfp"): Promise<string> {
+  const form = await forms.create({ eventId, key, definition });
   const version = await client.cfpFormVersion.findUniqueOrThrow({
     where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
   });
@@ -173,7 +173,7 @@ describe("speaker persistence", () => {
     const eventId = await createEvent("participant-files");
     const otherEventId = await createEvent("other-participant-files");
     const submissionId = await createSubmission(eventId);
-    const otherSubmissionId = await createSubmission(eventId);
+    const otherSubmissionId = await createSubmission(eventId, "second-cfp");
     const primary = await createSpeaker(eventId, "files-primary@example.test", "Primary");
     const coSpeaker = await createSpeaker(eventId, "files-co@example.test", "Co");
     const outsider = await createSpeaker(otherEventId, "files-outsider@example.test", "Outsider");
