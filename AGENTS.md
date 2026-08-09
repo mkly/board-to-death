@@ -110,10 +110,11 @@ incus profile show crabbox-btrfs
 
 `crabbox`'s `-incus-profile` **replaces** the default profile rather than
 adding to it, so `crabbox-btrfs` carries both the `root` disk and the `eth0`
-nic. The `dev-implement-task` skill applies it automatically when the profile
-exists (`INCUS_PROFILE=auto`); set `INCUS_PROFILE=` to opt out. Boxes leased
-before this change stay on the `dir` pool and keep working — they simply do
-not get the faster launch until they are re-leased.
+nic. The `dev-implement-task` skill does not select the profile itself; export
+`CRABBOX_INCUS_PROFILE=crabbox-btrfs` in the environment to use it (crabbox
+env vars apply to every subcommand). Boxes leased without it stay on the `dir`
+pool and keep working — they simply do not get the faster launch until they
+are re-leased.
 
 ### The image skips crabbox's apt bootstrap
 
