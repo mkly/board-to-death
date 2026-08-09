@@ -5,6 +5,12 @@ import { notFound, redirect } from "next/navigation";
 
 import type { ContactGroupKind } from "@/generated/prisma/client";
 import {
+  acceptContactGroupIntakeSubmission,
+  closeContactGroupIntakeForm,
+  publishContactGroupIntakeForm,
+  rejectContactGroupIntakeSubmission,
+} from "@/server/contacts/group-intake";
+import {
   createContactGroup,
   createContactGroupTier,
   listContactGroupTiers,
@@ -22,10 +28,14 @@ import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 const KINDS: readonly ContactGroupKind[] = ["SPONSOR", "EXHIBITOR"];
 
 async function requireAuthorizedEvent(eventSlug: string) {
+  return (await requireAuthorizedEventContext(eventSlug)).event;
+}
+
+async function requireAuthorizedEventContext(eventSlug: string) {
   const shell = await getDashboardShellData();
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event || shell.activeEvent?.id !== event.id) notFound();
-  return event;
+  return { event, reviewerId: shell.user.id };
 }
 
 function value(formData: FormData, name: string): string {
@@ -157,4 +167,49 @@ export async function updateGroupAction(eventSlug: string, groupId: string, form
     fail(event.slug, error);
   }
   return finish(event.slug, "Group updated.");
+}
+
+export async function publishIntakeFormAction(
+  eventSlug: string,
+  kind: ContactGroupKind,
+  formData: FormData,
+): Promise<never> {
+  const event = await requireAuthorizedEvent(eventSlug);
+  try {
+    await publishContactGroupIntakeForm(getDatabaseClient(), event.id, kind, {
+      title: value(formData, "title"),
+      description: value(formData, "description"),
+    });
+  } catch (error) {
+    fail(event.slug, error);
+  }
+  return finish(event.slug, `${kind === "SPONSOR" ? "Sponsor" : "Exhibitor"} intake form published.`);
+}
+
+export async function closeIntakeFormAction(eventSlug: string, kind: ContactGroupKind): Promise<never> {
+  const event = await requireAuthorizedEvent(eventSlug);
+  try {
+    await closeContactGroupIntakeForm(getDatabaseClient(), event.id, kind);
+  } catch (error) {
+    fail(event.slug, error);
+  }
+  return finish(event.slug, `${kind === "SPONSOR" ? "Sponsor" : "Exhibitor"} intake form closed.`);
+}
+
+export async function reviewIntakeSubmissionAction(
+  eventSlug: string,
+  submissionId: string,
+  decision: "accept" | "reject",
+): Promise<never> {
+  const { event, reviewerId } = await requireAuthorizedEventContext(eventSlug);
+  try {
+    if (decision === "accept") {
+      await acceptContactGroupIntakeSubmission(getDatabaseClient(), event.id, submissionId, reviewerId);
+    } else {
+      await rejectContactGroupIntakeSubmission(getDatabaseClient(), event.id, submissionId, reviewerId);
+    }
+  } catch (error) {
+    fail(event.slug, error);
+  }
+  return finish(event.slug, decision === "accept" ? "Intake submission accepted." : "Intake submission rejected.");
 }
