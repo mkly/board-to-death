@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { EventType, PrismaClient } from "../../generated/prisma/client.ts";
 import { EventRepository } from "../events/repositories.ts";
 import {
+  archiveContact,
   createContact,
   getDirectoryPersonProfile,
   linkDirectoryPersonToEvent,
@@ -116,5 +117,30 @@ describe("organization contact directory", () => {
     assert.equal(linked.personId, person.id);
     assert.equal(linked.givenName, "Event");
     assert.equal(linked.organization, "Event Org");
+  });
+
+  test("revives an archived event contact instead of stranding the person as already linked", async () => {
+    const event = await createEvent("directory-archived", "2027-07-01T16:00:00.000Z");
+    const contact = await createContact(client, {
+      eventId: event.id,
+      email: "archived@example.test",
+      givenName: "Archie",
+      familyName: "Ved",
+      organization: "Archive Co",
+    });
+    assert.ok(contact.personId);
+    await archiveContact(client, event.id, contact.id);
+
+    const [summary] = await searchDirectoryPeople(client, "Archive Co");
+    assert.deepEqual(summary?.linkedEventIds, []);
+    assert.deepEqual(await listContacts(client, event.id), []);
+
+    const revived = await linkDirectoryPersonToEvent(client, event.id, contact.personId);
+    assert.equal(revived.id, contact.id);
+    assert.equal(revived.archivedAt, null);
+    assert.deepEqual(
+      (await listContacts(client, event.id)).map(({ id }) => id),
+      [contact.id],
+    );
   });
 });

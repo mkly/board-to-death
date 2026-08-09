@@ -151,7 +151,7 @@ export async function searchDirectoryPeople(
               { organization: { contains: normalized, mode: "insensitive" } },
             ],
           },
-    include: { contacts: { select: { eventId: true } } },
+    include: { contacts: { where: { archivedAt: null }, select: { eventId: true } } },
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
     take: 50,
   });
@@ -162,6 +162,14 @@ export async function searchDirectoryPeople(
   }));
 }
 
+async function reviveContact(client: Prisma.TransactionClient, contactId: string, personId: string): Promise<Contact> {
+  try {
+    return await client.contact.update({ where: { id: contactId }, data: { personId, archivedAt: null } });
+  } catch (error) {
+    mapDatabaseError(error);
+  }
+}
+
 export async function linkDirectoryPersonToEvent(
   client: Prisma.TransactionClient,
   eventId: string,
@@ -170,17 +178,14 @@ export async function linkDirectoryPersonToEvent(
   const person = await client.person.findUnique({ where: { id: personId } });
   if (!person) throw new RepositoryError("not-found", "The directory person was not found.");
 
+  // An archived row still occupies this event's (eventId, personId) and (eventId, email) slots, so
+  // re-adding the person has to revive that row: listContacts hides archived contacts, and leaving it
+  // archived would report a successful link that never appears in the event.
   const linked = await client.contact.findUnique({ where: { eventId_personId: { eventId, personId } } });
-  if (linked) return linked;
+  if (linked) return linked.archivedAt === null ? linked : await reviveContact(client, linked.id, personId);
 
   const legacyContact = await client.contact.findUnique({ where: { eventId_email: { eventId, email: person.email } } });
-  if (legacyContact) {
-    try {
-      return await client.contact.update({ where: { id: legacyContact.id }, data: { personId } });
-    } catch (error) {
-      mapDatabaseError(error);
-    }
-  }
+  if (legacyContact) return await reviveContact(client, legacyContact.id, personId);
 
   try {
     return await client.contact.create({
