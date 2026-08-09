@@ -22,6 +22,13 @@ export async function createCfpFormDraft(eventSlug: string): Promise<never> {
       version: 1,
       title: "Untitled CFP",
       description: "Configure this form before publishing it to prospective speakers.",
+      submissionKind: "ABSTRACT",
+      accessPolicy: "OPEN",
+      welcomeTitle: "Submit your session",
+      welcomeContent: "Share your idea with our program team.",
+      instructions: "Complete each required field before submitting your proposal.",
+      termsContent: "",
+      consentRequired: false,
       sections: [
         {
           id: "proposal",

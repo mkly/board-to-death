@@ -40,6 +40,13 @@ function definition(title = "Board Game Design CFP"): CfpFormDefinition {
     version: 1,
     title,
     description: "Share a session about designing memorable tabletop games.",
+    submissionKind: "ABSTRACT",
+    accessPolicy: "RESTRICTED",
+    welcomeTitle: "Propose a board game design session",
+    welcomeContent: "Tell the program team how your session will help tabletop creators.",
+    instructions: "Include the audience level, format, and practical takeaways in your proposal.",
+    termsContent: "I agree that accepted sessions may be recorded and published.",
+    consentRequired: true,
     customQuestionTypes: ["game_complexity"],
     categories: [{ id: "design", label: "Game design" }],
     sections: [
