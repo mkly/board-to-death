@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 
 import { getDatabaseClient } from "@/server/database/client";
-import { loadSessionPreview, SpeakerMappingRepository } from "@/server/integrations";
+import { loadAcceleventsSyncHistory, loadSessionPreview, SpeakerMappingRepository } from "@/server/integrations";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 import { SessionMappingPreview } from "./_components/session-mapping-preview";
 import { SpeakerMappingWorkspace } from "./_components/speaker-mapping-workspace";
+import { SyncStatusWorkspace } from "./_components/sync-status-workspace";
 
 interface IntegrationsPageProps {
   readonly params: Promise<{ eventSlug: string }>;
@@ -19,9 +20,10 @@ export default async function IntegrationsPage({ params, searchParams }: Integra
   if (!event) notFound();
   const client = getDatabaseClient();
   const page = Number.parseInt(query.page ?? "1", 10);
-  const [speakerPreview, sessions] = await Promise.all([
+  const [speakerPreview, sessions, syncRuns] = await Promise.all([
     new SpeakerMappingRepository(client).previewOffline(event.id, page, 10),
     loadSessionPreview(client, event.id),
+    loadAcceleventsSyncHistory(client, event.id),
   ]);
 
   return (
@@ -41,6 +43,7 @@ export default async function IntegrationsPage({ params, searchParams }: Integra
         publishedVersion={sessions.publishedVersion}
         preview={sessions.preview}
       />
+      <SyncStatusWorkspace event={{ name: event.name, slug: event.slug }} runs={syncRuns} />
     </div>
   );
 }
