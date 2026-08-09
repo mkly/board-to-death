@@ -40,6 +40,16 @@ function definition(title = "Board Game Design CFP"): CfpFormDefinition {
     version: 1,
     title,
     description: "Share a session about designing memorable tabletop games.",
+    submissionKind: "ABSTRACT",
+    accessPolicy: "RESTRICTED",
+    welcomeTitle: "Propose a board game design session",
+    welcomeContent: "Tell the program team how your session will help tabletop creators.",
+    instructions: "Include the audience level, format, and practical takeaways in your proposal.",
+    termsContent: "I agree that accepted sessions may be recorded and published.",
+    consentRequired: true,
+    minimumSpeakerCount: 1,
+    maximumSpeakerCount: 4,
+    requiredSpeakerFields: ["biography", "contact", "consent"],
     customQuestionTypes: ["game_complexity"],
     categories: [{ id: "design", label: "Game design" }],
     sections: [
@@ -142,6 +152,61 @@ describe("CFP form persistence", () => {
     assert.equal((await forms.get(event.id, first.formId, 1))?.definition.title, "First");
   });
 
+  test("pins the exact saved definition at publication and keeps it through close and reopen", async () => {
+    const event = await events.create(eventInput);
+    const administrator = await administrators.create({
+      eventId: event.id,
+      externalId: "publisher@example.com",
+      displayName: "Publisher",
+    });
+    const first = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition("First") });
+    const previewed = await forms.createVersion(event.id, first.formId, definition("Previewed and published"));
+    const policy = await policies.create({
+      eventId: event.id,
+      key: first.key,
+      definition: {
+        submissionOpensAt: new Date("2027-01-01T08:00:00.000Z"),
+        submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+        messages: { introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" },
+        conditionalVisibility: [],
+        categoryRouting: [],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
+      },
+    });
+
+    await expectInvalid(
+      policies.transitionByForm(event.id, first.formId, CfpPolicyStatus.PUBLISHED, administrator.externalId),
+    );
+    assert.equal(await forms.getPublishedByPublicId(policy.publicId), null);
+
+    await policies.publishByForm(event.id, first.formId, previewed.versionNumber, administrator.externalId);
+    await forms.createVersion(event.id, first.formId, definition("Later draft"));
+
+    const reloadedForms = new CfpFormRepository(client);
+    const published = await reloadedForms.getPublishedByPublicId(policy.publicId);
+    assert.equal(published?.definition.title, "Previewed and published");
+    assert.equal(published?.versionNumber, previewed.versionNumber);
+    assert.equal(published?.status, CfpPolicyStatus.PUBLISHED);
+    assert.deepEqual(published?.definition, previewed.definition);
+
+    await policies.transitionByForm(event.id, first.formId, CfpPolicyStatus.CLOSED, administrator.externalId);
+    assert.equal((await reloadedForms.getPublishedByPublicId(policy.publicId))?.status, CfpPolicyStatus.CLOSED);
+    await policies.transitionByForm(event.id, first.formId, CfpPolicyStatus.PUBLISHED, administrator.externalId);
+    assert.equal(
+      (await reloadedForms.getPublishedByPublicId(policy.publicId))?.definition.title,
+      "Previewed and published",
+    );
+  });
+
   test("lists latest event-scoped form details with policy state, assignments, and responses", async () => {
     const event = await events.create(eventInput);
     const otherEvent = await events.create({ ...eventInput, name: "Other", slug: "other" });
@@ -167,7 +232,14 @@ describe("CFP form persistence", () => {
         },
         conditionalVisibility: [],
         categoryRouting: [],
-        adminAssignments: [{ administratorId: administrator.id, role: CfpAdminRole.OWNER }],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
       },
     });
     await submissions.createDraft({
@@ -190,12 +262,81 @@ describe("CFP form persistence", () => {
         key: "main-cfp",
         title: "Latest title",
         versionNumber: 2,
+        policyId: (
+          await client.cfpPolicy.findUniqueOrThrow({
+            where: { eventId_key: { eventId: event.id, key: "main-cfp" } },
+            select: { id: true },
+          })
+        ).id,
         status: CfpPolicyStatus.DRAFT,
         submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
         responseCount: 1,
         assignedAdministrators: ["Ada Lovelace"],
       },
     ]);
+  });
+
+  test("duplicates the latest definition and policy as a distinct draft without submissions", async () => {
+    const event = await events.create(eventInput);
+    const administrator = await administrators.create({
+      eventId: event.id,
+      externalId: "owner@example.com",
+      displayName: "Owner",
+    });
+    const source = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition("Original") });
+    const sourcePolicy = await policies.create({
+      eventId: event.id,
+      key: "main-cfp",
+      definition: {
+        submissionOpensAt: new Date("2027-01-01T08:00:00.000Z"),
+        submissionClosesAt: new Date("2027-02-01T08:00:00.000Z"),
+        draftPolicy: CfpDraftPolicy.ALLOWED,
+        submissionLimits: { maxSubmissionsPerSpeaker: 3, maxParticipantsPerSubmission: 4 },
+        messages: { introduction: "Welcome", submissionConfirmation: "Submitted", closed: "Closed" },
+        conditionalVisibility: [],
+        categoryRouting: [],
+        adminAssignments: [
+          {
+            administratorId: administrator.id,
+            role: CfpAdminRole.OWNER,
+            notifyOnNewSubmission: false,
+            notifyOnSubmissionUpdate: false,
+          },
+        ],
+      },
+    });
+    await policies.transition(event.id, sourcePolicy.id, CfpPolicyStatus.PUBLISHED, administrator.id);
+    await submissions.createDraft({
+      eventId: event.id,
+      formVersionId: (
+        await client.cfpFormVersion.findFirstOrThrow({ where: { formId: source.formId }, select: { id: true } })
+      ).id,
+      kind: CfpSubmissionKind.ABSTRACT,
+      answers: [],
+    });
+
+    const duplicate = await forms.duplicate(event.id, source.formId, "copied-cfp");
+    const duplicatePolicy = await client.cfpPolicy.findUniqueOrThrow({
+      where: { eventId_key: { eventId: event.id, key: "copied-cfp" } },
+      include: { versions: true },
+    });
+
+    assert.equal(duplicate.key, "copied-cfp");
+    assert.equal(duplicate.versionNumber, 1);
+    assert.equal(duplicate.definition.title, "Copy of Original");
+    assert.notEqual(duplicate.formId, source.formId);
+    assert.equal(duplicate.publicId, duplicatePolicy.publicId);
+    assert.notEqual(duplicate.publicId, sourcePolicy.publicId);
+    assert.equal(duplicatePolicy.status, CfpPolicyStatus.DRAFT);
+    assert.equal(duplicatePolicy.versions.length, 1);
+    assert.equal(await client.cfpSubmission.count({ where: { formVersion: { formId: duplicate.formId } } }), 0);
+    assert.equal(await client.cfpSubmission.count({ where: { formVersion: { formId: source.formId } } }), 1);
+
+    const otherEvent = await events.create({ ...eventInput, name: "Other", slug: "other" });
+    await assert.rejects(
+      forms.duplicate(otherEvent.id, source.formId, "stolen-copy"),
+      (error: unknown) => error instanceof RepositoryError && error.code === "not-found",
+    );
   });
 
   test("rejects malformed type-specific constraints before writing", async () => {

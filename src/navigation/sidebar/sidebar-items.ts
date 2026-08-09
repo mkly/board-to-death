@@ -78,7 +78,8 @@ export function dashboardWorkspaceTitle(workspace: DashboardWorkspace): string {
 }
 
 export function dashboardEventHref(eventSlug: string, workspace: DashboardWorkspace = "overview"): string {
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/${workspace}`;
+  const workspacePath = workspace === "communications" ? "communications/templates" : workspace;
+  return `/dashboard/events/${encodeURIComponent(eventSlug)}/${workspacePath}`;
 }
 
 export function getSidebarItems(eventSlug?: string): NavGroup[] {
@@ -86,13 +87,47 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
     {
       id: 1,
       label: "Program workspace",
-      items: workspaces.map(({ id, title, icon }) => ({
-        id,
-        title,
-        icon,
-        url: eventSlug ? dashboardEventHref(eventSlug, id) : "/dashboard",
-        disabled: !eventSlug,
-      })),
+      items: workspaces.map(({ id, title, icon }): NavMainItem => {
+        const url = eventSlug ? dashboardEventHref(eventSlug, id) : "/dashboard";
+        const disabled = !eventSlug;
+        if (id === "evaluations") {
+          return {
+            id,
+            title,
+            icon,
+            disabled,
+            subItems: [
+              { id: "evaluation-rubrics", title: "Rubrics", url, disabled },
+              {
+                id: "evaluation-assignments",
+                title: "Reviewer assignments",
+                url: eventSlug ? `${url}/assignments` : "/dashboard",
+                disabled,
+              },
+            ],
+          };
+        }
+
+        if (id === "publishing") {
+          return {
+            id,
+            title,
+            icon,
+            disabled,
+            subItems: [
+              { id: "publishing-overview", title: "Publishing", url, disabled },
+              {
+                id: "embed-builder",
+                title: "Embed builder",
+                url: eventSlug ? `${url}/embeds` : "/dashboard",
+                disabled,
+              },
+            ],
+          };
+        }
+
+        return { id, title, icon, url, disabled };
+      }),
     },
   ];
 }

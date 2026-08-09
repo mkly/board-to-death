@@ -1,4 +1,25 @@
 export type {
+  ExcludedRecipientAudienceMember,
+  RecipientAudienceMatch,
+  RecipientAudienceMember,
+  RecipientAudienceOptions,
+  RecipientAudiencePreview,
+  RecipientAudienceSelection,
+} from "./audiences.ts";
+export { RecipientAudienceRepository } from "./audiences.ts";
+export type {
+  BulkDelivery,
+  BulkDeliveryDispatcherOptions,
+  BulkDeliveryRecipient,
+  ConfirmBulkDeliveryInput,
+  ConfirmedBulkDelivery,
+} from "./bulk-dispatch.ts";
+export {
+  BulkCommunicationRepository,
+  BulkDeliveryDispatcher,
+  PrismaBulkDeliveryAuditRepository,
+} from "./bulk-dispatch.ts";
+export type {
   AttemptClaim,
   DeliverEmailInput,
   DeliveryAttemptAudit,
@@ -11,5 +32,13 @@ export type {
   MessageRecipientDeliveryStatus,
 } from "./delivery.ts";
 export { EmailDeliveryCoordinator, InMemoryDeliveryAuditRepository } from "./delivery.ts";
+export { PrismaDeliveryAuditRepository } from "./persistence.ts";
+export type {
+  SessionCalendarAttendee,
+  SessionCalendarEvent,
+  SessionCalendarInput,
+  SessionCalendarOrganizer,
+} from "./session-calendar.ts";
+export { attachSessionCalendar, createSessionCalendarAttachment } from "./session-calendar.ts";
 export type { CreateEmailTemplateInput, PersistedEmailTemplate } from "./templates.ts";
 export { EmailTemplateRepository } from "./templates.ts";

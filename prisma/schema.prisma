@@ -17,6 +17,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
+  cfpSubmissionViews CfpSubmissionView[]
 
   @@unique([email])
   @@map("user")
@@ -88,6 +89,11 @@ enum DeliveryFailureClass {
   PERMANENT
 }
 
+enum PublishedProgramState {
+  PUBLISHED
+  UNPUBLISHED
+}
+
 enum EventType {
   CONFERENCE
   MEETUP
@@ -98,6 +104,11 @@ enum EventType {
 enum CfpSubmissionKind {
   ABSTRACT
   GUARANTEED_SESSION
+}
+
+enum CfpAccessPolicy {
+  OPEN
+  RESTRICTED
 }
 
 enum CfpSubmissionStatus {
@@ -131,6 +142,13 @@ enum EvaluationRoundStatus {
   PLANNED
   OPEN
   CLOSED
+  ARCHIVED
+}
+
+enum ReviewerVisibility {
+  IDENTIFIED
+  BLIND
+  ANONYMIZED
 }
 
 enum EvaluationReviewerStatus {
@@ -188,40 +206,73 @@ enum ProgramSessionKind {
   PROMOTED
 }
 
+enum IntegrationProvider {
+  ACCELEVENTS
+}
+
+enum IntegrationRemoteRecordStatus {
+  ACTIVE
+  STALE
+}
+
+enum IntegrationSyncRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  PARTIALLY_FAILED
+  FAILED
+  CANCELLED
+}
+
+enum IntegrationSyncRecordStatus {
+  PENDING
+  SUCCEEDED
+  SKIPPED
+  VALIDATION_FAILED
+  RETRIABLE_FAILED
+  TERMINAL_FAILED
+}
+
 model Event {
-  id                  String             @id @default(uuid()) @db.Uuid
-  name                String
-  slug                String             @unique
-  type                EventType          @default(CONFERENCE)
-  websiteUrl          String?
-  location            String?
-  communicationTemplates CommunicationTemplate[]
-  messageDeliveries      MessageDelivery[]
-  timezone            String
-  startsAt            DateTime           @db.Timestamptz(3)
-  endsAt              DateTime           @db.Timestamptz(3)
-  theme               String?
-  exhibitorsEnabled   Boolean            @default(false)
-  sponsorsEnabled     Boolean            @default(false)
-  logoObjectKey       String?
-  backgroundObjectKey String?
-  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt           DateTime           @updatedAt @db.Timestamptz(3)
-  rooms               Room[]
-  tracks              Track[]
-  cfpForms            CfpForm[]
-  cfpCategories       CfpCategory[]
-  cfpSubmissions      CfpSubmission[]
-  evaluationPlans     EvaluationPlan[]
-  evaluationReviewers EvaluationReviewer[]
-  evaluationCommittees EvaluationCommittee[]
-  cfpPolicies         CfpPolicy[]
-  cfpAdministrators   CfpAdministrator[]
-  speakers            Speaker[]
-  speakerTaskDefinitions SpeakerTaskDefinition[]
-  speakerTaskAssignments SpeakerTaskAssignment[]
-  programSessions     ProgramSession[]
-  programSessionVersions ProgramSessionVersion[]
+  id                        String                     @id @default(uuid()) @db.Uuid
+  name                      String
+  slug                      String                     @unique
+  type                      EventType                  @default(CONFERENCE)
+  websiteUrl                String?
+  location                  String?
+  communicationTemplates    CommunicationTemplate[]
+  messageDeliveries         MessageDelivery[]
+  timezone                  String
+  startsAt                  DateTime                   @db.Timestamptz(3)
+  endsAt                    DateTime                   @db.Timestamptz(3)
+  theme                     String?
+  exhibitorsEnabled         Boolean                    @default(false)
+  sponsorsEnabled           Boolean                    @default(false)
+  logoObjectKey             String?
+  backgroundObjectKey       String?
+  createdAt                 DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime                   @updatedAt @db.Timestamptz(3)
+  rooms                     Room[]
+  tracks                    Track[]
+  cfpForms                  CfpForm[]
+  cfpCategories             CfpCategory[]
+  cfpSubmissions            CfpSubmission[]
+  cfpSubmissionViews        CfpSubmissionView[]
+  evaluationPlans           EvaluationPlan[]
+  evaluationReviewers       EvaluationReviewer[]
+  evaluationCommittees      EvaluationCommittee[]
+  cfpPolicies               CfpPolicy[]
+  cfpAdministrators         CfpAdministrator[]
+  speakers                  Speaker[]
+  speakerTaskDefinitions    SpeakerTaskDefinition[]
+  speakerTaskAssignments    SpeakerTaskAssignment[]
+  speakerTaskReminderRules  SpeakerTaskReminderRule[]
+  programSessions           ProgramSession[]
+  programSessionVersions    ProgramSessionVersion[]
+  integrationConfigurations IntegrationConfiguration[]
+  agendaPlacements          AgendaPlacement[]
+  publishedProgram          PublishedProgram?
+  speakerResourcePages      SpeakerResourcePage[]
 
   @@map("events")
 }
@@ -241,20 +292,31 @@ model CfpForm {
 }
 
 model CfpFormVersion {
-  id            String                  @id @default(uuid()) @db.Uuid
-  formId        String                  @db.Uuid
-  versionNumber Int
-  schemaVersion Int
-  title         String
-  description   String?
-  customTypes   Json
-  categories    Json?
-  categoryRules Json?
-  createdAt     DateTime                @default(now()) @db.Timestamptz(3)
-  form          CfpForm                 @relation(fields: [formId], references: [id], onDelete: Cascade)
-  steps         CfpFormStep[]
-  submissions   CfpSubmission[]
-  revisions     CfpSubmissionRevision[]
+  id              String                  @id @default(uuid()) @db.Uuid
+  formId          String                  @db.Uuid
+  versionNumber   Int
+  schemaVersion   Int
+  title           String
+  description     String?
+  submissionKind  CfpSubmissionKind?
+  accessPolicy    CfpAccessPolicy?
+  welcomeTitle    String?
+  welcomeContent  String?
+  instructions    String?
+  termsContent    String?
+  consentRequired Boolean?
+  minimumSpeakerCount Int?
+  maximumSpeakerCount Int?
+  requiredSpeakerFields Json?
+  customTypes     Json
+  categories      Json?
+  categoryRules   Json?
+  createdAt       DateTime                @default(now()) @db.Timestamptz(3)
+  form            CfpForm                 @relation(fields: [formId], references: [id], onDelete: Cascade)
+  steps           CfpFormStep[]
+  submissions     CfpSubmission[]
+  revisions       CfpSubmissionRevision[]
+  publishedByPolicies CfpPolicy[]
 
   @@unique([formId, versionNumber])
   @@index([formId])
@@ -302,15 +364,18 @@ model CfpPolicy {
   key         String
   publicId    String                @unique @default(uuid()) @db.Uuid
   status      CfpPolicyStatus       @default(DRAFT)
+  publishedFormVersionId String?     @db.Uuid
   createdAt   DateTime              @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime              @updatedAt @db.Timestamptz(3)
   event       Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
   versions    CfpPolicyVersion[]
   transitions CfpPolicyTransition[]
+  publishedFormVersion CfpFormVersion? @relation(fields: [publishedFormVersionId], references: [id], onDelete: SetNull)
 
   @@unique([eventId, key])
   @@unique([eventId, id])
   @@index([eventId, status])
+  @@index([publishedFormVersionId])
   @@map("cfp_policies")
 }
 
@@ -353,12 +418,14 @@ model CfpPolicyCategoryRoute {
 }
 
 model CfpPolicyAdminAssignment {
-  eventId         String           @db.Uuid
-  versionId       String           @db.Uuid
-  administratorId String           @db.Uuid
-  role            CfpAdminRole
-  version         CfpPolicyVersion @relation(fields: [eventId, versionId], references: [eventId, id], onDelete: Cascade)
-  administrator   CfpAdministrator @relation(fields: [eventId, administratorId], references: [eventId, id], onDelete: NoAction)
+  eventId                    String           @db.Uuid
+  versionId                  String           @db.Uuid
+  administratorId            String           @db.Uuid
+  role                       CfpAdminRole
+  notifyOnNewSubmission      Boolean          @default(false)
+  notifyOnSubmissionUpdate   Boolean          @default(false)
+  version                    CfpPolicyVersion @relation(fields: [eventId, versionId], references: [eventId, id], onDelete: Cascade)
+  administrator              CfpAdministrator @relation(fields: [eventId, administratorId], references: [eventId, id], onDelete: NoAction)
 
   @@id([versionId, administratorId])
   @@index([eventId, administratorId])
@@ -382,26 +449,26 @@ model CfpPolicyTransition {
 }
 
 model CfpSubmission {
-  id              String                    @id @default(uuid()) @db.Uuid
-  eventId         String                    @db.Uuid
-  formVersionId   String                    @db.Uuid
-  kind            CfpSubmissionKind
-  status          CfpSubmissionStatus       @default(DRAFT)
-  submittedAt     DateTime?                 @db.Timestamptz(3)
-  reviewStartedAt DateTime?                 @db.Timestamptz(3)
-  decidedAt       DateTime?                 @db.Timestamptz(3)
-  confirmedAt     DateTime?                 @db.Timestamptz(3)
-  createdAt       DateTime                  @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime                  @updatedAt @db.Timestamptz(3)
-  event           Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  formVersion     CfpFormVersion            @relation(fields: [formVersionId], references: [id], onDelete: Restrict)
-  revisions       CfpSubmissionRevision[]
-  categories      CfpSubmissionCategory[]
-  transitions     CfpSubmissionTransition[]
+  id                    String                     @id @default(uuid()) @db.Uuid
+  eventId               String                     @db.Uuid
+  formVersionId         String                     @db.Uuid
+  kind                  CfpSubmissionKind
+  status                CfpSubmissionStatus        @default(DRAFT)
+  submittedAt           DateTime?                  @db.Timestamptz(3)
+  reviewStartedAt       DateTime?                  @db.Timestamptz(3)
+  decidedAt             DateTime?                  @db.Timestamptz(3)
+  confirmedAt           DateTime?                  @db.Timestamptz(3)
+  createdAt             DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime                   @updatedAt @db.Timestamptz(3)
+  event                 Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  formVersion           CfpFormVersion             @relation(fields: [formVersionId], references: [id], onDelete: Restrict)
+  revisions             CfpSubmissionRevision[]
+  categories            CfpSubmissionCategory[]
+  transitions           CfpSubmissionTransition[]
   evaluationAssignments EvaluationAssignment[]
   evaluationDecisions   EvaluationDecision[]
-  participants    CfpSubmissionParticipant[]
-  promotedSession ProgramSession?              @relation("ProgramSessionSourceSubmission")
+  participants          CfpSubmissionParticipant[]
+  promotedSession       ProgramSession?            @relation("ProgramSessionSourceSubmission")
 
   @@unique([eventId, id])
   @@index([eventId, status])
@@ -409,19 +476,37 @@ model CfpSubmission {
   @@map("cfp_submissions")
 }
 
+model CfpSubmissionView {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @db.Uuid
+  userId    String
+  columns   Json
+  filters   Json
+  sorting   Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("cfp_submission_views")
+}
+
 model Speaker {
-  id              String                     @id @default(uuid()) @db.Uuid
-  eventId         String                     @db.Uuid
-  normalizedEmail String
-  createdAt       DateTime                   @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime                   @updatedAt @db.Timestamptz(3)
-  event           Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  profileVersions SpeakerProfileVersion[]
-  submissions     CfpSubmissionParticipant[]
-  taskAssignments SpeakerTaskAssignment[]
-  magicLinks      SpeakerMagicLink[]
-  sessions        SpeakerSession[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  eventId                    String                      @db.Uuid
+  normalizedEmail            String
+  createdAt                  DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime                    @updatedAt @db.Timestamptz(3)
+  event                      Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  profileVersions            SpeakerProfileVersion[]
+  submissions                CfpSubmissionParticipant[]
+  taskAssignments            SpeakerTaskAssignment[]
+  magicLinks                 SpeakerMagicLink[]
+  sessions                   SpeakerSession[]
   programSessionParticipants ProgramSessionParticipant[]
+  agendaPlacementSpeakers    AgendaPlacementSpeaker[]
 
   @@unique([eventId, normalizedEmail])
   @@unique([eventId, id])
@@ -460,6 +545,7 @@ model SpeakerTaskDefinition {
   id          String                         @id @default(uuid()) @db.Uuid
   eventId     String                         @db.Uuid
   key         String
+  archivedAt  DateTime?                      @db.Timestamptz(3)
   createdAt   DateTime                       @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime                       @updatedAt @db.Timestamptz(3)
   event       Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -468,7 +554,7 @@ model SpeakerTaskDefinition {
 
   @@unique([eventId, key])
   @@unique([eventId, id])
-  @@index([eventId])
+  @@index([eventId, archivedAt])
   @@map("speaker_task_definitions")
 }
 
@@ -495,29 +581,51 @@ model SpeakerTaskDefinitionVersion {
 }
 
 model SpeakerTaskAssignment {
-  id                  String                      @id @default(uuid()) @db.Uuid
-  eventId             String                      @db.Uuid
-  definitionId        String                      @db.Uuid
-  definitionVersionId String                      @db.Uuid
-  speakerId           String                      @db.Uuid
-  status              SpeakerTaskAssignmentStatus @default(PENDING)
-  assignedAt          DateTime                    @default(now()) @db.Timestamptz(3)
-  dueAt               DateTime?                   @db.Timestamptz(3)
-  submittedAt         DateTime?                   @db.Timestamptz(3)
-  completedAt         DateTime?                   @db.Timestamptz(3)
-  withdrawnAt         DateTime?                   @db.Timestamptz(3)
-  updatedAt           DateTime                    @updatedAt @db.Timestamptz(3)
-  event               Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  definition          SpeakerTaskDefinition       @relation(fields: [eventId, definitionId], references: [eventId, id], onDelete: Restrict)
-  definitionVersion   SpeakerTaskDefinitionVersion @relation(fields: [eventId, definitionId, definitionVersionId], references: [eventId, definitionId, id], onDelete: Restrict)
-  speaker             Speaker                     @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
+  id                  String                            @id @default(uuid()) @db.Uuid
+  eventId             String                            @db.Uuid
+  definitionId        String                            @db.Uuid
+  definitionVersionId String                            @db.Uuid
+  speakerId           String                            @db.Uuid
+  status              SpeakerTaskAssignmentStatus       @default(PENDING)
+  assignedAt          DateTime                          @default(now()) @db.Timestamptz(3)
+  dueAt               DateTime?                         @db.Timestamptz(3)
+  submittedAt         DateTime?                         @db.Timestamptz(3)
+  completedAt         DateTime?                         @db.Timestamptz(3)
+  withdrawnAt         DateTime?                         @db.Timestamptz(3)
+  remindersOptedOut   Boolean                           @default(false)
+  updatedAt           DateTime                          @updatedAt @db.Timestamptz(3)
+  event               Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  definition          SpeakerTaskDefinition             @relation(fields: [eventId, definitionId], references: [eventId, id], onDelete: Restrict)
+  definitionVersion   SpeakerTaskDefinitionVersion      @relation(fields: [eventId, definitionId, definitionVersionId], references: [eventId, definitionId, id], onDelete: Restrict)
+  speaker             Speaker                           @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: Restrict)
   submissions         SpeakerTaskSubmission[]
   transitions         SpeakerTaskAssignmentTransition[]
 
-  @@unique([definitionId, speakerId])
   @@unique([eventId, id])
+  @@index([definitionId, speakerId])
   @@index([eventId, speakerId, status])
   @@map("speaker_task_assignments")
+}
+
+model SpeakerTaskReminderRule {
+  id            String                @id @default(uuid()) @db.Uuid
+  eventId       String                @db.Uuid
+  templateId    String                @db.Uuid
+  name          String
+  daysBeforeDue Int
+  sendAtMinute  Int
+  enabledAt     DateTime?             @db.Timestamptz(3)
+  cancelledAt   DateTime?             @db.Timestamptz(3)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime              @updatedAt @db.Timestamptz(3)
+  event         Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template      CommunicationTemplate @relation(fields: [templateId, eventId], references: [id, eventId], onDelete: Restrict)
+
+  @@unique([eventId, name])
+  @@unique([eventId, id])
+  @@index([eventId, enabledAt, cancelledAt])
+  @@index([templateId])
+  @@map("speaker_task_reminder_rules")
 }
 
 model SpeakerTaskSubmission {
@@ -547,25 +655,25 @@ model SpeakerTaskAssignmentTransition {
 }
 
 model SpeakerProfileVersion {
-  id                      String   @id @default(uuid()) @db.Uuid
-  speakerId               String   @db.Uuid
+  id                      String    @id @default(uuid()) @db.Uuid
+  speakerId               String    @db.Uuid
   versionNumber           Int
   email                   String
   givenName               String
   familyName              String
   preferredName           String?
   pronouns                String?
-  phone                    String?
+  phone                   String?
   organization            String?
   jobTitle                String?
   biography               String?
   websiteUrl              String?
   photoObjectKey          String?
-  consentToPublishProfile Boolean  @default(false)
-  consentToReceiveEmail   Boolean  @default(false)
+  consentToPublishProfile Boolean   @default(false)
+  consentToReceiveEmail   Boolean   @default(false)
   consentedAt             DateTime? @db.Timestamptz(3)
-  createdAt               DateTime @default(now()) @db.Timestamptz(3)
-  speaker                 Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  speaker                 Speaker   @relation(fields: [speakerId], references: [id], onDelete: Cascade)
 
   @@unique([speakerId, versionNumber])
   @@index([speakerId])
@@ -597,6 +705,7 @@ model ProgramSession {
   event              Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sourceSubmission   CfpSubmission?          @relation("ProgramSessionSourceSubmission", fields: [eventId, sourceSubmissionId], references: [eventId, id], onDelete: NoAction)
   versions           ProgramSessionVersion[]
+  agendaPlacement    AgendaPlacement?
 
   @@unique([eventId, id])
   @@unique([eventId, sourceSubmissionId])
@@ -626,17 +735,134 @@ model ProgramSessionVersion {
 }
 
 model ProgramSessionParticipant {
-  eventId         String                @db.Uuid
-  sessionVersionId String               @db.Uuid
-  speakerId       String                @db.Uuid
-  sortOrder       Int
-  sessionVersion  ProgramSessionVersion @relation(fields: [eventId, sessionVersionId], references: [eventId, id], onDelete: Cascade)
-  speaker         Speaker               @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
+  eventId          String                @db.Uuid
+  sessionVersionId String                @db.Uuid
+  speakerId        String                @db.Uuid
+  sortOrder        Int
+  sessionVersion   ProgramSessionVersion @relation(fields: [eventId, sessionVersionId], references: [eventId, id], onDelete: Cascade)
+  speaker          Speaker               @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
 
   @@id([sessionVersionId, speakerId])
   @@unique([sessionVersionId, sortOrder])
   @@index([eventId, speakerId])
   @@map("program_session_participants")
+}
+
+model AgendaPlacement {
+  id        String                   @id @default(uuid()) @db.Uuid
+  eventId   String                   @db.Uuid
+  sessionId String                   @db.Uuid
+  roomId    String                   @db.Uuid
+  startsAt  DateTime                 @db.Timestamptz(3)
+  endsAt    DateTime                 @db.Timestamptz(3)
+  version   Int                      @default(1)
+  createdAt DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime                 @updatedAt @db.Timestamptz(3)
+  event     Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  session   ProgramSession           @relation(fields: [eventId, sessionId], references: [eventId, id], onDelete: Cascade)
+  room      Room                     @relation(fields: [eventId, roomId], references: [eventId, id], onDelete: NoAction)
+  tracks    AgendaPlacementTrack[]
+  speakers  AgendaPlacementSpeaker[]
+
+  @@unique([eventId, id])
+  @@unique([eventId, sessionId])
+  @@index([eventId, startsAt, endsAt])
+  @@index([eventId, roomId])
+  @@map("agenda_placements")
+}
+
+model AgendaPlacementTrack {
+  eventId     String          @db.Uuid
+  placementId String          @db.Uuid
+  trackId     String          @db.Uuid
+  sortOrder   Int
+  placement   AgendaPlacement @relation(fields: [eventId, placementId], references: [eventId, id], onDelete: Cascade)
+  track       Track           @relation(fields: [eventId, trackId], references: [eventId, id], onDelete: NoAction)
+
+  @@id([placementId, trackId])
+  @@unique([placementId, sortOrder])
+  @@index([eventId, trackId])
+  @@map("agenda_placement_tracks")
+}
+
+model AgendaPlacementSpeaker {
+  eventId     String          @db.Uuid
+  placementId String          @db.Uuid
+  speakerId   String          @db.Uuid
+  sortOrder   Int
+  placement   AgendaPlacement @relation(fields: [eventId, placementId], references: [eventId, id], onDelete: Cascade)
+  speaker     Speaker         @relation(fields: [eventId, speakerId], references: [eventId, id], onDelete: NoAction)
+
+  @@id([placementId, speakerId])
+  @@unique([placementId, sortOrder])
+  @@index([eventId, speakerId])
+  @@map("agenda_placement_speakers")
+}
+
+model PublishedProgram {
+  id        String                    @id @default(uuid()) @db.Uuid
+  eventId   String                    @unique @db.Uuid
+  createdAt DateTime                  @default(now()) @db.Timestamptz(3)
+  event     Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions  PublishedProgramVersion[]
+
+  @@unique([eventId, id])
+  @@map("published_programs")
+}
+
+model PublishedProgramVersion {
+  id                 String                @id @default(uuid()) @db.Uuid
+  eventId            String                @db.Uuid
+  publishedProgramId String                @db.Uuid
+  versionNumber      Int
+  state              PublishedProgramState
+  actorPrincipalId   String
+  snapshot           Json?
+  createdAt          DateTime              @default(now()) @db.Timestamptz(3)
+  publishedProgram   PublishedProgram      @relation(fields: [eventId, publishedProgramId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([publishedProgramId, versionNumber])
+  @@index([eventId, state, createdAt])
+  @@map("published_program_versions")
+}
+
+model SpeakerResourcePage {
+  id         String                       @id @default(uuid()) @db.Uuid
+  eventId    String                       @db.Uuid
+  key        String
+  archivedAt DateTime?                    @db.Timestamptz(3)
+  createdAt  DateTime                     @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime                     @updatedAt @db.Timestamptz(3)
+  event      Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions   SpeakerResourcePageVersion[]
+
+  @@unique([eventId, key])
+  @@unique([eventId, id])
+  @@index([eventId, archivedAt])
+  @@map("speaker_resource_pages")
+}
+
+model SpeakerResourcePageVersion {
+  id               String              @id @default(uuid()) @db.Uuid
+  eventId          String              @db.Uuid
+  pageId           String              @db.Uuid
+  versionNumber    Int
+  slug             String
+  title            String
+  summary          String?
+  bodyMarkdown     String
+  allowedEmbedUrls Json?
+  sortOrder        Int
+  publishedAt      DateTime?           @db.Timestamptz(3)
+  unpublishedAt    DateTime?           @db.Timestamptz(3)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  page             SpeakerResourcePage @relation(fields: [eventId, pageId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([pageId, versionNumber])
+  @@unique([eventId, id])
+  @@index([eventId, sortOrder])
+  @@index([eventId, publishedAt, unpublishedAt])
+  @@map("speaker_resource_page_versions")
 }
 
 model CfpSubmissionRevision {
@@ -737,29 +963,32 @@ model CfpFormQuestion {
 }
 
 model Room {
-  id        String   @id @default(uuid()) @db.Uuid
-  eventId   String   @db.Uuid
-  name      String
-  sortOrder Int
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id               String            @id @default(uuid()) @db.Uuid
+  eventId          String            @db.Uuid
+  name             String
+  sortOrder        Int
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  agendaPlacements AgendaPlacement[]
 
   @@unique([eventId, sortOrder])
+  @@unique([eventId, id])
   @@index([eventId])
   @@map("rooms")
 }
 
 model Track {
-  id        String   @id @default(uuid()) @db.Uuid
-  eventId   String   @db.Uuid
-  name      String
-  color     String
-  sortOrder Int
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  sessionVersions ProgramSessionVersion[]
+  id                    String                  @id @default(uuid()) @db.Uuid
+  eventId               String                  @db.Uuid
+  name                  String
+  color                 String
+  sortOrder             Int
+  createdAt             DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime                @updatedAt @db.Timestamptz(3)
+  event                 Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sessionVersions       ProgramSessionVersion[]
+  agendaPlacementTracks AgendaPlacementTrack[]
 
   @@unique([eventId, sortOrder])
   @@unique([eventId, id])
@@ -802,21 +1031,25 @@ model EvaluationPlanVersion {
 }
 
 model EvaluationRound {
-  id            String                @id @default(uuid()) @db.Uuid
-  planVersionId String                @db.Uuid
-  key           String
-  title         String
-  description   String?
-  sortOrder     Int
-  status        EvaluationRoundStatus @default(PLANNED)
-  opensAt       DateTime?             @db.Timestamptz(3)
-  closesAt      DateTime?             @db.Timestamptz(3)
-  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime              @updatedAt @db.Timestamptz(3)
-  planVersion   EvaluationPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
-  criteria      EvaluationCriterion[]
-  assignments   EvaluationAssignment[]
-  decisions     EvaluationDecision[]
+  id                 String                      @id @default(uuid()) @db.Uuid
+  planVersionId      String                      @db.Uuid
+  key                String
+  title              String
+  description        String?
+  sortOrder          Int
+  status             EvaluationRoundStatus       @default(PLANNED)
+  reviewerVisibility ReviewerVisibility          @default(BLIND)
+  visibilitySnapshot ReviewerVisibility?
+  opensAt            DateTime?                   @db.Timestamptz(3)
+  closesAt           DateTime?                   @db.Timestamptz(3)
+  archivedAt         DateTime?                   @db.Timestamptz(3)
+  createdAt          DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime                    @updatedAt @db.Timestamptz(3)
+  planVersion        EvaluationPlanVersion       @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  criteria           EvaluationCriterion[]
+  assignments        EvaluationAssignment[]
+  decisions          EvaluationDecision[]
+  transitions        EvaluationRoundTransition[]
 
   @@unique([planVersionId, key])
   @@unique([planVersionId, sortOrder])
@@ -824,19 +1057,32 @@ model EvaluationRound {
   @@map("evaluation_rounds")
 }
 
+model EvaluationRoundTransition {
+  id         String                 @id @default(uuid()) @db.Uuid
+  roundId    String                 @db.Uuid
+  fromStatus EvaluationRoundStatus?
+  toStatus   EvaluationRoundStatus
+  occurredAt DateTime               @default(now()) @db.Timestamptz(3)
+  round      EvaluationRound        @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, occurredAt])
+  @@map("evaluation_round_transitions")
+}
+
 model EvaluationCriterion {
-  id          String                  @id @default(uuid()) @db.Uuid
-  roundId     String                  @db.Uuid
+  id          String             @id @default(uuid()) @db.Uuid
+  roundId     String             @db.Uuid
   key         String
   label       String
   description String?
   sortOrder   Int
-  weight      Decimal                 @default(1) @db.Decimal(8, 4)
-  minimum     Decimal                 @db.Decimal(8, 4)
-  maximum     Decimal                 @db.Decimal(8, 4)
-  createdAt   DateTime                @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime                @updatedAt @db.Timestamptz(3)
-  round       EvaluationRound         @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  weight      Decimal            @default(1) @db.Decimal(8, 4)
+  minimum     Decimal            @db.Decimal(8, 4)
+  maximum     Decimal            @db.Decimal(8, 4)
+  required    Boolean            @default(true)
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+  round       EvaluationRound    @relation(fields: [roundId], references: [id], onDelete: Cascade)
   results     EvaluationResult[]
 
   @@unique([roundId, key])
@@ -846,15 +1092,15 @@ model EvaluationCriterion {
 }
 
 model EvaluationReviewer {
-  id          String                     @id @default(uuid()) @db.Uuid
-  eventId     String                     @db.Uuid
+  id          String                      @id @default(uuid()) @db.Uuid
+  eventId     String                      @db.Uuid
   identityId  String
   email       String
   displayName String
-  status      EvaluationReviewerStatus   @default(ACTIVE)
-  createdAt   DateTime                   @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime                   @updatedAt @db.Timestamptz(3)
-  event       Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  status      EvaluationReviewerStatus    @default(ACTIVE)
+  createdAt   DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                    @updatedAt @db.Timestamptz(3)
+  event       Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   memberships EvaluationCommitteeMember[]
   assignments EvaluationAssignment[]
 
@@ -865,14 +1111,14 @@ model EvaluationReviewer {
 }
 
 model EvaluationCommittee {
-  id          String                     @id @default(uuid()) @db.Uuid
-  eventId     String                     @db.Uuid
+  id          String                      @id @default(uuid()) @db.Uuid
+  eventId     String                      @db.Uuid
   key         String
   name        String
   description String?
-  createdAt   DateTime                   @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime                   @updatedAt @db.Timestamptz(3)
-  event       Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                    @updatedAt @db.Timestamptz(3)
+  event       Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members     EvaluationCommitteeMember[]
   assignments EvaluationAssignment[]
 
@@ -882,12 +1128,12 @@ model EvaluationCommittee {
 }
 
 model EvaluationCommitteeMember {
-  committeeId String                @db.Uuid
-  reviewerId  String                @db.Uuid
+  committeeId String              @db.Uuid
+  reviewerId  String              @db.Uuid
   role        String?
-  createdAt   DateTime              @default(now()) @db.Timestamptz(3)
-  committee   EvaluationCommittee   @relation(fields: [committeeId], references: [id], onDelete: Cascade)
-  reviewer    EvaluationReviewer    @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  committee   EvaluationCommittee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  reviewer    EvaluationReviewer  @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
 
   @@id([committeeId, reviewerId])
   @@index([reviewerId])
@@ -951,22 +1197,22 @@ model EvaluationResult {
 }
 
 model EvaluationDecision {
-  id                  String                    @id @default(uuid()) @db.Uuid
-  planVersionId       String                    @db.Uuid
-  roundId             String?                   @db.Uuid
-  submissionId        String                    @db.Uuid
-  decisionNumber      Int
-  outcome             EvaluationDecisionOutcome
-  supersedesDecisionId String?                  @unique @db.Uuid
-  decidedBy           String
-  rationale           String?
-  decidedAt           DateTime                  @default(now()) @db.Timestamptz(3)
-  createdAt           DateTime                  @default(now()) @db.Timestamptz(3)
-  planVersion         EvaluationPlanVersion     @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
-  round               EvaluationRound?          @relation(fields: [roundId], references: [id], onDelete: Restrict)
-  submission          CfpSubmission             @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  supersedes          EvaluationDecision?       @relation("DecisionHistory", fields: [supersedesDecisionId], references: [id], onDelete: Restrict)
-  supersededBy        EvaluationDecision?       @relation("DecisionHistory")
+  id                   String                    @id @default(uuid()) @db.Uuid
+  planVersionId        String                    @db.Uuid
+  roundId              String?                   @db.Uuid
+  submissionId         String                    @db.Uuid
+  decisionNumber       Int
+  outcome              EvaluationDecisionOutcome
+  supersedesDecisionId String?                   @unique @db.Uuid
+  decidedBy            String
+  rationale            String?
+  decidedAt            DateTime                  @default(now()) @db.Timestamptz(3)
+  createdAt            DateTime                  @default(now()) @db.Timestamptz(3)
+  planVersion          EvaluationPlanVersion     @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  round                EvaluationRound?          @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  submission           CfpSubmission             @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  supersedes           EvaluationDecision?       @relation("DecisionHistory", fields: [supersedesDecisionId], references: [id], onDelete: Restrict)
+  supersededBy         EvaluationDecision?       @relation("DecisionHistory")
 
   @@unique([submissionId, decisionNumber])
   @@index([planVersionId, outcome])
@@ -976,14 +1222,15 @@ model EvaluationDecision {
 }
 
 model CommunicationTemplate {
-  id        String                         @id @default(uuid()) @db.Uuid
-  eventId   String                         @db.Uuid
-  key       String
-  name      String
-  createdAt DateTime                       @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime                       @updatedAt @db.Timestamptz(3)
-  event     Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  versions  CommunicationTemplateVersion[]
+  id            String                         @id @default(uuid()) @db.Uuid
+  eventId       String                         @db.Uuid
+  key           String
+  name          String
+  createdAt     DateTime                       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                       @updatedAt @db.Timestamptz(3)
+  event         Event                          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions      CommunicationTemplateVersion[]
+  reminderRules SpeakerTaskReminderRule[]
 
   @@unique([id, eventId])
   @@unique([eventId, key])
@@ -1016,6 +1263,7 @@ model MessageDelivery {
   idempotencyKey    String
   occurrenceKey     String?
   scheduledFor      DateTime?                    @db.Timestamptz(3)
+  cancelledAt       DateTime?                    @db.Timestamptz(3)
   createdAt         DateTime                     @default(now()) @db.Timestamptz(3)
   event             Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   templateVersion   CommunicationTemplateVersion @relation(fields: [templateVersionId, eventId], references: [id, eventId])
@@ -1038,11 +1286,11 @@ model MessageRecipient {
   htmlSnapshot    String
   textSnapshot    String?
   status          MessageRecipientStatus @default(QUEUED)
-  nextAttemptAt   DateTime?               @db.Timestamptz(3)
-  deliveredAt     DateTime?               @db.Timestamptz(3)
-  terminalAt      DateTime?               @db.Timestamptz(3)
-  createdAt       DateTime                @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime                @updatedAt @db.Timestamptz(3)
+  nextAttemptAt   DateTime?              @db.Timestamptz(3)
+  deliveredAt     DateTime?              @db.Timestamptz(3)
+  terminalAt      DateTime?              @db.Timestamptz(3)
+  createdAt       DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime               @updatedAt @db.Timestamptz(3)
   delivery        MessageDelivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
   attempts        DeliveryAttempt[]
 
@@ -1053,8 +1301,8 @@ model MessageRecipient {
 }
 
 model DeliveryAttempt {
-  id                String                 @id @default(uuid()) @db.Uuid
-  recipientId       String                 @db.Uuid
+  id                String                @id @default(uuid()) @db.Uuid
+  recipientId       String                @db.Uuid
   attemptNumber     Int
   provider          String
   providerMessageId String?
@@ -1062,13 +1310,170 @@ model DeliveryAttempt {
   failureClass      DeliveryFailureClass?
   failureCode       String?
   failureMessage    String?
-  startedAt         DateTime               @default(now()) @db.Timestamptz(3)
-  completedAt       DateTime?              @db.Timestamptz(3)
-  createdAt         DateTime               @default(now()) @db.Timestamptz(3)
-  recipient         MessageRecipient       @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  startedAt         DateTime              @default(now()) @db.Timestamptz(3)
+  completedAt       DateTime?             @db.Timestamptz(3)
+  createdAt         DateTime              @default(now()) @db.Timestamptz(3)
+  recipient         MessageRecipient      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@unique([recipientId, attemptNumber])
   @@unique([provider, providerMessageId])
   @@index([recipientId, status])
   @@map("delivery_attempts")
+}
+
+model IntegrationConfiguration {
+  id            String                            @id @default(uuid()) @db.Uuid
+  eventId       String                            @db.Uuid
+  provider      IntegrationProvider
+  createdAt     DateTime                          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                          @updatedAt @db.Timestamptz(3)
+  event         Event                             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  versions      IntegrationConfigurationVersion[]
+  fieldMappings IntegrationFieldMapping[]
+  remoteRecords IntegrationRemoteRecord[]
+  syncRuns      IntegrationSyncRun[]
+
+  @@unique([eventId, provider])
+  @@unique([eventId, id])
+  @@map("integration_configurations")
+}
+
+model IntegrationConfigurationVersion {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  eventId             String                   @db.Uuid
+  configurationId     String                   @db.Uuid
+  versionNumber       Int
+  remoteEventId       String
+  credentialReference String
+  settings            Json
+  createdAt           DateTime                 @default(now()) @db.Timestamptz(3)
+  configuration       IntegrationConfiguration @relation(fields: [eventId, configurationId], references: [eventId, id], onDelete: Cascade)
+  syncRuns            IntegrationSyncRun[]
+
+  @@unique([configurationId, versionNumber])
+  @@unique([eventId, configurationId, id])
+  @@index([eventId, configurationId])
+  @@map("integration_configuration_versions")
+}
+
+model IntegrationFieldMapping {
+  id              String                           @id @default(uuid()) @db.Uuid
+  eventId         String                           @db.Uuid
+  configurationId String                           @db.Uuid
+  resourceType    String
+  key             String
+  createdAt       DateTime                         @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                         @updatedAt @db.Timestamptz(3)
+  configuration   IntegrationConfiguration         @relation(fields: [eventId, configurationId], references: [eventId, id], onDelete: Cascade)
+  versions        IntegrationFieldMappingVersion[]
+
+  @@unique([configurationId, resourceType, key])
+  @@unique([eventId, configurationId, id])
+  @@index([eventId, configurationId])
+  @@map("integration_field_mappings")
+}
+
+model IntegrationFieldMappingVersion {
+  id              String                    @id @default(uuid()) @db.Uuid
+  eventId         String                    @db.Uuid
+  configurationId String                    @db.Uuid
+  mappingId       String                    @db.Uuid
+  versionNumber   Int
+  definition      Json
+  createdAt       DateTime                  @default(now()) @db.Timestamptz(3)
+  mapping         IntegrationFieldMapping   @relation(fields: [eventId, configurationId, mappingId], references: [eventId, configurationId, id], onDelete: Cascade)
+  remoteRecords   IntegrationRemoteRecord[]
+  syncRuns        IntegrationSyncRun[]
+
+  @@unique([mappingId, versionNumber])
+  @@unique([eventId, configurationId, id])
+  @@index([eventId, configurationId, mappingId])
+  @@map("integration_field_mapping_versions")
+}
+
+model IntegrationRemoteRecord {
+  id               String                          @id @default(uuid()) @db.Uuid
+  eventId          String                          @db.Uuid
+  configurationId  String                          @db.Uuid
+  mappingVersionId String?                         @db.Uuid
+  resourceType     String
+  localId          String
+  remoteId         String
+  status           IntegrationRemoteRecordStatus   @default(ACTIVE)
+  comparisonHash   String?
+  lastSyncedAt     DateTime?                       @db.Timestamptz(3)
+  staleAt          DateTime?                       @db.Timestamptz(3)
+  createdAt        DateTime                        @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime                        @updatedAt @db.Timestamptz(3)
+  configuration    IntegrationConfiguration        @relation(fields: [eventId, configurationId], references: [eventId, id], onDelete: Cascade)
+  mappingVersion   IntegrationFieldMappingVersion? @relation(fields: [eventId, configurationId, mappingVersionId], references: [eventId, configurationId, id], onDelete: Restrict)
+  syncRecords      IntegrationSyncRecord[]
+
+  @@unique([configurationId, resourceType, localId])
+  @@unique([configurationId, resourceType, remoteId])
+  @@unique([eventId, configurationId, id])
+  @@index([eventId, status])
+  @@index([mappingVersionId])
+  @@map("integration_remote_records")
+}
+
+model IntegrationSyncRun {
+  id                     String                          @id @default(uuid()) @db.Uuid
+  eventId                String                          @db.Uuid
+  configurationId        String                          @db.Uuid
+  configurationVersionId String                          @db.Uuid
+  mappingVersionId       String                          @db.Uuid
+  retryOfRunId           String?                         @db.Uuid
+  idempotencyKey         String
+  status                 IntegrationSyncRunStatus        @default(PENDING)
+  startedAt              DateTime?                       @db.Timestamptz(3)
+  completedAt            DateTime?                       @db.Timestamptz(3)
+  cancelRequestedAt      DateTime?                       @db.Timestamptz(3)
+  createdAt              DateTime                        @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime                        @updatedAt @db.Timestamptz(3)
+  configuration          IntegrationConfiguration        @relation(fields: [eventId, configurationId], references: [eventId, id], onDelete: Cascade)
+  configurationVersion   IntegrationConfigurationVersion @relation(fields: [eventId, configurationId, configurationVersionId], references: [eventId, configurationId, id], onDelete: Restrict)
+  mappingVersion         IntegrationFieldMappingVersion  @relation(fields: [eventId, configurationId, mappingVersionId], references: [eventId, configurationId, id], onDelete: Restrict)
+  retryOfRun             IntegrationSyncRun?             @relation("IntegrationSyncRunRetries", fields: [eventId, configurationId, retryOfRunId], references: [eventId, configurationId, id], onDelete: Restrict)
+  retries                IntegrationSyncRun[]            @relation("IntegrationSyncRunRetries")
+  records                IntegrationSyncRecord[]
+
+  @@unique([configurationId, idempotencyKey])
+  @@unique([eventId, configurationId, id])
+  @@index([eventId, status, createdAt])
+  @@index([retryOfRunId])
+  @@map("integration_sync_runs")
+}
+
+model IntegrationSyncRecord {
+  id                     String                      @id @default(uuid()) @db.Uuid
+  eventId                String                      @db.Uuid
+  configurationId        String                      @db.Uuid
+  runId                  String                      @db.Uuid
+  remoteRecordId         String?                     @db.Uuid
+  retryOfRecordId        String?                     @db.Uuid
+  resourceType           String
+  localId                String
+  remoteId               String?
+  inputHash              String
+  attemptNumber          Int                         @default(1)
+  status                 IntegrationSyncRecordStatus @default(PENDING)
+  errorCode              String?
+  redactedRequestContext Json
+  retryAfter             DateTime?                   @db.Timestamptz(3)
+  startedAt              DateTime                    @default(now()) @db.Timestamptz(3)
+  completedAt            DateTime?                   @db.Timestamptz(3)
+  createdAt              DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime                    @updatedAt @db.Timestamptz(3)
+  run                    IntegrationSyncRun          @relation(fields: [eventId, configurationId, runId], references: [eventId, configurationId, id], onDelete: Cascade)
+  remoteRecord           IntegrationRemoteRecord?    @relation(fields: [eventId, configurationId, remoteRecordId], references: [eventId, configurationId, id], onDelete: Restrict)
+  retryOfRecord          IntegrationSyncRecord?      @relation("IntegrationSyncRecordRetries", fields: [eventId, configurationId, retryOfRecordId], references: [eventId, configurationId, id], onDelete: Restrict)
+  retry                  IntegrationSyncRecord?      @relation("IntegrationSyncRecordRetries")
+
+  @@unique([runId, resourceType, localId])
+  @@unique([eventId, configurationId, retryOfRecordId])
+  @@unique([eventId, configurationId, id])
+  @@index([eventId, status, retryAfter])
+  @@index([remoteRecordId])
+  @@map("integration_sync_records")
 }

@@ -136,7 +136,19 @@ npm run db:deploy                  # apply committed migrations without generati
 npm run db:status                  # compare committed and applied migration history
 npm run db:test:reset              # destructively reset only the guarded *_test database
 npm run db:test:smoke              # rebuild the test schema and verify every migration
+npm run db:seed                    # replace the deterministic representative demo event
 ```
+
+`npm run db:seed` replaces only the event whose slug is `board-to-death-demo`; running it repeatedly produces the
+same stable IDs and does not duplicate records. The fixture includes a CFP form and accepted submission, speaker and
+session, onboarding assignment, evaluation plan and reviewer, agenda placement, and a completed Accelevents-style
+speaker resource sync.
+
+The fixture labels its actors as `demo-admin` and `demo-reviewer` and uses `ada@example.test` and
+`reviewer@example.test`. These are data labels, not login accounts, and the seed creates no passwords or authentication
+sessions. Its integration configuration points to `local://adapters/accelevents/board-to-death-demo`; this is a
+deterministic local adapter reference, not a production credential. The stored sync request context is redacted and
+the adapter's in-memory state starts fresh with each application process.
 
 Prisma records applied migrations in `_prisma_migrations`. Commit `prisma/schema.prisma` and every generated migration
 directory together. `db:migrate` is for development only; deployments use `db:deploy`.
@@ -146,6 +158,11 @@ required compensating SQL, apply it with `prisma db execute`, and mark the faile
 `prisma migrate resolve --rolled-back MIGRATION_NAME` before redeploying. Do not edit or mark a successfully applied
 migration as rolled back; revert the Prisma schema and create a new forward migration instead.
 
+### Production operations
+
+See [Production operations](docs/operations.md) for runtime configuration, mounted secrets, migration and startup
+commands, health checks, graceful shutdown, persistent storage, backup, and recovery guidance.
+
 ### Formatting and Linting
 
 Format, lint, and organize imports
@@ -153,6 +170,19 @@ Format, lint, and organize imports
 npx @biomejs/biome check --write
 ```
 > For more information on available rules, fixes, and CLI options, refer to the [Biome documentation](https://biomejs.dev/).
+
+### Browser tests
+
+Reset the guarded test database, then run the Playwright suite:
+
+```bash
+npm run db:test:reset
+npm run test:browser
+```
+
+Playwright starts the Next.js development server on `127.0.0.1:3100` by default, so the browser suite does not need a
+production build or production-only runtime secrets. Set `PLAYWRIGHT_WEB_SERVER_COMMAND` to use another server command,
+or `PLAYWRIGHT_BASE_URL` to test an already running application at another URL.
 
 ---
 

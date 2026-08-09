@@ -7,7 +7,7 @@ import {
   type EventResourceKind,
   eventRoles,
   requireAuthenticatedPrincipal,
-} from "./policy";
+} from "./policy.ts";
 
 export type PrincipalProvider = () => Promise<AuthenticatedPrincipal | null>;
 

@@ -42,6 +42,7 @@ export function parseCfpDefinition(input: unknown): CfpParseResult {
   errors.push(...findUnknownQuestionTypeErrors(definition));
   errors.push(...findMissingRuleTargetErrors(definition));
   errors.push(...findImpossibleConstraintErrors(definition));
+  errors.push(...findSpeakerRequirementErrors(definition));
   errors.push(...findQuestionTypeConstraintErrors(definition));
   errors.push(...findVisibilityRuleErrors(definition));
 
@@ -49,6 +50,41 @@ export function parseCfpDefinition(input: unknown): CfpParseResult {
     return { ok: false, definition: null, errors };
   }
   return { ok: true, definition, errors: [] };
+}
+
+function findSpeakerRequirementErrors(definition: CfpFormDefinition): CfpParseError[] {
+  const errors: CfpParseError[] = [];
+  const minimum = definition.minimumSpeakerCount;
+  const maximum = definition.maximumSpeakerCount;
+
+  if ((minimum === undefined) !== (maximum === undefined)) {
+    errors.push(
+      cfpError(
+        "impossible_rule",
+        minimum === undefined ? "minimumSpeakerCount" : "maximumSpeakerCount",
+        "Minimum and maximum speaker counts must be configured together",
+      ),
+    );
+  }
+
+  if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+    errors.push(
+      cfpError(
+        "impossible_rule",
+        "minimumSpeakerCount",
+        `Minimum speaker count (${minimum}) cannot exceed maximum speaker count (${maximum})`,
+      ),
+    );
+  }
+
+  const requiredFields = definition.requiredSpeakerFields ?? [];
+  if (new Set(requiredFields).size !== requiredFields.length) {
+    errors.push(
+      cfpError("impossible_rule", "requiredSpeakerFields", "Required speaker fields cannot contain duplicates"),
+    );
+  }
+
+  return errors;
 }
 
 function findQuestionTypeConstraintErrors(definition: CfpFormDefinition): CfpParseError[] {

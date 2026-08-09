@@ -13,6 +13,7 @@ const productionEnvironment = {
   BETTER_AUTH_SECRET: "a-production-better-auth-secret-with-enough-entropy",
   BETTER_AUTH_URL: "https://events.example.com",
   DATABASE_URL: "postgresql://app:password@database.example.com:5432/board_to_death",
+  FILE_STORAGE_PATH: "/var/lib/board-to-death/files",
   NEXT_PUBLIC_APP_URL: "https://events.example.com",
   NODE_ENV: "production",
 } as const;
@@ -28,8 +29,11 @@ const productionProcessEnvironment = Object.fromEntries(
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "DATABASE_URL",
+        "FILE_STORAGE_PATH",
         "NEXT_PUBLIC_APP_URL",
         "NEXT_RUNTIME",
+        "RESEND_API_KEY",
+        "RESEND_FROM_EMAIL",
       ].includes(key),
   ),
 );
@@ -67,7 +71,7 @@ test("production requires every configured server and public value", () => {
         "BETTER_AUTH_SECRET is required when NODE_ENV=production",
         "BETTER_AUTH_URL is required when NODE_ENV=production",
         "AUTH_ALLOWED_EMAILS is required when NODE_ENV=production",
-        "AUTH_MAGIC_LINK_WEBHOOK_URL is required when NODE_ENV=production",
+        "FILE_STORAGE_PATH is required when NODE_ENV=production",
         "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
       ]);
       return true;
@@ -149,6 +153,122 @@ test("malformed URLs produce keyed runtime configuration errors in every mode", 
   }
 });
 
+test("production requires an absolute persistent file-storage path", () => {
+  assert.throws(
+    () => parseServerRuntimeConfig({ ...productionEnvironment, FILE_STORAGE_PATH: "./ephemeral-files" }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, ["FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production"]);
+      assert.doesNotMatch(error.message, /ephemeral-files/);
+      return true;
+    },
+  );
+});
+
+test("production accepts complete Resend delivery configuration and rejects partial configuration", () => {
+  const resendEnvironment = {
+    ...productionEnvironment,
+    AUTH_MAGIC_LINK_WEBHOOK_TOKEN: undefined,
+    AUTH_MAGIC_LINK_WEBHOOK_URL: undefined,
+    RESEND_API_KEY: "re_test_key",
+    RESEND_FROM_EMAIL: "noreply@updates.example.com",
+  };
+
+  const config = parseServerRuntimeConfig(resendEnvironment);
+  assert.equal(config.RESEND_API_KEY, "re_test_key");
+  assert.equal(config.RESEND_FROM_EMAIL, "noreply@updates.example.com");
+
+  assert.throws(
+    () =>
+      parseServerRuntimeConfig({
+        ...productionEnvironment,
+        AUTH_MAGIC_LINK_WEBHOOK_TOKEN: undefined,
+        AUTH_MAGIC_LINK_WEBHOOK_URL: undefined,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, [
+        "AUTH_MAGIC_LINK_WEBHOOK_URL or both RESEND_API_KEY and RESEND_FROM_EMAIL are required when NODE_ENV=production",
+      ]);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => parseServerRuntimeConfig({ ...resendEnvironment, RESEND_FROM_EMAIL: undefined }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, ["RESEND_FROM_EMAIL is required when Resend delivery is configured"]);
+      return true;
+    },
+  );
+});
+
+const vercelEnvironment = {
+  AUTH_ALLOWED_EMAILS: productionEnvironment.AUTH_ALLOWED_EMAILS,
+  AUTH_MAGIC_LINK_WEBHOOK_URL: productionEnvironment.AUTH_MAGIC_LINK_WEBHOOK_URL,
+  AUTH_SECRET: productionEnvironment.AUTH_SECRET,
+  BETTER_AUTH_SECRET: productionEnvironment.BETTER_AUTH_SECRET,
+  DATABASE_URL: productionEnvironment.DATABASE_URL,
+  NODE_ENV: "production",
+  VERCEL: "1",
+} as const;
+
+test("a Vercel production deployment resolves its origin and storage without extra configuration", () => {
+  const config = parseRuntimeConfig({
+    ...vercelEnvironment,
+    VERCEL_ENV: "production",
+    VERCEL_PROJECT_PRODUCTION_URL: "events.example.com",
+    VERCEL_URL: "board-to-death-abc123.vercel.app",
+  });
+
+  assert.equal(config.server.BETTER_AUTH_URL, "https://events.example.com");
+  assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://events.example.com");
+  assert.equal(config.server.FILE_STORAGE_PATH, "/tmp/board-to-death/files");
+});
+
+test("a Vercel preview deployment resolves its own per-deployment origin", () => {
+  const config = parseRuntimeConfig({
+    ...vercelEnvironment,
+    VERCEL_ENV: "preview",
+    VERCEL_PROJECT_PRODUCTION_URL: "events.example.com",
+    VERCEL_URL: "board-to-death-abc123.vercel.app",
+  });
+
+  assert.equal(config.server.BETTER_AUTH_URL, "https://board-to-death-abc123.vercel.app");
+  assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://board-to-death-abc123.vercel.app");
+});
+
+test("explicit configuration still wins over the Vercel-derived defaults", () => {
+  const config = parseRuntimeConfig({
+    ...vercelEnvironment,
+    BETTER_AUTH_URL: "https://custom.example.com",
+    FILE_STORAGE_PATH: "/mnt/files",
+    NEXT_PUBLIC_APP_URL: "https://custom.example.com",
+    VERCEL_ENV: "production",
+    VERCEL_PROJECT_PRODUCTION_URL: "events.example.com",
+  });
+
+  assert.equal(config.server.BETTER_AUTH_URL, "https://custom.example.com");
+  assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://custom.example.com");
+  assert.equal(config.server.FILE_STORAGE_PATH, "/mnt/files");
+});
+
+test("the Vercel defaults do not apply off Vercel", () => {
+  assert.throws(
+    () => parseRuntimeConfig({ ...vercelEnvironment, VERCEL: undefined }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, [
+        "BETTER_AUTH_URL is required when NODE_ENV=production",
+        "FILE_STORAGE_PATH is required when NODE_ENV=production",
+        "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
+      ]);
+      return true;
+    },
+  );
+});
+
 test("the public parser returns only its explicit allowlist", () => {
   const publicConfig = parsePublicRuntimeConfig(productionEnvironment);
 
@@ -159,6 +279,7 @@ test("the public parser returns only its explicit allowlist", () => {
   assert.equal("BETTER_AUTH_SECRET" in publicConfig, false);
   assert.equal("AUTH_ALLOWED_EMAILS" in publicConfig, false);
   assert.equal("DATABASE_URL" in publicConfig, false);
+  assert.equal("FILE_STORAGE_PATH" in publicConfig, false);
 });
 
 test("a generic production build falls back when NEXT_PUBLIC_APP_URL is unset", () => {
@@ -207,6 +328,7 @@ test("instrumentation exits production startup with key-only runtime configurati
     BETTER_AUTH_SECRET: productionEnvironment.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: productionEnvironment.BETTER_AUTH_URL,
     DATABASE_URL: databaseUrl,
+    FILE_STORAGE_PATH: productionEnvironment.FILE_STORAGE_PATH,
     NEXT_PUBLIC_APP_URL: productionEnvironment.NEXT_PUBLIC_APP_URL,
     NEXT_RUNTIME: "nodejs",
     NODE_ENV: "production",
@@ -237,6 +359,7 @@ test("the client entry point never references server-only keys", async () => {
   const publicModule = await readFile(new URL("./public-env.ts", import.meta.url), "utf8");
 
   assert.doesNotMatch(clientModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
-  assert.doesNotMatch(publicModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL/);
+  assert.doesNotMatch(clientModule, /FILE_STORAGE_PATH/);
+  assert.doesNotMatch(publicModule, /AUTH_SECRET|BETTER_AUTH|AUTH_ALLOWED|AUTH_MAGIC|DATABASE_URL|FILE_STORAGE_PATH/);
   assert.match(clientModule, /process\.env\.NEXT_PUBLIC_APP_URL/);
 });

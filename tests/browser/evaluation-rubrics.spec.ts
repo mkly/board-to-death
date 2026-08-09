@@ -9,6 +9,11 @@ const testDatabaseUrl =
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 const database = new Pool({ connectionString: testDatabaseUrl });
 
+// Signing in and rendering a dashboard route compiles on demand under the dev
+// web server, which does not fit Playwright's 30s default (agenda.spec.ts already
+// raises it for the same reason).
+test.setTimeout(120_000);
+
 test.afterAll(async () => {
   await database.end();
 });
@@ -66,7 +71,7 @@ test("creates, edits, reorders, locks, and reloads an event-scoped rubric", asyn
     ]);
 
     await page.goto(`/dashboard/events/${event.slug}/evaluations`);
-    await expect(page.getByRole("heading", { name: "Evaluation rubrics" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
     await page.getByRole("button", { name: "Add default rubric" }).click();
     await expect(page.getByText("Default 1-to-5 rubric added.")).toBeVisible();
     await expect(page.getByLabel("Label").nth(0)).toHaveValue("Relevance");

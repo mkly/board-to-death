@@ -12,6 +12,8 @@ const eventSlug = `question-editor-conference-${randomUUID().slice(0, 8)}`;
 const formId = randomUUID();
 const database = new Client({ connectionString: databaseUrl });
 
+test.setTimeout(120_000);
+
 test.beforeAll(async () => {
   await database.connect();
   const versionId = randomUUID();
@@ -102,8 +104,10 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await page.goto(`/dashboard/events/${eventSlug}/cfp/forms/${formId}/setup`);
 
   await expect(page.getByRole("heading", { name: "Board Game Design CFP" })).toBeVisible();
+  await page.getByLabel("Form name").fill("Updated Board Game Design CFP");
+  await page.getByRole("button", { name: "Save and continue" }).click();
   await expect(page.getByRole("heading", { name: "Questions" })).toBeVisible();
-  await expect(page.getByText("Version 1")).toBeVisible();
+  await expect(page.getByText("Version 2", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Add question" }).click();
   await expect(page.getByText("Review the question definition")).toBeVisible();
@@ -138,11 +142,13 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await page.getByRole("button", { name: "Remove question" }).click();
 
   await page.getByRole("button", { name: "Save questions" }).click();
-  await expect(page.getByText("Questions saved as version 2.").first()).toBeVisible();
-  await expect(page.getByText("Version 2")).toBeVisible();
+  await expect(page.getByText("Questions saved as version 3.").first()).toBeVisible();
+  await expect(page.getByText("Version 3", { exact: true })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText("Version 2")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Updated Board Game Design CFP" })).toBeVisible();
+  await page.getByRole("tab", { name: "Questions" }).click();
+  await expect(page.getByText("Version 3", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Label").first()).toHaveValue("Audience experience");
   await expect(page.getByLabel("Label").nth(1)).toHaveValue("Format");
   await expect(page.getByLabel("Custom type identifier")).toHaveValue("audience_scale");
@@ -154,18 +160,24 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
     key: string;
     required: boolean;
     sortOrder: number;
+    title: string;
     type: string;
     versionNumber: number;
   }>(
-    `SELECT v."versionNumber", v."customTypes", q."key", q."type", q."required", q."sortOrder"
+    `SELECT v."versionNumber", v."title", v."customTypes", q."key", q."type", q."required", q."sortOrder"
        FROM "cfp_form_versions" v
        JOIN "cfp_form_steps" s ON s."versionId" = v."id"
        JOIN "cfp_form_questions" q ON q."stepId" = s."id"
-      WHERE v."formId" = $1 AND v."versionNumber" = 2
+      WHERE v."formId" = $1 AND v."versionNumber" = 3
       ORDER BY q."sortOrder"`,
     [formId],
   );
   expect(persisted.rows.map(({ key }) => key)).toEqual(["audience-experience", "format"]);
-  expect(persisted.rows[0]).toMatchObject({ type: "audience_scale", required: true, versionNumber: 2 });
+  expect(persisted.rows[0]).toMatchObject({
+    type: "audience_scale",
+    required: true,
+    title: "Updated Board Game Design CFP",
+    versionNumber: 3,
+  });
   expect(persisted.rows[0]?.customTypes).toContain("audience_scale");
 });

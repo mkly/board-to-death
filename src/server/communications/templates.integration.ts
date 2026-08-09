@@ -6,7 +6,7 @@ import type { RepositoryError } from "../events/repositories.ts";
 import { EmailTemplateRepository } from "./templates.ts";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://invalid:invalid@localhost:5432/invalid";
-const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
+const describeWithDatabase = databaseUrl.includes("_test") ? describe : describe.skip;
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const templates = new EmailTemplateRepository(client);
@@ -34,6 +34,10 @@ const definition = {
 
 describeWithDatabase("EmailTemplateRepository", () => {
   beforeAll(async () => {
+    if (!databaseUrl.includes("_test")) {
+      throw new Error("Email template integration tests require a guarded *_test DATABASE_URL");
+    }
+
     await client.$connect();
   });
 

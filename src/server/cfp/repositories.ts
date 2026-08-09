@@ -16,12 +16,22 @@ export interface PersistedCfpFormDefinition {
   readonly definition: CfpFormDefinition;
 }
 
+export interface DuplicatedCfpForm extends PersistedCfpFormDefinition {
+  readonly publicId: string | null;
+}
+
+export interface PublishedCfpFormDefinition extends PersistedCfpFormDefinition {
+  readonly publicId: string;
+  readonly status: CfpPolicyStatus;
+}
+
 export interface CfpFormSummary {
   readonly id: string;
   readonly eventId: string;
   readonly key: string;
   readonly title: string;
   readonly versionNumber: number;
+  readonly policyId: string | null;
   readonly status: CfpPolicyStatus;
   readonly submissionClosesAt: Date | null;
   readonly responseCount: number;
@@ -88,6 +98,16 @@ function versionData(formId: string, versionNumber: number, definition: CfpFormD
     schemaVersion: definition.version,
     title: definition.title,
     description: definition.description,
+    submissionKind: definition.submissionKind,
+    accessPolicy: definition.accessPolicy,
+    welcomeTitle: definition.welcomeTitle,
+    welcomeContent: definition.welcomeContent,
+    instructions: definition.instructions,
+    termsContent: definition.termsContent,
+    consentRequired: definition.consentRequired,
+    minimumSpeakerCount: definition.minimumSpeakerCount,
+    maximumSpeakerCount: definition.maximumSpeakerCount,
+    requiredSpeakerFields: optionalJson(definition.requiredSpeakerFields),
     customTypes: inputJson(definition.customQuestionTypes ?? []),
     categories: optionalJson(definition.categories),
     categoryRules: optionalJson(definition.categoryRouting),
@@ -120,6 +140,16 @@ function fromStored(version: StoredVersion): PersistedCfpFormDefinition {
     version: version.schemaVersion,
     title: version.title,
     ...(version.description === null ? {} : { description: version.description }),
+    ...(version.submissionKind === null ? {} : { submissionKind: version.submissionKind }),
+    ...(version.accessPolicy === null ? {} : { accessPolicy: version.accessPolicy }),
+    ...(version.welcomeTitle === null ? {} : { welcomeTitle: version.welcomeTitle }),
+    ...(version.welcomeContent === null ? {} : { welcomeContent: version.welcomeContent }),
+    ...(version.instructions === null ? {} : { instructions: version.instructions }),
+    ...(version.termsContent === null ? {} : { termsContent: version.termsContent }),
+    ...(version.consentRequired === null ? {} : { consentRequired: version.consentRequired }),
+    ...(version.minimumSpeakerCount === null ? {} : { minimumSpeakerCount: version.minimumSpeakerCount }),
+    ...(version.maximumSpeakerCount === null ? {} : { maximumSpeakerCount: version.maximumSpeakerCount }),
+    ...(version.requiredSpeakerFields === null ? {} : { requiredSpeakerFields: version.requiredSpeakerFields }),
     ...((version.customTypes as unknown[]).length === 0 ? {} : { customQuestionTypes: version.customTypes }),
     ...(version.categories === null ? {} : { categories: version.categories }),
     sections: version.steps.map((step) => ({
@@ -216,6 +246,7 @@ export class CfpFormRepository {
           key: form.key,
           title: latestVersion.title,
           versionNumber: latestVersion.versionNumber,
+          policyId: policy?.id ?? null,
           status: policy?.status ?? CfpPolicyStatus.DRAFT,
           submissionClosesAt: policyVersion?.submissionClosesAt ?? null,
           responseCount: form.versions.reduce((total, version) => total + version._count.submissions, 0),
@@ -248,6 +279,93 @@ export class CfpFormRepository {
     }
   }
 
+  async duplicate(eventId: string, formId: string, key: string): Promise<DuplicatedCfpForm> {
+    const duplicateKey = normalizeKey(key);
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        const source = await transaction.cfpForm.findFirst({
+          where: { id: formId, eventId },
+          include: {
+            versions: {
+              orderBy: { versionNumber: "desc" },
+              take: 1,
+              include: versionInclude,
+            },
+          },
+        });
+        const sourceVersion = source?.versions[0];
+        if (!source || !sourceVersion) {
+          throw new RepositoryError("not-found", "The event-owned CFP form was not found.");
+        }
+
+        const sourceDefinition = fromStored(sourceVersion).definition;
+        const duplicateDefinition = validatedDefinition({
+          ...sourceDefinition,
+          title: `Copy of ${sourceDefinition.title}`,
+        });
+        const duplicateForm = await transaction.cfpForm.create({ data: { eventId, key: duplicateKey } });
+        const duplicateVersion = await transaction.cfpFormVersion.create({
+          data: versionData(duplicateForm.id, 1, duplicateDefinition),
+          include: versionInclude,
+        });
+
+        const sourcePolicy = await transaction.cfpPolicy.findUnique({
+          where: { eventId_key: { eventId, key: source.key } },
+          include: {
+            versions: {
+              orderBy: { versionNumber: "desc" },
+              take: 1,
+              include: {
+                categoryRoutes: { orderBy: { sortOrder: "asc" } },
+                adminAssignments: { orderBy: [{ role: "asc" }, { administratorId: "asc" }] },
+              },
+            },
+          },
+        });
+        const sourcePolicyVersion = sourcePolicy?.versions[0];
+        let publicId: string | null = null;
+
+        if (sourcePolicyVersion) {
+          const duplicatePolicy = await transaction.cfpPolicy.create({ data: { eventId, key: duplicateKey } });
+          publicId = duplicatePolicy.publicId;
+          await transaction.cfpPolicyVersion.create({
+            data: {
+              versionNumber: 1,
+              submissionOpensAt: sourcePolicyVersion.submissionOpensAt,
+              submissionClosesAt: sourcePolicyVersion.submissionClosesAt,
+              confirmationClosesAt: sourcePolicyVersion.confirmationClosesAt,
+              draftPolicy: sourcePolicyVersion.draftPolicy,
+              submissionLimits: sourcePolicyVersion.submissionLimits as Prisma.InputJsonValue,
+              messages: sourcePolicyVersion.messages as Prisma.InputJsonValue,
+              conditionalVisibility: sourcePolicyVersion.conditionalVisibility as Prisma.InputJsonValue,
+              policy: { connect: { eventId_id: { eventId, id: duplicatePolicy.id } } },
+              categoryRoutes: {
+                create: sourcePolicyVersion.categoryRoutes.map(({ categoryId, condition, sortOrder }) => ({
+                  condition: condition as Prisma.InputJsonValue,
+                  sortOrder,
+                  category: { connect: { eventId_id: { eventId, id: categoryId } } },
+                })),
+              },
+              adminAssignments: {
+                create: sourcePolicyVersion.adminAssignments.map(({ administratorId, role }) => ({
+                  role,
+                  administrator: { connect: { eventId_id: { eventId, id: administratorId } } },
+                })),
+              },
+            },
+          });
+          await transaction.cfpPolicyTransition.create({
+            data: { eventId, policyId: duplicatePolicy.id, fromStatus: null, toStatus: CfpPolicyStatus.DRAFT },
+          });
+        }
+
+        return { ...fromStored(duplicateVersion), publicId };
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
   async get(eventId: string, formId: string, versionNumber?: number): Promise<PersistedCfpFormDefinition | null> {
     const version = await this.client.cfpFormVersion.findFirst({
       where: { formId, form: { eventId }, ...(versionNumber === undefined ? {} : { versionNumber }) },
@@ -255,5 +373,18 @@ export class CfpFormRepository {
       include: versionInclude,
     });
     return version ? fromStored(version) : null;
+  }
+
+  async getPublishedByPublicId(publicId: string): Promise<PublishedCfpFormDefinition | null> {
+    const policy = await this.client.cfpPolicy.findUnique({
+      where: { publicId },
+      select: {
+        publicId: true,
+        status: true,
+        publishedFormVersion: { include: versionInclude },
+      },
+    });
+    if (!policy?.publishedFormVersion) return null;
+    return { ...fromStored(policy.publishedFormVersion), publicId: policy.publicId, status: policy.status };
   }
 }

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/client";
+import { defaultSubmissionView, parseSubmissionView } from "@/lib/cfp/submission-table";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { CfpSubmissionRepository } from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
@@ -35,19 +36,46 @@ export default async function SubmissionsPage({ params, searchParams }: Submissi
     redirect(shell.activeEvent ? dashboardEventHref(shell.activeEvent.slug, "submissions") : "/dashboard");
   }
 
+  const client = getDatabaseClient();
+  const repository = new CfpSubmissionRepository(client);
+  const storedView = await client.cfpSubmissionView.findUnique({
+    where: { eventId_userId: { eventId: event.id, userId: shell.user.id } },
+    select: { columns: true, filters: true, sorting: true },
+  });
+  const savedView = storedView ? parseSubmissionView(storedView) : defaultSubmissionView;
+  const useSavedView = Object.keys(rawFilters).length === 0 && Boolean(storedView);
   const filters = {
     page: pageNumber(first(rawFilters.page)),
-    search: first(rawFilters.q)?.trim() || undefined,
-    status: enumValue(Object.values(CfpSubmissionStatus), first(rawFilters.status)),
-    kind: enumValue(Object.values(CfpSubmissionKind), first(rawFilters.type)),
-    categoryId: first(rawFilters.category),
-    assigneeId: first(rawFilters.assignee),
+    search: (useSavedView ? savedView.filters.search : first(rawFilters.q))?.trim() || undefined,
+    status: enumValue(
+      Object.values(CfpSubmissionStatus),
+      useSavedView ? savedView.filters.status : first(rawFilters.status),
+    ),
+    kind: enumValue(Object.values(CfpSubmissionKind), useSavedView ? savedView.filters.kind : first(rawFilters.type)),
+    categoryId: useSavedView ? savedView.filters.categoryId : first(rawFilters.category),
+    assigneeId: useSavedView ? savedView.filters.assigneeId : first(rawFilters.assignee),
+    sortBy: enumValue(
+      ["submittedAt", "updatedAt", "status", "formTitle"] as const,
+      useSavedView ? savedView.sorting.id : first(rawFilters.sort),
+    ),
+    sortDirection: enumValue(
+      ["asc", "desc"] as const,
+      useSavedView ? savedView.sorting.direction : first(rawFilters.direction),
+    ),
   } as const;
-  const repository = new CfpSubmissionRepository(getDatabaseClient());
   const [result, options] = await Promise.all([
     repository.listForEvent(event.id, filters),
     repository.getFilterOptions(event.id),
   ]);
 
-  return <SubmissionsWorkspace event={event} filters={filters} options={options} result={result} />;
+  return (
+    <SubmissionsWorkspace
+      event={event}
+      filters={filters}
+      options={options}
+      result={result}
+      initialColumns={savedView.columns}
+      hasSavedView={Boolean(storedView)}
+    />
+  );
 }

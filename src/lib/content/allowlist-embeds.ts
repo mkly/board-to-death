@@ -1,7 +1,7 @@
 import type { Root } from "hast";
 import { visit } from "unist-util-visit";
 
-import { EMBED_HOST_ALLOWLIST } from "./schema";
+import { EMBED_HOST_ALLOWLIST } from "./schema.ts";
 
 function isAllowedEmbedSrc(src: unknown): boolean {
   if (typeof src !== "string") return false;

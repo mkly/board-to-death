@@ -68,11 +68,37 @@ export type PublicRuntimeConfigOptions = {
   allowBuildDefault?: boolean;
 };
 
+// Vercel assigns a different host to every deployment and never sets our own
+// origin variables, so a deploy that does not hardcode an origin would fail
+// the production check outright — and hardcoding one value breaks every
+// preview deployment, which each get their own host. VERCEL_URL is the
+// unique per-deployment host; VERCEL_PROJECT_PRODUCTION_URL is the stable
+// production domain, which is the right origin for auth callbacks and links
+// in production. Neither carries a protocol; Vercel deployments are HTTPS.
+// The NEXT_PUBLIC_* twins are the same values under the names Vercel exposes
+// to client bundles; only those can be inlined into browser code.
+export function getVercelDeploymentUrl(environment: Environment): string | undefined {
+  const productionHost = (
+    environment.VERCEL_PROJECT_PRODUCTION_URL ?? environment.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL
+  )?.trim();
+  const deploymentHost = (environment.VERCEL_URL ?? environment.NEXT_PUBLIC_VERCEL_URL)?.trim();
+  const deploymentEnvironment = environment.VERCEL_ENV ?? environment.NEXT_PUBLIC_VERCEL_ENV;
+  const host = deploymentEnvironment === "production" ? productionHost || deploymentHost : deploymentHost;
+
+  return host ? `https://${host}` : undefined;
+}
+
 function getPublicAppUrl(environment: Environment, mode: RuntimeMode, options: PublicRuntimeConfigOptions): string {
   const configuredValue = environment.NEXT_PUBLIC_APP_URL?.trim();
 
   if (configuredValue) {
     return configuredValue;
+  }
+
+  const vercelUrl = getVercelDeploymentUrl(environment);
+
+  if (vercelUrl) {
+    return vercelUrl;
   }
 
   if (mode !== "production" || options.allowBuildDefault) {

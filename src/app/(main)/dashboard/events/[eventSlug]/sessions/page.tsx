@@ -10,10 +10,11 @@ import { SessionWorkspace } from "./_components/session-workspace";
 
 interface SessionsPageProps {
   readonly params: Promise<{ eventSlug: string }>;
+  readonly searchParams: Promise<{ sessionId?: string }>;
 }
 
-export default async function SessionsPage({ params }: SessionsPageProps) {
-  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
+export default async function SessionsPage({ params, searchParams }: SessionsPageProps) {
+  const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event) notFound();
 
@@ -34,6 +35,7 @@ export default async function SessionsPage({ params }: SessionsPageProps) {
   return (
     <SessionWorkspace
       event={{ name: event.name, slug: event.slug }}
+      initialSessionId={query.sessionId}
       speakers={speakers.map((speaker) => ({
         id: speaker.id,
         name: speakerNames.get(speaker.id) ?? speaker.profile.email,

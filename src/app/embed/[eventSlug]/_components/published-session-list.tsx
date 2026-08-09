@@ -1,0 +1,183 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+import { Clock3, LayoutList, Search } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
+
+interface PublishedSessionSpeaker {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface PublishedSessionListItem {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly durationMinutes: number;
+  readonly track: { readonly id: string; readonly name: string } | null;
+  readonly speakers: readonly PublishedSessionSpeaker[];
+}
+
+interface PublishedSessionListProps {
+  readonly density: EmbedDensity;
+  readonly enabledFilters: readonly EmbedFilter[];
+  readonly eventName: string;
+  readonly sessions: readonly PublishedSessionListItem[];
+}
+
+function matchesSearch(session: PublishedSessionListItem, search: string): boolean {
+  if (search === "") return true;
+  const text = [session.title, session.description, session.track?.name, ...session.speakers.map(({ name }) => name)]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase();
+  return text.includes(search.toLocaleLowerCase());
+}
+
+export function PublishedSessionList({ density, enabledFilters, eventName, sessions }: PublishedSessionListProps) {
+  const [search, setSearch] = useState("");
+  const [trackId, setTrackId] = useState("");
+  const showSearch = enabledFilters.includes("search");
+  const showTrack = enabledFilters.includes("track");
+  const tracks = useMemo(
+    () =>
+      [
+        ...new Map(
+          sessions.flatMap((session) => (session.track ? [[session.track.id, session.track] as const] : [])),
+        ).values(),
+      ].sort((a, b) => a.name.localeCompare(b.name)),
+    [sessions],
+  );
+  const visibleSessions = sessions.filter(
+    (session) => matchesSearch(session, showSearch ? search.trim() : "") && (!trackId || session.track?.id === trackId),
+  );
+
+  return (
+    <section aria-labelledby="session-list-title" className="mx-auto flex w-full max-w-4xl flex-col gap-5">
+      <header className="flex flex-col gap-1">
+        <p className="text-muted-foreground text-sm">{eventName}</p>
+        <h1 className="font-heading font-semibold text-2xl tracking-tight" id="session-list-title">
+          Sessions
+        </h1>
+        <p className="text-muted-foreground text-sm">Explore the sessions and speakers in the published program.</p>
+      </header>
+
+      {showSearch || showTrack ? (
+        <FieldGroup className="rounded-xl border bg-card p-3 sm:flex-row sm:items-end">
+          {showSearch ? (
+            <Field>
+              <FieldLabel htmlFor="session-search">Search sessions</FieldLabel>
+              <div className="relative">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  className="pl-8"
+                  id="session-search"
+                  onChange={(event) => setSearch(event.currentTarget.value)}
+                  placeholder="Title, description, speaker, or track"
+                  type="search"
+                  value={search}
+                />
+              </div>
+            </Field>
+          ) : null}
+          {showTrack ? (
+            <Field className="sm:max-w-64">
+              <FieldLabel htmlFor="session-track">Track</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="session-track"
+                onChange={(event) => setTrackId(event.currentTarget.value)}
+                value={trackId}
+              >
+                <NativeSelectOption value="">All tracks</NativeSelectOption>
+                {tracks.map((track) => (
+                  <NativeSelectOption key={track.id} value={track.id}>
+                    {track.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
+        </FieldGroup>
+      ) : null}
+
+      <p aria-live="polite" className="sr-only" role="status">
+        {visibleSessions.length === 1 ? "1 session shown" : `${visibleSessions.length} sessions shown`}
+      </p>
+
+      {visibleSessions.length > 0 ? (
+        <ul className="flex flex-col gap-3">
+          {visibleSessions.map((session) => (
+            <li id={`session-${session.id}`} key={session.id}>
+              <Card size={density === "compact" ? "sm" : "default"}>
+                <CardHeader>
+                  <CardTitle className="min-w-0 break-words">
+                    <h2>
+                      <a
+                        className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        href={`#session-${session.id}`}
+                      >
+                        {session.title}
+                      </a>
+                    </h2>
+                  </CardTitle>
+                  <CardDescription className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 aria-hidden="true" className="size-3.5" />
+                      {session.durationMinutes} minutes
+                    </span>
+                    {session.track ? <Badge variant="outline">{session.track.name}</Badge> : null}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  {session.description ? (
+                    <p className="break-words text-sm leading-relaxed">{session.description}</p>
+                  ) : null}
+                  <div className="flex flex-col gap-2">
+                    <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">Speakers</h3>
+                    {session.speakers.length > 0 ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {session.speakers.map((speaker) => (
+                          <li key={speaker.id}>
+                            <Badge variant="secondary">{speaker.name}</Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">No public speaker profiles are linked.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <LayoutList aria-hidden="true" />
+            </EmptyMedia>
+            <EmptyTitle>{sessions.length === 0 ? "No published sessions" : "No matching sessions"}</EmptyTitle>
+            <EmptyDescription>
+              {sessions.length === 0
+                ? "Sessions will appear here when they are included in a published program."
+                : "Try a different search or track."}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+    </section>
+  );
+}

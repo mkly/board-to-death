@@ -121,27 +121,44 @@ npm run quality
 infrastructure tests, database migrations and repository integration tests, authentication and authorization,
 the production build, and Chromium browser and accessibility smoke tests. Database-backed stages use
 `TEST_DATABASE_URL`; the guard requires its database name to end in `_test` and refuses to use the same database as
-`DATABASE_URL`. Browser tests run the production server against that test database with local magic-link delivery,
-so no production email, storage, or Accelevents credentials are required.
+`DATABASE_URL`. Browser tests run the development server against that test database with local magic-link delivery,
+so no production email, storage, or Accelevents credentials are required. The preceding build remains a separate
+quality-gate stage.
 
 The browser stage writes screenshots and traces to `test-results/` and an HTML report to `playwright-report/` when it
 fails. CI uploads both directories as the `playwright-failure-artifacts` artifact.
 
-To run the browser specs on their own without waiting for a production build, point the Playwright web server at the
-dev server, which compiles routes on demand:
+To run the browser specs on their own without waiting for a production build, use the default Playwright web server,
+which compiles routes on demand:
 
 ```bash
 npm run db:test:reset
-PLAYWRIGHT_WEB_SERVER_COMMAND="npm run dev -- --hostname 127.0.0.1 --port 3100" npm run test:browser
+npm run test:browser
 ```
 
 This verifies the specs and the accessibility assertions but not the production build, so it is a development
 shortcut and not a substitute for `npm run quality`. `PLAYWRIGHT_BASE_URL` overrides the URL the same way.
+Set `PLAYWRIGHT_WEB_SERVER_COMMAND` when Playwright should start a different server command.
 
 The separate Incus image smoke test is intentionally outside this portable gate. It requires an x86_64 Linux host
 with Incus, `distrobuilder`, the `crabbox-btrfs` profile, passwordless access to the repository's documented `sudo`
 operation, and a Crabbox build containing the image-ready optimization. On a prepared host, run
 `./scripts/bootstrap-image.sh` independently.
+
+The bootstrap command validates and builds `distrobuilder.yml`, imports the resulting `incus.tar.xz` and
+`rootfs.squashfs` under a unique staging alias, and promotes it to `board-to-death` only after all smoke checks pass.
+If that alias already exists, it is retained as a dated `board-to-death-prev-*` rollback alias. The application smoke
+launches two clean containers, injects generated local-only runtime configuration, attaches a temporary custom storage
+volume, installs the tracked checkout, deploys the local database migrations, and verifies the application systemd
+service, its HTTP login page, a ready `GET /api/health`, stop/start/restart behavior, and a second launch. The
+generated configuration points `FILE_STORAGE_PATH` at the mounted volume, so a ready health check proves PostgreSQL
+and that volume are both usable by the application, and the second instance must recover a file the first one left
+under `FILE_STORAGE_PATH`. On failure it prints the path to
+retained Incus, systemd, and journal logs; those logs do not include the generated secret or environment file.
+
+The application smoke resolves its storage pool from the default profile and then `crabbox-btrfs`. Set
+`INCUS_STORAGE_POOL=<pool>` when neither profile should supply it. To validate an already-imported image without
+rebuilding or changing aliases, run `./scripts/smoke-incus-image.sh <image-alias>`.
 
 ---
 

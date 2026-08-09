@@ -123,6 +123,19 @@ packages:
     - cloud-init
     - libpq5
     - libpq-dev
+    # Chromium runtime libraries required by Playwright browser tests.
+    - libnspr4
+    - libnss3
+    - libatk1.0-0t64
+    - libatk-bridge2.0-0t64
+    - libxcomposite1
+    - libxdamage1
+    - libxfixes3
+    - libxrandr2
+    - libgbm1
+    - libxkbcommon0
+    - libasound2t64
+    - libatspi2.0-0t64
     - postgresql-client-16
     # A local PostgreSQL server so the Prisma-backed persistence layer and its
     # tests work inside the box. Crabbox boxes have no route to the host's

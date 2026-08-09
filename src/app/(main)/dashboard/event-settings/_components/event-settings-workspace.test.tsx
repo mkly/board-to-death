@@ -103,6 +103,37 @@ describe("EventSettingsWorkspace", () => {
     expect(push).toHaveBeenCalledWith("/dashboard/event-settings?event=22222222-2222-4222-8222-222222222222");
   });
 
+  test("keeps event selection and post-create navigation in event-scoped settings", async () => {
+    const createdSnapshot: EventSettingsSnapshot = {
+      ...firstSnapshot,
+      event: {
+        ...firstSnapshot.event,
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "New Event",
+        slug: "new-event",
+      },
+    };
+    actionMocks.createEvent.mockResolvedValue({ ok: true, message: "Event created.", snapshot: createdSnapshot });
+    render(<EventSettingsWorkspace eventOptions={eventOptions} eventScoped initialSnapshot={firstSnapshot} />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Select event" }));
+    fireEvent.click(screen.getByRole("option", { name: "Side Quest Summit" }));
+    expect(push).toHaveBeenCalledWith(
+      "/dashboard/switch-event?eventId=22222222-2222-4222-8222-222222222222&workspace=settings",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "New event" }));
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("button", { name: "Create event" }).closest("form") as HTMLFormElement);
+    });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenLastCalledWith(
+        "/dashboard/switch-event?eventId=33333333-3333-4333-8333-333333333333&workspace=settings",
+      ),
+    );
+  });
+
   test("renders field-level server validation and applies a successful room snapshot", async () => {
     const validation: MutationResult = {
       ok: false,
