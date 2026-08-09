@@ -376,7 +376,13 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
 
         <footer className="text-muted-foreground text-xs">
           Published{" "}
-          {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(publishedAt))}
+          <time dateTime={publishedAt}>
+            {new Intl.DateTimeFormat("en", {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: event.timezone,
+            }).format(new Date(publishedAt))}
+          </time>
         </footer>
       </div>
     </main>
