@@ -211,8 +211,18 @@ describe("CFP policy persistence", () => {
       (error: unknown) => error instanceof RepositoryError && error.code === "not-found",
     );
     await expectInvalid(policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId, []));
+    await expectInvalid(
+      policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId, [
+        {
+          administratorId: editor.id,
+          role: CfpAdminRole.EDITOR,
+          notifyOnNewSubmission: true,
+          notifyOnSubmissionUpdate: false,
+        },
+      ]),
+    );
 
-    const updated = await policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId, [
+    const updated = await policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId.toUpperCase(), [
       {
         administratorId: owner.id,
         role: CfpAdminRole.OWNER,

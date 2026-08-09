@@ -45,8 +45,8 @@ export async function createCfpFormDraft(eventSlug: string): Promise<never> {
 
   const administrator = await new CfpAdministratorRepository(client).upsert({
     eventId: event.id,
-    externalId: shell.user.email.toLowerCase(),
-    displayName: shell.user.name,
+    externalId: shell.user.email,
+    displayName: shell.user.name.trim() || shell.user.email,
   });
   const submissionClosesAt = new Date(event.startsAt.getTime() - 24 * 60 * 60 * 1_000);
   await new CfpPolicyRepository(client).create({

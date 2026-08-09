@@ -328,7 +328,7 @@ export class CfpAdministratorRepository {
     readonly externalId: string;
     readonly displayName: string;
   }): Promise<CfpAdministrator> {
-    const externalId = requireText(input.externalId, "externalId");
+    const externalId = requireText(input.externalId, "externalId").toLowerCase();
     try {
       return await this.client.cfpAdministrator.upsert({
         where: { eventId_externalId: { eventId: input.eventId, externalId } },
@@ -438,7 +438,9 @@ export class CfpPolicyRepository {
     if (!current) throw new RepositoryError("not-found", "The event-owned CFP policy was not found.");
 
     const actor = await this.client.cfpAdministrator.findUnique({
-      where: { eventId_externalId: { eventId, externalId: requireText(actorExternalId, "actorExternalId") } },
+      where: {
+        eventId_externalId: { eventId, externalId: requireText(actorExternalId, "actorExternalId").toLowerCase() },
+      },
       select: { id: true },
     });
     const actorAssignment = current.definition.adminAssignments.find(
