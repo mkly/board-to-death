@@ -16,11 +16,14 @@ const currentProfile = {
     familyName: true,
     preferredName: true,
     pronouns: true,
+    phone: true,
     organization: true,
     jobTitle: true,
     biography: true,
     websiteUrl: true,
+    accessibilityNeeds: true,
     photoObjectKey: true,
+    versionNumber: true,
   },
 };
 
@@ -45,6 +48,15 @@ export class SpeakerPortalRepository {
 
   constructor(database: PrismaClient) {
     this.#database = database;
+  }
+
+  async getProfile(identity: SpeakerPortalIdentity) {
+    const profile = await this.#database.speakerProfileVersion.findFirst({
+      where: { speakerId: identity.speakerId, speaker: { eventId: identity.eventId } },
+      orderBy: { versionNumber: "desc" },
+      select: currentProfile.select,
+    });
+    return profile ? { ...profile, displayName: displayName(profile) } : null;
   }
 
   async getDashboard(identity: SpeakerPortalIdentity) {

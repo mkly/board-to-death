@@ -12,6 +12,7 @@ export interface SpeakerProfileInput {
   readonly jobTitle?: string | null;
   readonly biography?: string | null;
   readonly websiteUrl?: string | null;
+  readonly accessibilityNeeds?: string | null;
   readonly photoObjectKey?: string | null;
   readonly consentToPublishProfile?: boolean;
   readonly consentToReceiveEmail?: boolean;
@@ -56,6 +57,7 @@ interface ValidatedProfile {
   readonly jobTitle: string | null;
   readonly biography: string | null;
   readonly websiteUrl: string | null;
+  readonly accessibilityNeeds: string | null;
   readonly photoObjectKey: string | null;
   readonly consentToPublishProfile: boolean;
   readonly consentToReceiveEmail: boolean;
@@ -125,6 +127,7 @@ function validateProfile(input: SpeakerProfileInput): ValidatedProfile {
     jobTitle: optionalText(input.jobTitle),
     biography: optionalText(input.biography),
     websiteUrl: normalizeUrl(input.websiteUrl),
+    accessibilityNeeds: optionalText(input.accessibilityNeeds),
     photoObjectKey: optionalText(input.photoObjectKey),
     consentToPublishProfile,
     consentToReceiveEmail,
@@ -166,6 +169,7 @@ function fromStored(stored: StoredSpeaker): PersistedSpeaker {
     jobTitle: version.jobTitle,
     biography: version.biography,
     websiteUrl: version.websiteUrl,
+    accessibilityNeeds: version.accessibilityNeeds,
     photoObjectKey: version.photoObjectKey,
     consentToPublishProfile: version.consentToPublishProfile,
     consentToReceiveEmail: version.consentToReceiveEmail,
@@ -196,6 +200,7 @@ function profileInput(profile: PersistedSpeakerProfile): SpeakerProfileInput {
     jobTitle: profile.jobTitle,
     biography: profile.biography,
     websiteUrl: profile.websiteUrl,
+    accessibilityNeeds: profile.accessibilityNeeds,
     photoObjectKey: profile.photoObjectKey,
     consentToPublishProfile: profile.consentToPublishProfile,
     consentToReceiveEmail: profile.consentToReceiveEmail,
@@ -241,7 +246,12 @@ export class SpeakerRepository {
     return speakers.map(fromStored);
   }
 
-  async updateProfile(eventId: string, speakerId: string, input: UpdateSpeakerProfileInput): Promise<PersistedSpeaker> {
+  async updateProfile(
+    eventId: string,
+    speakerId: string,
+    input: UpdateSpeakerProfileInput,
+    expectedVersionNumber?: number,
+  ): Promise<PersistedSpeaker> {
     try {
       await this.client.$transaction(async (transaction) => {
         const current = await transaction.speaker.findFirst({
@@ -252,6 +262,9 @@ export class SpeakerRepository {
           throw new RepositoryError("not-found", "The event-owned speaker was not found.");
         }
         const previous = fromStored({ ...current, profileVersions: [...current.profileVersions].reverse() });
+        if (expectedVersionNumber !== undefined && previous.profile.versionNumber !== expectedVersionNumber) {
+          throw new RepositoryError("conflict", "The speaker profile changed after this form was loaded.");
+        }
         const profile = validateProfile({ ...profileInput(previous.profile), ...input });
         await transaction.speaker.update({
           where: { id: speakerId },

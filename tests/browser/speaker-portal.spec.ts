@@ -69,6 +69,64 @@ test("renders an empty dashboard without exposing populated-speaker data", async
   await expect(page.getByText("Ada Lovelace")).toHaveCount(0);
 });
 
+test("validates, saves, and reloads only speaker-editable profile fields", async ({ page }) => {
+  const fixture = await preparePortal();
+  await page.goto(fixture.populatedAuthHref);
+  await expect(page.getByRole("link", { name: "Profile" })).toHaveAttribute(
+    "href",
+    `/portal/${fixture.eventSlug}/profile`,
+  );
+  await page.goto(`/portal/${fixture.eventSlug}/profile`);
+
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/profile`);
+  await expect(page.getByRole("heading", { name: "My profile" })).toBeVisible();
+  await expect(page.getByLabel("Email address")).toBeDisabled();
+  await expect(page.getByText("Ada Lovelace")).toBeVisible();
+
+  await page.getByLabel("Website or social profile").fill("ftp://example.test/ada");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByText("Enter a valid HTTP or HTTPS URL.")).toBeVisible();
+
+  await page.getByLabel("Phone number").fill("+1 555 0199");
+  await page.getByLabel("Pronouns").fill("she/her");
+  await page.getByLabel("Organization").fill("Analytical Engines Guild");
+  await page.getByLabel("Title").fill("Lead systems designer");
+  await page.getByLabel("Biography").fill("Ada builds welcoming strategy games and teaches systems design.");
+  await page.getByLabel("Website or social profile").fill("https://social.example.test/ada");
+  await page.getByLabel("Accessibility needs").fill("A step-free route to the stage.");
+  await page.getByRole("button", { name: "Save profile" }).evaluate((button) => {
+    const form = button.closest("form");
+    if (!form) throw new Error("Profile form not found.");
+    for (const [name, value] of [
+      ["email", "forged@example.test"],
+      ["givenName", "Forged"],
+      ["status", "REJECTED"],
+    ]) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.append(input);
+    }
+  });
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByText("Your profile was updated.")).toBeVisible();
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/profile?updated=2`);
+
+  await page.reload();
+  await expect(page.getByLabel("Email address")).toHaveValue("ada@example.test");
+  await expect(page.getByText("Ada Lovelace")).toBeVisible();
+  await expect(page.getByLabel("Phone number")).toHaveValue("+1 555 0199");
+  await expect(page.getByLabel("Pronouns")).toHaveValue("she/her");
+  await expect(page.getByLabel("Organization")).toHaveValue("Analytical Engines Guild");
+  await expect(page.getByLabel("Title")).toHaveValue("Lead systems designer");
+  await expect(page.getByLabel("Biography")).toHaveValue(
+    "Ada builds welcoming strategy games and teaches systems design.",
+  );
+  await expect(page.getByLabel("Website or social profile")).toHaveValue("https://social.example.test/ada");
+  await expect(page.getByLabel("Accessibility needs")).toHaveValue("A step-free route to the stage.");
+});
+
 test("redirects an expired speaker session to the event sign-in screen", async ({ context, page }) => {
   const fixture = await preparePortal();
   await addSpeakerCookie(context, fixture.expiredSessionToken);
