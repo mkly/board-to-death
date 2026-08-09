@@ -6,12 +6,15 @@ import {
   CfpSubmissionStatus,
   EvaluationAssignmentStatus,
   EvaluationPlanVersionStatus,
+  EvaluationRecommendation,
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
+  EvaluationStatus,
   EventType,
   PrismaClient,
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
+import { EvaluationAssignmentRepository } from "./assignments.ts";
 import { ReviewerWorkspaceRepository } from "./reviewer-workspace.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
@@ -21,6 +24,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for reviewer workspa
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const repository = new ReviewerWorkspaceRepository(client);
+const assignmentRepository = new EvaluationAssignmentRepository(client);
 
 const definitionSnapshot = {
   version: 1,
@@ -42,6 +46,7 @@ const definitionSnapshot = {
 };
 
 interface Fixture {
+  readonly eventId: string;
   readonly identityId: string;
   readonly otherIdentityId: string;
   readonly reviewerId: string;
@@ -51,6 +56,7 @@ interface Fixture {
   readonly otherAssignmentId: string;
   readonly revokedAssignmentId: string;
   readonly blindRoundId: string;
+  readonly identifiedCriterionId: string;
 }
 
 async function createFixture(): Promise<Fixture> {
@@ -161,6 +167,7 @@ async function createFixture(): Promise<Fixture> {
             },
           },
         },
+        include: { criteria: true },
       }),
     ),
   );
@@ -168,6 +175,8 @@ async function createFixture(): Promise<Fixture> {
   const blindRound = rounds[1];
   const anonymizedRound = rounds[2];
   assert.ok(identifiedRound && blindRound && anonymizedRound);
+  const identifiedCriterion = identifiedRound.criteria[0];
+  assert.ok(identifiedCriterion);
   await client.evaluationPlanVersion.update({
     where: { id: planVersion.id },
     data: { status: EvaluationPlanVersionStatus.ACTIVE, activatedAt: new Date("2027-02-01T18:00:00.000Z") },
@@ -233,6 +242,7 @@ async function createFixture(): Promise<Fixture> {
   ]);
 
   return {
+    eventId: event.id,
     identityId: reviewer.identityId,
     otherIdentityId: otherReviewer.identityId,
     reviewerId: reviewer.id,
@@ -242,6 +252,7 @@ async function createFixture(): Promise<Fixture> {
     otherAssignmentId: other.id,
     revokedAssignmentId: revoked.id,
     blindRoundId: blindRound.id,
+    identifiedCriterionId: identifiedCriterion.id,
   };
 }
 
@@ -306,5 +317,126 @@ describe("reviewer workspace authorization", () => {
       },
     });
     assert.equal(await repository.get(fixture.identityId, fixture.blindAssignmentId), null);
+  });
+});
+
+describe("reviewer workspace evaluation drafts and submission", () => {
+  before(async () => {
+    await client.$connect();
+  });
+
+  beforeEach(async () => {
+    await client.event.deleteMany();
+  });
+
+  after(async () => {
+    await client.$disconnect();
+  });
+
+  test("saves a partial draft, reflects it on reload, and blocks finalize until required criteria are scored", async () => {
+    const fixture = await createFixture();
+
+    await repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+      expectedVersion: 0,
+      overallNote: "Promising start.",
+      recommendation: null,
+      criteria: [{ criterionId: fixture.identifiedCriterionId, score: null, note: "Needs more detail." }],
+    });
+
+    const reloaded = await repository.get(fixture.identityId, fixture.identifiedAssignmentId);
+    assert.equal(reloaded?.evaluation.status, EvaluationStatus.DRAFT);
+    assert.equal(reloaded?.evaluation.version, 1);
+    assert.equal(reloaded?.evaluation.overallNote, "Promising start.");
+    assert.equal(reloaded?.criteria[0]?.score, null);
+    assert.equal(reloaded?.criteria[0]?.note, "Needs more detail.");
+
+    await assert.rejects(
+      repository.submitFinal(fixture.identityId, fixture.identifiedAssignmentId, {
+        expectedVersion: 1,
+        overallNote: "Promising start.",
+        recommendation: EvaluationRecommendation.ACCEPT,
+        criteria: [],
+      }),
+      /must have a score before submitting/,
+    );
+  });
+
+  test("rejects out-of-range scores server-side", async () => {
+    const fixture = await createFixture();
+    await assert.rejects(
+      repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+        expectedVersion: 0,
+        overallNote: null,
+        recommendation: null,
+        criteria: [{ criterionId: fixture.identifiedCriterionId, score: 9, note: null }],
+      }),
+      /must be between/,
+    );
+  });
+
+  test("rejects a stale concurrent edit by version and finalizes once resolved", async () => {
+    const fixture = await createFixture();
+    await repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+      expectedVersion: 0,
+      overallNote: "First pass",
+      recommendation: null,
+      criteria: [{ criterionId: fixture.identifiedCriterionId, score: 3, note: null }],
+    });
+
+    await assert.rejects(
+      repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+        expectedVersion: 0,
+        overallNote: "Stale concurrent edit",
+        recommendation: null,
+        criteria: [{ criterionId: fixture.identifiedCriterionId, score: 4, note: null }],
+      }),
+      /changed since you loaded it/,
+    );
+
+    await repository.submitFinal(fixture.identityId, fixture.identifiedAssignmentId, {
+      expectedVersion: 1,
+      overallNote: "Final feedback",
+      recommendation: EvaluationRecommendation.ACCEPT,
+      criteria: [{ criterionId: fixture.identifiedCriterionId, score: 4, note: "Solid" }],
+    });
+
+    const finalized = await repository.get(fixture.identityId, fixture.identifiedAssignmentId);
+    assert.equal(finalized?.evaluation.status, EvaluationStatus.FINAL);
+    assert.equal(finalized?.evaluation.recommendation, EvaluationRecommendation.ACCEPT);
+  });
+
+  test("finalized evaluations are immutable to the reviewer until an admin reopens them, then support replay", async () => {
+    const fixture = await createFixture();
+    await repository.submitFinal(fixture.identityId, fixture.identifiedAssignmentId, {
+      expectedVersion: 0,
+      overallNote: "Final feedback",
+      recommendation: EvaluationRecommendation.ACCEPT,
+      criteria: [{ criterionId: fixture.identifiedCriterionId, score: 5, note: "Excellent" }],
+    });
+
+    await assert.rejects(
+      repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+        expectedVersion: 1,
+        overallNote: "Trying to edit after finalize",
+        recommendation: null,
+        criteria: [],
+      }),
+      /finalized and cannot be edited/,
+    );
+
+    await assignmentRepository.reopenEvaluation(fixture.eventId, fixture.identifiedAssignmentId);
+
+    const reopened = await repository.get(fixture.identityId, fixture.identifiedAssignmentId);
+    assert.equal(reopened?.evaluation.status, EvaluationStatus.DRAFT);
+    assert.equal(reopened?.evaluation.version, 2);
+
+    await repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+      expectedVersion: 2,
+      overallNote: "Replay after reopen",
+      recommendation: null,
+      criteria: [{ criterionId: fixture.identifiedCriterionId, score: 4, note: null }],
+    });
+    const replayed = await repository.get(fixture.identityId, fixture.identifiedAssignmentId);
+    assert.equal(replayed?.evaluation.overallNote, "Replay after reopen");
   });
 });

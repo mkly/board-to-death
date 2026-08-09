@@ -253,7 +253,9 @@ function emptyStatusMetrics(): Record<CfpSubmissionStatus, number> {
 
 function listItemFromStored(submission: StoredSubmissionListItem): CfpSubmissionListItem {
   const scores = submission.evaluationAssignments.flatMap(({ evaluation }) =>
-    evaluation?.status === "FINAL" ? evaluation.results.map(({ score }) => Number(score)) : [],
+    evaluation?.status === "FINAL"
+      ? evaluation.results.filter(({ score }) => score !== null).map(({ score }) => Number(score))
+      : [],
   );
   return {
     id: submission.id,

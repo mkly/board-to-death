@@ -10,13 +10,16 @@ const fixtureScript = path.join(process.cwd(), "tests/browser/fixtures/reviewer-
 
 interface BrowserFixture {
   readonly eventId: string;
+  readonly eventSlug: string;
   readonly reviewerToken: string;
   readonly emptyReviewerToken: string;
+  readonly adminToken: string;
   readonly identifiedAssignmentId: string;
   readonly blindAssignmentId: string;
   readonly anonymizedAssignmentId: string;
   readonly otherAssignmentId: string;
   readonly blindRoundId: string;
+  readonly anonymizedRoundId: string;
 }
 
 async function runFixture(action: string, ...args: readonly string[]): Promise<BrowserFixture | null> {
@@ -76,6 +79,62 @@ test.describe("reviewer workspace", () => {
   test("returns a masked not-found response for another reviewer's assignment", async ({ page }) => {
     const response = await page.goto(`/reviews/${fixture.otherAssignmentId}`);
     expect(response?.status()).toBe(404);
+  });
+
+  test("saves a partial draft and reflects it after reload", async ({ page }) => {
+    await page.goto(`/reviews/${fixture.identifiedAssignmentId}`);
+    await page.locator('input[name^="score:"]').fill("4");
+    await page.locator('textarea[name^="note:"]').fill("Needs more detail.");
+    await page.getByLabel("Overall feedback").fill("Promising start.");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByText("Evaluation saved", { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator('input[name^="score:"]')).toHaveValue("4");
+    await expect(page.locator('textarea[name^="note:"]')).toHaveValue("Needs more detail.");
+    await expect(page.getByLabel("Overall feedback")).toHaveValue("Promising start.");
+  });
+
+  test("blocks final submission until every required criterion has a score", async ({ page }) => {
+    await page.goto(`/reviews/${fixture.blindAssignmentId}`);
+    await page.getByLabel("Recommendation").selectOption("ACCEPT");
+    await page.getByRole("button", { name: "Submit final" }).click();
+    await expect(page.getByText("Evaluation not saved", { exact: true })).toBeVisible();
+    await expect(page.getByText(/must have a score before submitting/)).toBeVisible();
+  });
+
+  test("finalizes an evaluation, keeps it immutable, and supports admin reopen and replay", async ({
+    page,
+    browser,
+  }) => {
+    await page.goto(`/reviews/${fixture.anonymizedAssignmentId}`);
+    await page.locator('input[name^="score:"]').fill("5");
+    await page.locator('textarea[name^="note:"]').fill("Excellent");
+    await page.getByLabel("Overall feedback").fill("Final feedback.");
+    await page.getByLabel("Recommendation").selectOption("ACCEPT");
+    await page.getByRole("button", { name: "Submit final" }).click();
+    await expect(page.getByText("Evaluation saved", { exact: true })).toBeVisible();
+    await expect(page.getByText("Finalized", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit final" })).toHaveCount(0);
+
+    const adminContext = await browser.newContext();
+    await useSession(adminContext, fixture.adminToken);
+    const adminPage = await adminContext.newPage();
+    await adminPage.goto(
+      `/dashboard/events/${fixture.eventSlug}/evaluations/assignments?round=${fixture.anonymizedRoundId}`,
+    );
+    await adminPage.getByRole("button", { name: "Reopen evaluation for this reviewer" }).click();
+    await expect(adminPage.getByRole("button", { name: "Reopen evaluation for this reviewer" })).toHaveCount(0);
+    await adminContext.close();
+
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Submit final" })).toBeVisible();
+    await page.locator('textarea[name="overallNote"]').fill("Replay after reopen.");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByText("Evaluation saved", { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByLabel("Overall feedback")).toHaveValue("Replay after reopen.");
   });
 
   test("shows an empty state and removes closed-round or withdrawn work", async ({ context, page }) => {

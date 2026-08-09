@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 
 import { useRouter } from "next/navigation";
 
-import { CircleAlertIcon, ClipboardCheckIcon, UsersRoundIcon } from "lucide-react";
+import { CircleAlertIcon, ClipboardCheckIcon, LockOpenIcon, UsersRoundIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,44 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { EvaluationAssignmentWorkspace } from "@/server/evaluations/assignments";
 
-import { type ManageAssignmentsState, manageEvaluationAssignments } from "../actions";
+import { type ManageAssignmentsState, manageEvaluationAssignments, reopenEvaluationAssignment } from "../actions";
+
+const reopenInitialState: ManageAssignmentsState = { status: "idle" };
+
+function ReopenAssignmentButton({
+  eventSlug,
+  assignmentId,
+}: {
+  readonly eventSlug: string;
+  readonly assignmentId: string;
+}) {
+  const [state, setState] = useState<ManageAssignmentsState>(reopenInitialState);
+  const [pending, startTransition] = useTransition();
+
+  function handleReopen() {
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("eventSlug", eventSlug);
+      formData.set("assignmentId", assignmentId);
+      setState(await reopenEvaluationAssignment(state, formData));
+    });
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={pending}
+      aria-label="Reopen evaluation for this reviewer"
+      title={state.status === "error" ? state.message : "Reopen evaluation"}
+      onClick={handleReopen}
+    >
+      {pending ? <Spinner data-icon="inline-start" /> : <LockOpenIcon data-icon="inline-start" />}
+      Reopen
+    </Button>
+  );
+}
 
 interface EvaluationAssignmentsProps {
   readonly event: { readonly id: string; readonly name: string; readonly slug: string };
@@ -345,14 +382,19 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex max-w-64 flex-wrap gap-1">
+                        <div className="flex max-w-64 flex-wrap items-center gap-1">
                           {submission.assignments.length > 0 ? (
                             submission.assignments.map((assignment) => (
-                              <Badge key={assignment.id} variant="secondary">
-                                {assignment.reviewerName}
-                                {assignment.committeeName ? ` · ${assignment.committeeName}` : ""}
-                                {assignment.status === "COMPLETED" ? " · completed" : ""}
-                              </Badge>
+                              <span key={assignment.id} className="flex items-center gap-1">
+                                <Badge variant="secondary">
+                                  {assignment.reviewerName}
+                                  {assignment.committeeName ? ` · ${assignment.committeeName}` : ""}
+                                  {assignment.status === "COMPLETED" ? " · completed" : ""}
+                                </Badge>
+                                {assignment.status === "COMPLETED" ? (
+                                  <ReopenAssignmentButton eventSlug={event.slug} assignmentId={assignment.id} />
+                                ) : null}
+                              </span>
                             ))
                           ) : (
                             <span className="text-muted-foreground">Unassigned</span>

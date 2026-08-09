@@ -49,6 +49,33 @@ async function createSession(email: string): Promise<{ readonly token: string; r
   return { token, userId: session.user.id };
 }
 
+async function createAdministratorSession(): Promise<string> {
+  const links: string[] = [];
+  const auth = createAuth({
+    baseURL,
+    database,
+    isAllowedEmail: (email) => email.toLowerCase() === "admin@example.test",
+    secret: "quality-gate-better-auth-secret-at-least-32-characters",
+    sendMagicLink: async ({ url }) => {
+      links.push(url);
+    },
+  });
+  const signIn = await auth.handler(
+    new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseURL },
+      body: JSON.stringify({ email: "admin@example.test", callbackURL: "/dashboard" }),
+    }),
+  );
+  if (signIn.status !== 200) throw new Error(`Magic-link sign-in returned ${signIn.status}.`);
+  const link = links[0];
+  if (!link) throw new Error("Expected the browser administrator magic link to be delivered.");
+  const verified = await auth.handler(new Request(link, { redirect: "manual" }));
+  const match = (verified.headers.get("set-cookie") ?? "").match(/better-auth\.session_token=([^;]+)/);
+  if (!match?.[1]) throw new Error("Expected Better Auth to create a browser session cookie.");
+  return match[1];
+}
+
 const definitionSnapshot = {
   version: 1,
   title: "Reviewer browser CFP",
@@ -70,10 +97,11 @@ const definitionSnapshot = {
 
 async function setup() {
   const suffix = randomUUID().slice(0, 8);
-  const [reviewerSession, emptySession, otherSession] = await Promise.all([
+  const [reviewerSession, emptySession, otherSession, adminToken] = await Promise.all([
     createSession(`reviewer-${suffix}@example.test`),
     createSession(`empty-reviewer-${suffix}@example.test`),
     createSession(`other-reviewer-${suffix}@example.test`),
+    createAdministratorSession(),
   ]);
   const event = await database.event.create({
     data: {
@@ -248,13 +276,16 @@ async function setup() {
 
   return {
     eventId: event.id,
+    eventSlug: event.slug,
     reviewerToken: reviewerSession.token,
     emptyReviewerToken: emptySession.token,
+    adminToken,
     identifiedAssignmentId: identified.id,
     blindAssignmentId: blind.id,
     anonymizedAssignmentId: anonymized.id,
     otherAssignmentId: other.id,
     blindRoundId: blindRound.id,
+    anonymizedRoundId: anonymizedRound.id,
   };
 }
 

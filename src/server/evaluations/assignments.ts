@@ -535,4 +535,31 @@ export class EvaluationAssignmentRepository {
       return mapDatabaseError(error);
     }
   }
+
+  async reopenEvaluation(eventId: string, assignmentId: string): Promise<void> {
+    try {
+      await this.client.$transaction(async (transaction) => {
+        const assignment = await transaction.evaluationAssignment.findFirst({
+          where: { id: assignmentId, round: { planVersion: { plan: { eventId } } } },
+          select: { id: true, status: true, evaluation: { select: { id: true, status: true } } },
+        });
+        if (!assignment) throw new RepositoryError("not-found", "The event-owned reviewer assignment was not found.");
+        if (!assignment.evaluation || assignment.evaluation.status !== EvaluationStatus.FINAL) {
+          invalid("Only a finalized evaluation can be reopened.");
+        }
+        await transaction.evaluation.update({
+          where: { id: assignment.evaluation.id },
+          data: { status: EvaluationStatus.DRAFT, submittedAt: null, version: { increment: 1 } },
+        });
+        if (assignment.status === EvaluationAssignmentStatus.COMPLETED) {
+          await transaction.evaluationAssignment.update({
+            where: { id: assignment.id },
+            data: { status: EvaluationAssignmentStatus.ASSIGNED, completedAt: null },
+          });
+        }
+      });
+    } catch (error) {
+      mapDatabaseError(error);
+    }
+  }
 }

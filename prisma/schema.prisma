@@ -173,6 +173,12 @@ enum EvaluationDecisionOutcome {
   REJECTED
 }
 
+enum EvaluationRecommendation {
+  ACCEPT
+  WAITLIST
+  REJECT
+}
+
 enum CfpPolicyStatus {
   DRAFT
   PUBLISHED
@@ -1167,15 +1173,17 @@ model EvaluationAssignment {
 }
 
 model Evaluation {
-  id           String               @id @default(uuid()) @db.Uuid
-  assignmentId String               @unique @db.Uuid
-  status       EvaluationStatus     @default(DRAFT)
-  overallNote  String?
-  submittedAt  DateTime?            @db.Timestamptz(3)
-  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime             @updatedAt @db.Timestamptz(3)
-  assignment   EvaluationAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  results      EvaluationResult[]
+  id             String                    @id @default(uuid()) @db.Uuid
+  assignmentId   String                    @unique @db.Uuid
+  status         EvaluationStatus          @default(DRAFT)
+  recommendation EvaluationRecommendation?
+  overallNote    String?
+  version        Int                       @default(1)
+  submittedAt    DateTime?                 @db.Timestamptz(3)
+  createdAt      DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime                  @updatedAt @db.Timestamptz(3)
+  assignment     EvaluationAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  results        EvaluationResult[]
 
   @@index([status, submittedAt])
   @@map("evaluations")
@@ -1185,7 +1193,7 @@ model EvaluationResult {
   id           String              @id @default(uuid()) @db.Uuid
   evaluationId String              @db.Uuid
   criterionId  String              @db.Uuid
-  score        Decimal             @db.Decimal(8, 4)
+  score        Decimal?            @db.Decimal(8, 4)
   note         String?
   createdAt    DateTime            @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime            @updatedAt @db.Timestamptz(3)
