@@ -42,6 +42,7 @@ export async function GET(request: Request, { params }: AgendaExportRouteContext
     new SpeakerRepository(client).list(event.id),
   ]);
   const sessionTitles = new Map(sessions.map((item) => [item.id, item.version.title]));
+  const sessionTrackIds = new Map(sessions.map((item) => [item.id, item.version.trackId]));
   const roomNames = new Map(rooms.map((room) => [room.id, room.name]));
   const trackNames = new Map(tracks.map((track) => [track.id, track.name]));
   const speakerNames = new Map(
@@ -54,7 +55,12 @@ export async function GET(request: Request, { params }: AgendaExportRouteContext
     status === "unscheduled"
       ? []
       : placements.filter(
-          (placement) => (!roomId || placement.roomId === roomId) && (!trackId || placement.trackIds.includes(trackId)),
+          (placement) =>
+            (!roomId || placement.roomId === roomId) &&
+            (!trackId ||
+              (placement.trackIds.length > 0
+                ? placement.trackIds.includes(trackId)
+                : sessionTrackIds.get(placement.sessionId) === trackId)),
         );
   const bytes = createAgendaCsv(
     filtered.map((placement) => ({

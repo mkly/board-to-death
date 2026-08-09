@@ -194,7 +194,7 @@ function GroupedView({
       sessions: scheduled.filter((session) =>
         groupBy === "room"
           ? session.placement?.roomId === group.id
-          : (session.placement?.trackId ?? "unassigned") === group.id,
+          : (sessionTrackId(session) ?? "unassigned") === group.id,
       ),
     }),
   );
