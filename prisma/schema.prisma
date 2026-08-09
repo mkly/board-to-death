@@ -239,6 +239,35 @@ enum IntegrationSyncRecordStatus {
   TERMINAL_FAILED
 }
 
+enum CustomDashboardTemplate {
+  EVENT_OVERVIEW
+  SUBMISSIONS_PIPELINE
+  SPEAKER_TRACKING
+  REVIEW_PROGRESS
+  EVALUATION_PLANS_BY_TRACK
+  SCHEDULE_HEALTH
+  MANUAL
+}
+
+enum DashboardWidgetKind {
+  METRIC
+  CHART
+  LIST
+}
+
+enum DashboardWidgetDataSource {
+  SUBMISSION_TOTAL
+  SUBMISSIONS_BY_STATUS
+  RECENT_SUBMISSIONS
+  SPEAKER_TOTAL
+  MISSING_BIOGRAPHIES
+  MISSING_HEADSHOTS
+  OUTSTANDING_SPEAKER_TASKS
+  EVALUATION_PROGRESS
+  EVALUATION_PLANS_BY_TRACK
+  UNSCHEDULED_SESSIONS
+}
+
 model Event {
   id                        String                     @id @default(uuid()) @db.Uuid
   name                      String
@@ -279,8 +308,44 @@ model Event {
   agendaPlacements          AgendaPlacement[]
   publishedProgram          PublishedProgram?
   speakerResourcePages      SpeakerResourcePage[]
+  customDashboards          CustomDashboard[]
 
   @@map("events")
+}
+
+model CustomDashboard {
+  id        String                  @id @default(uuid()) @db.Uuid
+  eventId   String                  @db.Uuid
+  name      String
+  template  CustomDashboardTemplate
+  filters   Json
+  createdAt DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime                @updatedAt @db.Timestamptz(3)
+  event     Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  widgets   DashboardWidget[]
+
+  @@unique([eventId, id])
+  @@index([eventId, createdAt])
+  @@map("custom_dashboards")
+}
+
+model DashboardWidget {
+  id          String                    @id @default(uuid()) @db.Uuid
+  eventId     String                    @db.Uuid
+  dashboardId String                    @db.Uuid
+  kind        DashboardWidgetKind
+  dataSource  DashboardWidgetDataSource
+  title       String
+  position    Int
+  settings    Json
+  createdAt   DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime                  @updatedAt @db.Timestamptz(3)
+  dashboard   CustomDashboard           @relation(fields: [eventId, dashboardId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([dashboardId, position])
+  @@unique([eventId, dashboardId, id])
+  @@index([eventId, dashboardId])
+  @@map("dashboard_widgets")
 }
 
 model CfpForm {
