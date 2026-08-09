@@ -201,6 +201,11 @@ test("serves distinct safe experiences for every public CFP access state via dir
     await page.goto(`/cfp/${randomUUID()}`);
     await expect(page.getByRole("heading", { name: "Page not found." })).toBeVisible();
 
+    // A path segment that is not a UUID at all must reach the same not-found
+    // page rather than blowing up the uuid-typed lookup with a 500.
+    await page.goto("/cfp/not-a-public-id");
+    await expect(page.getByRole("heading", { name: "Page not found." })).toBeVisible();
+
     await page.goto(`/cfp/${publicIds.draft}`);
     await expect(page.getByRole("heading", { name: "Page not found." })).toBeVisible();
 

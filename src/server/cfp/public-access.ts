@@ -28,6 +28,8 @@ export type CfpPublicAccessLookup =
       readonly closesAt: Date | null;
     };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export class CfpPublicAccessRepository {
   private readonly client: PrismaClient;
 
@@ -36,6 +38,13 @@ export class CfpPublicAccessRepository {
   }
 
   async findByPublicId(publicId: string): Promise<CfpPublicAccessLookup> {
+    // publicId is a Postgres uuid column, so a non-UUID path segment would
+    // make the driver reject the query (22P02) and surface a 500 instead of
+    // the not-found page every other unresolvable identifier gets.
+    if (!UUID_PATTERN.test(publicId)) {
+      return { status: "unknown" };
+    }
+
     const policy = await this.client.cfpPolicy.findUnique({
       where: { publicId },
       select: {
