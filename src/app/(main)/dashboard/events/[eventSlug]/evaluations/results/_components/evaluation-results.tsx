@@ -324,7 +324,7 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                       </TableHead>
                     ))}
                     <TableHead>Weighted average</TableHead>
-                    <TableHead className="pr-(--card-spacing)">Rank</TableHead>
+                    <TableHead>Rank</TableHead>
                     <TableHead>Progression</TableHead>
                     <TableHead className="pr-(--card-spacing)">Final decision</TableHead>
                   </TableRow>
@@ -388,7 +388,7 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="pr-(--card-spacing)">
+                      <TableCell>
                         {workspace.selectedRoundId ? (
                           <ProgressionAction
                             eventSlug={event.slug}

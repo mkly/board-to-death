@@ -189,6 +189,7 @@ export class EvaluationResultsRepository {
         },
         evaluationDecisions: {
           orderBy: { decisionNumber: "desc" },
+          take: 1,
           select: {
             decisionNumber: true,
             outcome: true,
