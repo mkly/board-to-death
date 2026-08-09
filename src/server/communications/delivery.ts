@@ -36,7 +36,7 @@ export type AttemptClaim =
   | { readonly claimed: true; readonly attempt: DeliveryAttemptAudit }
   | {
       readonly claimed: false;
-      readonly reason: "not-found" | "in-flight" | "already-delivered" | "terminal-failure" | "not-ready";
+      readonly reason: "not-found" | "cancelled" | "in-flight" | "already-delivered" | "terminal-failure" | "not-ready";
       readonly nextAttemptAt?: string;
     };
 

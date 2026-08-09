@@ -47,6 +47,23 @@ test("previews a deduplicated live audience with exact recipients and explained 
   await expect(page.getByRole("row", { name: /Lin Speaker/ })).toContainText("Email consent is not active");
   await expect(page.getByText("Ready for confirmation")).toBeVisible();
 
+  await page.getByRole("combobox", { name: "Email template" }).click();
+  await page.getByRole("option", { name: "Speaker update · v1" }).click();
+  await page.getByRole("button", { name: "Confirm 2 recipients" }).click();
+  await expect(page.getByRole("alertdialog", { name: "Queue this bulk send?" })).toBeVisible();
+  await page.getByRole("button", { name: "Queue recipient deliveries" }).click();
+  await expect(page.getByRole("alert")).toContainText("2 recipient deliveries queued from immutable snapshots.");
+
+  await page.getByRole("link", { name: "View delivery details" }).click();
+  await expect(page.getByRole("heading", { name: "Bulk delivery" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toContainText("Hello Ada Lovelace");
+  await page.getByRole("button", { name: "Cancel remaining attempts" }).click();
+  await expect(page.getByRole("alertdialog", { name: "Cancel this delivery?" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel remaining attempts", exact: true }).last().click();
+  await expect(page.getByText(/Cancelled/)).toBeVisible();
+
+  await page.getByRole("link", { name: "Back to audience" }).click();
+
   await page.getByRole("link", { name: "Clear" }).click();
   await page.getByRole("checkbox", { name: "Rejected" }).check();
   await page.getByRole("button", { name: "Preview audience" }).click();

@@ -16,11 +16,15 @@ import type {
   RecipientAudienceSelection,
 } from "@/server/communications/audiences";
 
+import { BulkSendConfirmation } from "./bulk-send-confirmation";
+
 interface RecipientAudienceWorkspaceProps {
   readonly event: { readonly id: string; readonly name: string; readonly slug: string };
   readonly options: RecipientAudienceOptions;
   readonly selection: RecipientAudienceSelection;
   readonly preview: RecipientAudiencePreview | null;
+  readonly confirmationToken: string;
+  readonly templates: readonly { readonly id: string; readonly name: string; readonly version: number }[];
 }
 
 const ACCEPTANCE_OPTIONS = [
@@ -42,7 +46,14 @@ function checked(values: readonly string[] | undefined, value: string): boolean 
   return values?.includes(value) ?? false;
 }
 
-export function RecipientAudienceWorkspace({ event, options, selection, preview }: RecipientAudienceWorkspaceProps) {
+export function RecipientAudienceWorkspace({
+  event,
+  options,
+  selection,
+  preview,
+  confirmationToken,
+  templates,
+}: RecipientAudienceWorkspaceProps) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -245,6 +256,16 @@ export function RecipientAudienceWorkspace({ event, options, selection, preview 
           </CardFooter>
         )}
       </Card>
+
+      {preview && preview.recipients.length > 0 && (
+        <BulkSendConfirmation
+          eventSlug={event.slug}
+          confirmationToken={confirmationToken}
+          recipientCount={preview.recipients.length}
+          selection={selection}
+          templates={templates}
+        />
+      )}
 
       {preview && preview.excluded.length > 0 && (
         <Card>
