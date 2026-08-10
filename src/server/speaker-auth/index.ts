@@ -5,3 +5,4 @@ export {
   SpeakerAuthService,
   type SpeakerSessionIdentity,
 } from "./speaker-auth";
+export { SpeakerMagicLinkDeliveryService } from "./speaker-magic-link-delivery";

@@ -361,6 +361,8 @@ if (!adminSessionCookie) throw new Error("Expected Better Auth to issue an admin
 process.stdout.write(
   JSON.stringify({
     eventSlug: fixture.eventSlug,
+    speakerId: fixture.speakerId,
+    speakerEmail: "ada@example.test",
     populatedAuthHref: await authHref(fixture.eventId, fixture.eventSlug, fixture.speakerId),
     emptyAuthHref: await authHref(fixture.eventId, fixture.eventSlug, emptySpeaker.id),
     emptyResourceAuthHref: await authHref(emptyResourceEvent.id, emptyResourceEvent.slug, emptyResourceSpeaker.id),

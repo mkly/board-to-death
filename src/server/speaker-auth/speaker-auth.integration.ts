@@ -5,6 +5,7 @@ import { EventRepository } from "../events/repositories.ts";
 import { DeterministicClock, DeterministicTokenGenerator } from "../infrastructure/fakes.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
 import { SpeakerAuthError, SpeakerAuthService } from "./speaker-auth.ts";
+import { SpeakerMagicLinkDeliveryService } from "./speaker-magic-link-delivery.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -124,5 +125,36 @@ describe("speaker magic-link authentication", () => {
     });
     assert.notEqual(stored.tokenHash, second.sessionToken);
     assert.equal(JSON.stringify(stored).includes(second.sessionToken), false);
+  });
+
+  test("delivers an event-scoped email request through the existing magic-link consumer", async () => {
+    const identity = await createSpeaker("delivery-speaker");
+    await createSpeaker("other-delivery-speaker");
+    const delivered: { email: string; url: string }[] = [];
+    const delivery = new SpeakerMagicLinkDeliveryService({
+      baseUrl: "https://events.example.test",
+      database: client,
+      sendMagicLink: async (message) => {
+        delivered.push(message);
+      },
+    });
+
+    await delivery.requestForEmail({
+      eventSlug: "delivery-speaker",
+      email: "DELIVERY-SPEAKER@example.test",
+    });
+    await delivery.requestForEmail({ eventSlug: "delivery-speaker", email: "unknown@example.test" });
+
+    assert.equal(delivered.length, 1);
+    assert.equal(delivered[0]?.email, "delivery-speaker@example.test");
+    const url = new URL(delivered[0]?.url ?? "");
+    assert.equal(url.pathname, "/portal/delivery-speaker/auth");
+    assert.equal(url.searchParams.get("speakerId"), identity.speakerId);
+    const token = url.searchParams.get("token");
+    assert.ok(token);
+
+    const session = await new SpeakerAuthService({ database: client }).consumeMagicLink({ ...identity, token });
+    assert.equal(session.eventId, identity.eventId);
+    assert.equal(session.speakerId, identity.speakerId);
   });
 });

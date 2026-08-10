@@ -1,6 +1,8 @@
 import { KeyRoundIcon } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+
+import { SpeakerSignInForm } from "./_components/speaker-sign-in-form";
 
 interface SpeakerSignInPageProps {
   readonly params: Promise<{ readonly eventSlug: string }>;
@@ -20,13 +22,14 @@ export default async function SpeakerSignInPage({ params, searchParams }: Speake
           <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
             <KeyRoundIcon aria-hidden="true" />
           </div>
-          <CardTitle>Speaker portal sign-in</CardTitle>
+          <h1 className="font-heading font-medium text-base leading-snug">Speaker portal sign-in</h1>
           <CardDescription>{problem}</CardDescription>
         </CardHeader>
         <CardContent className="text-muted-foreground text-sm">
-          Request a fresh link from the organizer for <span className="font-medium text-foreground">{eventSlug}</span>.
-          Speaker links are single-use and expire for your security.
+          Request a fresh link for <span className="font-medium text-foreground">{eventSlug}</span>. Speaker links are
+          single-use and expire after 10 minutes.
         </CardContent>
+        <SpeakerSignInForm eventSlug={eventSlug} />
       </Card>
     </main>
   );
