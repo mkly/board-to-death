@@ -121,9 +121,15 @@ export class ResendEmailService implements EmailService {
           ...(message.html ? { html: message.html } : {}),
           ...(message.attachments
             ? {
-                // Resend's send API accepts filename and content, but has no fields for the
-                // contract's contentType or disposition metadata.
-                attachments: message.attachments.map(({ content, filename }) => ({ content, filename })),
+                // Resend's send API takes filename, content and content_type. It has no field
+                // for the contract's disposition: inline rendering there requires a content_id
+                // per attachment, which EmailAttachment does not carry, so an "inline"
+                // disposition is delivered as a regular attachment.
+                attachments: message.attachments.map(({ content, filename, contentType }) => ({
+                  content,
+                  filename,
+                  content_type: contentType,
+                })),
               }
             : {}),
         }),
