@@ -164,10 +164,13 @@ function xmlFeed(feed: PublishedScheduleFeed): string {
 
 function icalFeed(feed: PublishedScheduleFeed): string {
   const publishedAt = new Date(feed.publication.publishedAt);
+  // Times stay in UTC: a TZID parameter would have to point at a VTIMEZONE
+  // component ical-generator does not emit, so the event timezone travels as
+  // the display hint clients read instead.
   const calendar = ical({
     name: `${feed.event.name} schedule`,
-    prodId: { company: "GatherPulse", product: "Published Program", language: "EN" },
-    timezone: feed.event.timezone,
+    prodId: { company: "Board to Death", product: "Published Program", language: "EN" },
+    x: [["X-WR-TIMEZONE", feed.event.timezone]],
   });
 
   for (const placement of feed.schedule) {
@@ -175,7 +178,6 @@ function icalFeed(feed: PublishedScheduleFeed): string {
       id: `${placement.id}.${feed.event.id}@board-to-death`,
       start: new Date(placement.startsAt),
       end: new Date(placement.endsAt),
-      timezone: feed.event.timezone,
       stamp: publishedAt,
       lastModified: publishedAt,
       summary: placement.session.title,

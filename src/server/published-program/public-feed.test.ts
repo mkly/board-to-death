@@ -99,6 +99,14 @@ describe("published schedule feeds", () => {
       assert.match(response.headers.get("cache-control") ?? "", /public/);
       assert.match(body, new RegExp(content.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
       assert.doesNotMatch(body, /private-storage-object|private-admin-id/);
+      if (format === "ical") {
+        // TZID may only reference a VTIMEZONE component in the same object, so
+        // every timestamp has to be emitted in UTC form.
+        assert.doesNotMatch(body, /TZID=/);
+        assert.match(body, /DTSTAMP:\d{8}T\d{6}Z/);
+        assert.match(body, /DTSTART:20270313T180000Z/);
+        assert.match(body, /X-WR-TIMEZONE:America\/Los_Angeles/);
+      }
     }
   });
 
