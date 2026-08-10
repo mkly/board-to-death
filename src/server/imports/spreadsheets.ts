@@ -19,6 +19,9 @@ import { RepositoryError } from "../events/repositories.ts";
 import { Readable } from "node:stream";
 
 export const MAX_IMPORT_ROWS = 500;
+// A full 500-row commit issues thousands of statements, so Prisma's 5s
+// interactive-transaction default aborts it long before it finishes.
+const IMPORT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 120_000 };
 export const MAX_IMPORT_BYTES = 1_000_000;
 export const SKIP_COLUMN = "__skip__";
 
@@ -167,20 +170,32 @@ function entityCustomFieldType(entityType: SpreadsheetImportEntityType): CustomF
     : CustomFieldEntityType.PROGRAM_SESSION;
 }
 
+// A FILE value only exists once a file has been uploaded, so an upload-only
+// definition can never be satisfied by a spreadsheet cell. Excluding it here
+// also keeps a *required* FILE definition from making every import impossible:
+// validateMapping would demand a column for a target no cell could ever fill.
+async function importableDefinitions(
+  client: ImportClient,
+  eventId: string,
+  entityType: SpreadsheetImportEntityType,
+): Promise<readonly CustomFieldDefinition[]> {
+  return client.customFieldDefinition.findMany({
+    where: { eventId, entityType: entityCustomFieldType(entityType), type: { not: CustomFieldType.FILE } },
+    orderBy: { position: "asc" },
+  });
+}
+
 export async function listImportFields(
   client: ImportClient,
   eventId: string,
   entityType: SpreadsheetImportEntityType,
 ): Promise<readonly ImportFieldOption[]> {
-  const definitions = await client.customFieldDefinition.findMany({
-    where: { eventId, entityType: entityCustomFieldType(entityType) },
-    orderBy: { position: "asc" },
-  });
+  const definitions = await importableDefinitions(client, eventId, entityType);
   return [
     ...(entityType === SpreadsheetImportEntityType.CONTACT ? CONTACT_FIELDS : SESSION_FIELDS),
     ...definitions.map((definition) => ({
       key: `custom:${definition.id}`,
-      label: `${definition.label} (custom${definition.type === CustomFieldType.FILE ? ", upload-only" : ""})`,
+      label: `${definition.label} (custom)`,
       required: definition.required,
       custom: true,
     })),
@@ -201,21 +216,17 @@ function previewOutcome(hasErrors: boolean, exists: boolean): ImportPreviewRow["
   return exists ? "updated" : "created";
 }
 
+// Never called with an empty `raw`: customValuesForRow handles blank cells.
 function parseCustomValue(definition: CustomFieldDefinition, raw: string): CustomFieldInputValue {
   if (definition.type === CustomFieldType.FILE) {
-    if (raw !== "")
-      throw new RepositoryError("invalid-input", `${definition.label} is upload-only and cannot be imported.`);
-    if (definition.required) throw new RepositoryError("invalid-input", `${definition.label} requires a file upload.`);
-    return "";
+    throw new RepositoryError("invalid-input", `${definition.label} is upload-only and cannot be imported.`);
   }
   if (definition.type === CustomFieldType.NUMBER) {
-    if (raw === "" && !definition.required) return "";
     const value = Number(raw);
     if (!Number.isFinite(value)) throw new RepositoryError("invalid-input", `${definition.label} must be a number.`);
     return value;
   }
   if (definition.type === CustomFieldType.CHECKBOX) {
-    if (raw === "" && !definition.required) return false;
     const normalized = raw.toLocaleLowerCase();
     if (["true", "yes", "1"].includes(normalized)) return true;
     if (["false", "no", "0"].includes(normalized)) return false;
@@ -258,8 +269,16 @@ function customValuesForRow(
     const fieldKey = `custom:${definition.id}`;
     const source = Object.entries(mapping).find(([, target]) => target === fieldKey)?.[0];
     if (!source) continue;
+    const raw = (row.values[source] ?? "").trim();
+    // A blank cell leaves whatever is already stored alone. Sending "" instead
+    // would reject the row for every non-text type, because the shared
+    // validator only accepts an empty string for text-shaped fields.
+    if (raw === "") {
+      if (definition.required) errors.push(`${definition.label} is required.`);
+      continue;
+    }
     try {
-      const value = parseCustomValue(definition, (row.values[source] ?? "").trim());
+      const value = parseCustomValue(definition, raw);
       validateCustomFieldValue(definition, value);
       values.push({ definitionId: definition.id, value });
     } catch (error) {
@@ -278,10 +297,7 @@ async function prepareRows(
 ): Promise<{ readonly rows: readonly PreparedRow[]; readonly preview: ImportPreview }> {
   const [fields, definitions] = await Promise.all([
     listImportFields(client, eventId, entityType),
-    client.customFieldDefinition.findMany({
-      where: { eventId, entityType: entityCustomFieldType(entityType) },
-      orderBy: { position: "asc" },
-    }),
+    importableDefinitions(client, eventId, entityType),
   ]);
   const mappingErrors = validateMapping(spreadsheet.headers, fields, mapping);
   if (mappingErrors.length > 0) {
@@ -512,5 +528,5 @@ export async function commitSpreadsheetImport(
       });
     }
     return { importId: audit.id, preview: prepared.preview };
-  });
+  }, IMPORT_TRANSACTION_OPTIONS);
 }

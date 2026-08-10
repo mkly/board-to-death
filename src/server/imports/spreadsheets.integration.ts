@@ -61,15 +61,28 @@ describe("spreadsheet imports", () => {
         position: 0,
       },
     });
+    const seats = await client.customFieldDefinition.create({
+      data: {
+        eventId,
+        entityType: CustomFieldEntityType.CONTACT,
+        key: "seats",
+        label: "Seats",
+        type: CustomFieldType.NUMBER,
+        position: 1,
+      },
+    });
     const spreadsheet = await parseSpreadsheet(
       "contacts.csv",
-      csv("Email,First,Last,Meal\r\nada@example.test,Ada,Byron,Vegan\r\ngrace@example.test,Grace,Hopper,Standard\r\n"),
+      csv(
+        "Email,First,Last,Meal,Seats\r\nada@example.test,Ada,Byron,Vegan,\r\ngrace@example.test,Grace,Hopper,Standard,3\r\n",
+      ),
     );
     const mapping = {
       Email: "email",
       First: "givenName",
       Last: "familyName",
       Meal: `custom:${field.id}`,
+      Seats: `custom:${seats.id}`,
     };
     const preview = await previewSpreadsheetImport(
       client,
@@ -99,6 +112,9 @@ describe("spreadsheet imports", () => {
       "Other",
     );
     assert.equal(await client.customFieldValue.count({ where: { eventId, definitionId: field.id } }), 2);
+    // Ada's Seats cell was blank: an optional custom field left empty stores nothing
+    // rather than rejecting the row or persisting a coerced 0.
+    assert.equal(await client.customFieldValue.count({ where: { eventId, definitionId: seats.id } }), 1);
     assert.equal(await client.spreadsheetImportChange.count({ where: { importId: committed.importId } }), 2);
   });
 
