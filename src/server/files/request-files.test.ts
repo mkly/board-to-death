@@ -5,6 +5,7 @@ import { InMemoryFileStorage } from "../infrastructure/fakes.ts";
 import { createFileRequestBundle } from "./exports.ts";
 import {
   type EventFileEntry,
+  type EventFileLibraryEntry,
   type FileRequestAssignmentRecord,
   FileRequestFileService,
   type FileRequestPolicySnapshot,
@@ -26,8 +27,8 @@ const policy: FileRequestPolicySnapshot = {
 
 /**
  * The store port stands in for the Prisma tables: `recordFile` supersedes the same way
- * `prisma-store.ts` does inside its transaction, so the service's storage cleanup and its
- * replacement policy can be exercised without a database.
+ * `prisma-store.ts` does inside its transaction, so the service's replacement policy can be
+ * exercised without a database.
  */
 class FakeFileRequestStore implements FileRequestStore {
   readonly assignments = new Map<string, FileRequestAssignmentRecord>();
@@ -68,12 +69,10 @@ class FakeFileRequestStore implements FileRequestStore {
     if (this.recordFailure) {
       throw this.recordFailure;
     }
-    const supersededKeys: string[] = [];
     if (input.supersedeExisting) {
       for (const [index, file] of this.files.entries()) {
         if (file.assignmentId === input.assignmentId && file.supersededAt === null) {
           this.files[index] = { ...file, supersededAt: new Date("2027-01-01T00:00:00.000Z") };
-          supersededKeys.push(file.objectKey);
         }
       }
     }
@@ -89,7 +88,7 @@ class FakeFileRequestStore implements FileRequestStore {
       supersededAt: null,
     };
     this.files.push(file);
-    return { file, supersededKeys };
+    return { file };
   }
 
   async isGroupMember(_eventId: string, groupId: string, contactId: string): Promise<boolean> {
@@ -117,6 +116,14 @@ class FakeFileRequestStore implements FileRequestStore {
           },
         ];
       });
+  }
+
+  async listEventFileLibrary(eventId: string): Promise<readonly EventFileLibraryEntry[]> {
+    return (await this.listEventFiles(eventId)).map((entry) => ({
+      ...entry,
+      uploaderLabel: "Organizer",
+      versionCount: 1,
+    }));
   }
 }
 
@@ -223,7 +230,7 @@ describe("file request uploads", () => {
 });
 
 describe("file request replacement policy", () => {
-  test("replaces the previous file and removes its object under REPLACE_LATEST", async () => {
+  test("replaces the previous file while retaining its object under REPLACE_LATEST", async () => {
     const store = new FakeFileRequestStore();
     store.addAssignment({ id: "assignment-1", contactId: "contact-1" });
     const { service, storage } = createService(store);
@@ -246,7 +253,7 @@ describe("file request replacement policy", () => {
     assert.equal(withHistory.value.length, 2);
 
     const replacedObject = await storage.get(first.value.key);
-    assert.equal(replacedObject.ok, false);
+    assert.equal(replacedObject.ok, true);
   });
 
   test("keeps every file and its object under KEEP_HISTORY", async () => {
@@ -299,9 +306,8 @@ describe("file request replacement policy", () => {
     assert.equal(respondentView.ok, true);
     if (respondentView.ok) assert.equal(respondentView.value.length, 1);
     assert.equal(respondentDownload.ok, false);
-    // The object was removed with the replacement, so an administrator reaches the row but not bytes.
-    assert.equal(adminDownload.ok, false);
-    if (!adminDownload.ok) assert.equal(adminDownload.error.code, "not-found");
+    assert.equal(adminDownload.ok, true);
+    if (adminDownload.ok) assert.deepEqual(adminDownload.value.bytes, PDF);
   });
 });
 

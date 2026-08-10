@@ -296,7 +296,7 @@ export function FileRequestDetail({
                           <span className="text-muted-foreground text-sm">No files uploaded</span>
                         ) : (
                           <ul className="flex flex-col gap-1">
-                            {assignmentFiles.map((file) => (
+                            {assignmentFiles.map((file, index) => (
                               <li className="flex flex-wrap items-center gap-2" key={file.id}>
                                 <a
                                   className="text-sm underline-offset-4 hover:underline"
@@ -305,7 +305,9 @@ export function FileRequestDetail({
                                   {file.fileName}
                                 </a>
                                 <span className="text-muted-foreground text-xs">{formatBytes(file.size)}</span>
-                                {file.supersededAt ? <Badge variant="outline">replaced</Badge> : null}
+                                <Badge variant={index === 0 ? "secondary" : "outline"}>
+                                  {index === 0 ? "Latest" : `Version ${assignmentFiles.length - index}`}
+                                </Badge>
                               </li>
                             ))}
                           </ul>

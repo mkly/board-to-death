@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { getDatabaseClient } from "@/server/database/client";
+import { createPrismaFileRequestStore } from "@/server/files/prisma-store";
 import { listFileRequests } from "@/server/files/repositories";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
@@ -26,13 +27,18 @@ export default async function FileRequestsPage({
     );
   }
 
-  const requests = await listFileRequests(getDatabaseClient(), event.id, { includeArchived: true });
+  const client = getDatabaseClient();
+  const [requests, files] = await Promise.all([
+    listFileRequests(client, event.id, { includeArchived: true }),
+    createPrismaFileRequestStore(client).listEventFileLibrary(event.id),
+  ]);
 
   return (
     <FileRequestsIndex
       activeTab={messages.tab ?? "all"}
       error={messages.error}
       event={event}
+      files={files}
       notice={messages.notice}
       requests={requests}
     />

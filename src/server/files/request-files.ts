@@ -57,8 +57,6 @@ export interface RecordFileInput {
 
 export interface RecordFileResult {
   readonly file: StoredFileRecord;
-  /** Object keys the write superseded; their objects are the service's to delete. */
-  readonly supersededKeys: readonly string[];
 }
 
 export interface EventFileEntry {
@@ -68,6 +66,11 @@ export interface EventFileEntry {
   readonly file: StoredFileRecord;
 }
 
+export interface EventFileLibraryEntry extends EventFileEntry {
+  readonly uploaderLabel: string;
+  readonly versionCount: number;
+}
+
 export interface FileRequestStore {
   findAssignment(eventId: string, assignmentId: string): Promise<FileRequestAssignmentRecord | undefined>;
   listAssignmentFiles(assignmentId: string, includeSuperseded: boolean): Promise<readonly StoredFileRecord[]>;
@@ -75,6 +78,7 @@ export interface FileRequestStore {
   isGroupMember(eventId: string, groupId: string, contactId: string): Promise<boolean>;
   isSubmissionSpeaker(eventId: string, submissionId: string, speakerId: string): Promise<boolean>;
   listEventFiles(eventId: string): Promise<readonly EventFileEntry[]>;
+  listEventFileLibrary(eventId: string): Promise<readonly EventFileLibraryEntry[]>;
 }
 
 export type FileRequestPrincipal =
@@ -279,9 +283,6 @@ export class FileRequestFileService {
       return failure("unexpected", error instanceof Error ? error.message : "The upload could not be recorded.");
     }
 
-    for (const supersededKey of recorded.supersededKeys) {
-      await this.#storage.delete(supersededKey);
-    }
     return success(reference(recorded.file));
   }
 
