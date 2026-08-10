@@ -1,6 +1,5 @@
+import Image from "next/image";
 import Link from "next/link";
-
-import { Command } from "lucide-react";
 
 import { LoginForm } from "../../_components/login-form";
 
@@ -15,12 +14,28 @@ export default async function LoginV1({ searchParams }: LoginV1Props) {
     requestedCallback.startsWith("/") && !requestedCallback.startsWith("//") ? requestedCallback : "/dashboard";
   return (
     <div className="flex h-dvh">
-      <div className="hidden bg-primary lg:block lg:w-1/3">
-        <div className="flex h-full flex-col items-center justify-center p-12 text-center">
+      <div className="relative hidden bg-primary lg:block lg:w-1/3">
+        <Image
+          src="/auth-background.png"
+          alt=""
+          fill
+          priority
+          sizes="(min-width: 1024px) 33vw, 0px"
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-primary/40" />
+        <div className="relative flex h-full flex-col items-center justify-center p-12 text-center">
           <div className="space-y-6">
-            <Command className="mx-auto size-12 text-primary-foreground" />
+            <Image
+              src="/brand-mark.png"
+              alt=""
+              width={64}
+              height={64}
+              priority
+              className="mx-auto size-12 object-contain"
+            />
             <div className="space-y-2">
-              <h1 className="font-light text-5xl text-primary-foreground">Hello again</h1>
+              <h1 className="font-light! text-5xl text-primary-foreground tracking-normal!">Hello again</h1>
               <p className="text-primary-foreground/80 text-xl">Login to continue</p>
             </div>
           </div>
