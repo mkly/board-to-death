@@ -107,7 +107,10 @@ function optionsFor(definition: CustomFieldDefinition): readonly string[] {
   return definition.options;
 }
 
-function validateValue(definition: CustomFieldDefinition, input: CustomFieldInputValue): Prisma.InputJsonValue {
+export function validateCustomFieldValue(
+  definition: CustomFieldDefinition,
+  input: CustomFieldInputValue,
+): Prisma.InputJsonValue {
   if (definition.type === CustomFieldType.CHECKBOX) {
     if (typeof input !== "boolean") invalid(`${definition.label} must be checked or unchecked.`);
     if (definition.required && !input) invalid(`${definition.label} must be checked.`);
@@ -334,7 +337,7 @@ export class CustomFieldRepository {
         if (!definition || definition.entityType !== target.entityType) {
           throw new RepositoryError("not-found", "The custom field is not available for this record.");
         }
-        const value = validateValue(definition, input);
+        const value = validateCustomFieldValue(definition, input);
         const where = { definitionId, ...targetWhere(eventId, target) };
         if ((value === "" || (Array.isArray(value) && value.length === 0)) && !definition.required) {
           await transaction.customFieldValue.deleteMany({ where });
