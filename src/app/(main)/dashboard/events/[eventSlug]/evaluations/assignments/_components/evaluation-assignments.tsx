@@ -20,6 +20,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import type { EvaluationAssignmentWorkspace } from "@/server/evaluations/assignments";
 
 import { type ManageAssignmentsState, manageEvaluationAssignments, reopenEvaluationAssignment } from "../actions";
+import { ReviewerReminders } from "./reviewer-reminders";
 
 const reopenInitialState: ManageAssignmentsState = { status: "idle" };
 
@@ -206,6 +207,9 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
             <EmptyDescription>Submitted and under-review proposals will appear here.</EmptyDescription>
           </EmptyHeader>
         </Empty>
+      ) : null}
+      {workspace.selectedRoundId ? (
+        <ReviewerReminders eventSlug={event.slug} roundId={workspace.selectedRoundId} workspace={workspace.reminders} />
       ) : null}
       {workspace.submissions.length > 0 ? (
         <form action={formAction} className="flex flex-col gap-4">

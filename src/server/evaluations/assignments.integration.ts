@@ -14,6 +14,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { EvaluationAssignmentRepository } from "./assignments.ts";
+import { EvaluationReminderRepository } from "./reminders.ts";
 import { EvaluationPlanRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
@@ -24,6 +25,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for reviewer assignm
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const repository = new EvaluationAssignmentRepository(client);
 const plans = new EvaluationPlanRepository(client);
+const reminderRepository = new EvaluationReminderRepository(client);
 
 interface Fixture {
   readonly eventId: string;
@@ -607,6 +609,78 @@ describe("reviewer and committee assignments", () => {
     await assert.rejects(
       repository.getWorkspace(fixture.otherEventId, fixture.openRoundId),
       /selected open evaluation round/,
+    );
+  });
+
+  test("queues one auditable reminder delivery for selected reviewers with outstanding work", async () => {
+    const fixture = await createFixture();
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId, fixture.secondSubmissionId],
+    });
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.targetReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+
+    const queued = await reminderRepository.queue({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerIds: [fixture.sourceReviewerId, fixture.targetReviewerId],
+    });
+    assert.equal(queued.recipientCount, 2);
+
+    const delivery = await client.messageDelivery.findUniqueOrThrow({
+      where: { id: queued.deliveryId },
+      include: { recipients: { orderBy: { email: "asc" } } },
+    });
+    assert.match(delivery.occurrenceKey ?? "", new RegExp(`^evaluation-review-reminder:${fixture.openRoundId}:`));
+    assert.deepEqual(
+      delivery.recipients.map(({ recipientKey }) => recipientKey).sort(),
+      [`evaluation-reviewer:${fixture.sourceReviewerId}`, `evaluation-reviewer:${fixture.targetReviewerId}`].sort(),
+    );
+
+    const workspace = await reminderRepository.getWorkspace(fixture.eventId, fixture.openRoundId);
+    assert.deepEqual(
+      workspace.targets.map(({ reviewerId, assignedCount, completedCount, outstandingCount, lastReminderAt }) => ({
+        reviewerId,
+        assignedCount,
+        completedCount,
+        outstandingCount,
+        lastReminderAt,
+      })),
+      [
+        {
+          reviewerId: fixture.sourceReviewerId,
+          assignedCount: 2,
+          completedCount: 0,
+          outstandingCount: 2,
+          lastReminderAt: delivery.createdAt,
+        },
+        {
+          reviewerId: fixture.targetReviewerId,
+          assignedCount: 1,
+          completedCount: 0,
+          outstandingCount: 1,
+          lastReminderAt: delivery.createdAt,
+        },
+      ],
+    );
+    assert.deepEqual(workspace.deliveries, [
+      { deliveryId: delivery.id, createdAt: delivery.createdAt, recipientCount: 2 },
+    ]);
+
+    await assert.rejects(
+      reminderRepository.queue({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        reviewerIds: [fixture.otherReviewerId],
+      }),
+      /outstanding assignment/,
     );
   });
 });
