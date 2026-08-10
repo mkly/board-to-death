@@ -56,6 +56,7 @@ describe("program workspace navigation", () => {
       "cfp",
       "submissions",
       "sessions",
+      "imports",
       "speakers",
       "speaker-sourcing",
       "contacts",
