@@ -59,8 +59,8 @@ npm run db:deploy
 npm run dev
 ```
 
-Open <http://localhost:3000>. The admin login uses a magic link and admits only addresses listed in
-`AUTH_ALLOWED_EMAILS`.
+Open <http://localhost:3000>. Authentication uses magic links. Dashboard access comes from active organization or
+event memberships, not from an email allowlist.
 
 Seed a repeatable demonstration event with:
 

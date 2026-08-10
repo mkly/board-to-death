@@ -128,20 +128,38 @@ describe("CFP policy persistence", () => {
 
   test("reuses an event administrator identity while refreshing its display name", async () => {
     const event = await events.create(eventInput);
+    const userId = "aB3xYz9QwErTyUiOpAsDfGhJ";
     const first = await administrators.ensure({
       eventId: event.id,
-      externalId: "OWNER@EXAMPLE.COM",
+      externalId: userId,
       displayName: "Original owner",
     });
     const second = await administrators.ensure({
       eventId: event.id,
-      externalId: "owner@example.com",
+      externalId: userId,
       displayName: "Current owner",
     });
 
     assert.equal(second.id, first.id);
-    assert.equal(second.externalId, "owner@example.com");
+    assert.equal(second.externalId, userId);
     assert.equal(second.displayName, "Current owner");
+  });
+
+  test("keeps administrator identities case-sensitive because they hold user IDs", async () => {
+    const event = await events.create(eventInput);
+    const owner = await administrators.ensure({
+      eventId: event.id,
+      externalId: "aB3xYz9QwErTyUiOpAsDfGhJ",
+      displayName: "Owner",
+    });
+    const other = await administrators.ensure({
+      eventId: event.id,
+      externalId: "ab3xyz9qwertyuiopasdfghj",
+      displayName: "Different user",
+    });
+
+    assert.notEqual(other.id, owner.id);
+    assert.equal(owner.externalId, "aB3xYz9QwErTyUiOpAsDfGhJ");
   });
 
   test("allows close, reopen, and archive only through the explicit publication lifecycle", async () => {
@@ -251,7 +269,17 @@ describe("CFP policy persistence", () => {
       ]),
     );
 
-    const updated = await policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId.toUpperCase(), [
+    await assert.rejects(
+      policies.updateAdministratorAssignments(
+        event.id,
+        policy.id,
+        owner.externalId.toUpperCase(),
+        policy.definition.adminAssignments,
+      ),
+      (error: unknown) => error instanceof RepositoryError && error.code === "not-found",
+    );
+
+    const updated = await policies.updateAdministratorAssignments(event.id, policy.id, owner.externalId, [
       {
         administratorId: owner.id,
         role: CfpAdminRole.OWNER,

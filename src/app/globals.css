@@ -4,6 +4,7 @@
 
 /* Theme preset styles: these override CSS variables based on the selected data-theme-preset */
 @import "../styles/presets/brutalist.css";
+@import "../styles/presets/emerald-rose-glow.css";
 @import "../styles/presets/soft-pop.css";
 @import "../styles/presets/tangerine.css";
 
@@ -87,7 +88,7 @@ These serve as the fallback; there is no separate default.css file. */
   --sidebar-ring: oklch(0.708 0 0);
 
   /* fonts */
-  --font-sans: var(--font-geist);
+  --font-sans: var(--font-plus-jakarta-sans);
   --font-mono: var(--font-geist-mono);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -203,6 +204,9 @@ These serve as the fallback; there is no separate default.css file. */
   }
   html[data-font="outfit"] body {
     --font-sans: var(--font-outfit);
+  }
+  html[data-font="plusJakartaSans"] body {
+    --font-sans: var(--font-plus-jakarta-sans);
   }
   html[data-font="geistMono"] body {
     --font-sans: var(--font-geist-mono);

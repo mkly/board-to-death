@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import type { CustomFieldInputDefinition, CustomFieldInputValue } from "@/components/custom-fields/custom-field-inputs";
 import { Button } from "@/components/ui/button";
-import { CfpDraftPolicy } from "@/generated/prisma/client";
+import { CfpDraftPolicy, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import { publicCfpHref } from "@/lib/cfp";
+import { customFieldFormPrefix } from "@/lib/custom-fields";
 import { CfpDraftRepository } from "@/server/cfp/drafts";
 import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
+import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
 import { PublicCfpForm } from "./_components/public-cfp-form";
@@ -25,6 +28,21 @@ interface PublicCfpStartPageProps {
 // request has to render its own key.
 export const dynamic = "force-dynamic";
 
+function inputDefinition(
+  field: Awaited<ReturnType<CustomFieldRepository["listDefinitions"]>>[number],
+): CustomFieldInputDefinition {
+  return {
+    id: field.id,
+    label: field.label,
+    description: field.description,
+    type: field.type,
+    required: field.required,
+    characterLimit: field.characterLimit,
+    options:
+      Array.isArray(field.options) && field.options.every((option) => typeof option === "string") ? field.options : [],
+  };
+}
+
 export default async function PublicCfpStartPage({ params, searchParams }: PublicCfpStartPageProps) {
   const { publicId } = await params;
   const { draft: draftToken } = await searchParams;
@@ -35,8 +53,12 @@ export default async function PublicCfpStartPage({ params, searchParams }: Publi
 
   let initialAnswers: Record<string, unknown> | undefined;
   let initialParticipants: readonly Record<string, string>[] | undefined;
+  let initialCustomFieldValues: readonly CustomFieldInputValue[] | undefined;
   let formVersionChanged = false;
   let draftError: string | null = null;
+  const customFieldDefinitions = (
+    await new CustomFieldRepository(client).listDefinitions(lookup.event.id, CustomFieldEntityType.CFP_SUBMISSION)
+  ).filter(({ type }) => type !== CustomFieldType.FILE);
 
   if (draftToken && lookup.draftPolicy !== CfpDraftPolicy.DISABLED) {
     try {
@@ -48,6 +70,10 @@ export default async function PublicCfpStartPage({ params, searchParams }: Publi
         currentFormVersionId: lookup.form.versionId,
       });
       initialAnswers = draft.answers;
+      initialCustomFieldValues = customFieldDefinitions.flatMap((definition) => {
+        const value = draft.answers[`${customFieldFormPrefix}${definition.id}`];
+        return value === undefined ? [] : [{ definitionId: definition.id, value }];
+      });
       initialParticipants = draft.participants as readonly Record<string, string>[];
       formVersionChanged = draft.formVersionChanged;
     } catch {
@@ -71,11 +97,13 @@ export default async function PublicCfpStartPage({ params, searchParams }: Publi
 
         <PublicCfpForm
           definition={lookup.form.definition}
+          customFieldDefinitions={customFieldDefinitions.map(inputDefinition)}
           draftError={draftError}
           draftPolicy={lookup.draftPolicy}
           draftToken={draftToken && !draftError ? draftToken : undefined}
           formVersionChanged={formVersionChanged}
           initialAnswers={initialAnswers}
+          initialCustomFieldValues={initialCustomFieldValues}
           initialParticipants={initialParticipants}
           publicId={publicId}
           submissionKey={randomUUID()}

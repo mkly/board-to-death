@@ -6,9 +6,10 @@ import { z } from "zod";
 
 import { portalHref, SPEAKER_SESSION_COOKIE } from "@/app/(speaker)/portal/[eventSlug]/_lib/portal-session";
 import { getRuntimeConfig } from "@/config/runtime-env.server";
-import { CfpDraftPolicy } from "@/generated/prisma/client";
+import { CfpDraftPolicy, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
 import { validateCfpAnswers } from "@/lib/cfp";
+import { customFieldFormPrefix } from "@/lib/custom-fields";
 import { CfpDraftRepository } from "@/server/cfp/drafts";
 import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
 import {
@@ -17,6 +18,8 @@ import {
   CfpSubmissionRepository,
 } from "@/server/cfp/submissions";
 import { type CfpApplicantRecipient, CfpThankYouRepository, renderCfpApplicantMessage } from "@/server/cfp/thank-you";
+import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
+import { CustomFieldRepository, validateCustomFieldValue } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { emitWebhookEvent } from "@/server/developer-api/webhooks";
 import { RepositoryError } from "@/server/events/repositories";
@@ -37,6 +40,22 @@ export interface SaveCfpDraftActionState {
   readonly message?: string;
   readonly token?: string;
   readonly expiresAt?: string;
+}
+
+async function customFieldValues(eventId: string, formData: FormData) {
+  const definitions = (
+    await new CustomFieldRepository(getDatabaseClient()).listDefinitions(eventId, CustomFieldEntityType.CFP_SUBMISSION)
+  ).filter(({ type }) => type !== CustomFieldType.FILE);
+  const parsed = parseCustomFieldFormData(formData, definitions);
+  const errors: Record<string, readonly string[]> = {};
+  for (const entry of parsed.values) {
+    try {
+      validateCustomFieldValue(entry.definition, entry.value);
+    } catch (error) {
+      errors[entry.definition.id] = [error instanceof Error ? error.message : "This custom field is invalid."];
+    }
+  }
+  return { definitions, values: parsed.values, errors };
 }
 
 function valuesFromFormData(definition: CfpFormDefinition, formData: FormData): Record<string, unknown> {
@@ -199,9 +218,20 @@ export async function submitPublicCfpForm(
   }
   const validation = validateCfpAnswers(lookup.form.definition, valuesFromFormData(lookup.form.definition, formData));
   const speakers = speakerValuesFromFormData(lookup.form.definition, formData);
+  let customFields: Awaited<ReturnType<typeof customFieldValues>>;
+  try {
+    customFields = await customFieldValues(lookup.event.id, formData);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "The custom fields are invalid." };
+  }
   const consentErrors: Readonly<Record<string, readonly string[]>> =
     lookup.form.consentRequired && formData.get("consent") === null ? { consent: ["Consent is required."] } : {};
-  if (!validation.ok || !speakers.ok || Object.keys(consentErrors).length > 0) {
+  if (
+    !validation.ok ||
+    !speakers.ok ||
+    Object.keys(consentErrors).length > 0 ||
+    Object.keys(customFields.errors).length > 0
+  ) {
     return {
       status: "error",
       message: "Review the form and fix the highlighted questions.",
@@ -209,6 +239,7 @@ export async function submitPublicCfpForm(
         ...(validation.ok ? {} : validation.errors),
         ...(speakers.ok ? {} : speakers.errors),
         ...consentErrors,
+        ...customFields.errors,
       },
     };
   }
@@ -237,6 +268,7 @@ export async function submitPublicCfpForm(
       answers: validation.answers,
       categoryIds,
       participants: speakers.participants,
+      customFieldValues: customFields.values.map(({ definition, value }) => ({ definitionId: definition.id, value })),
     });
     await emitWebhookEvent(client, {
       eventId: lookup.event.id,
@@ -331,6 +363,15 @@ export async function saveCfpDraft(
   }
 
   const answers = valuesFromFormData(lookup.form.definition, formData);
+  let customFields: Awaited<ReturnType<typeof customFieldValues>>;
+  try {
+    customFields = await customFieldValues(lookup.event.id, formData);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "The custom fields are invalid." };
+  }
+  for (const { definition, value } of customFields.values) {
+    answers[`${customFieldFormPrefix}${definition.id}`] = value;
+  }
   const participants = rawParticipantsFromFormData(formData);
   const existingToken = formData.get("draftToken");
   const token = typeof existingToken === "string" && existingToken.trim() !== "" ? existingToken : undefined;

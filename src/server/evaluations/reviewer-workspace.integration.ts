@@ -10,6 +10,7 @@ import {
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
   EvaluationStatus,
+  EventMembershipRole,
   EventType,
   PrismaClient,
   ReviewerVisibility,
@@ -182,6 +183,24 @@ async function createFixture(): Promise<Fixture> {
     data: { status: EvaluationPlanVersionStatus.ACTIVE, activatedAt: new Date("2027-02-01T18:00:00.000Z") },
   });
 
+  await client.user.createMany({
+    data: [
+      {
+        id: "authenticated-reviewer",
+        name: "Riley Reviewer",
+        email: "reviewer@example.test",
+        emailVerified: true,
+      },
+      { id: "other-reviewer", name: "Other Reviewer", email: "other@example.test", emailVerified: true },
+    ],
+  });
+  await client.eventMembership.createMany({
+    data: [
+      { eventId: event.id, userId: "authenticated-reviewer", roles: [EventMembershipRole.REVIEWER] },
+      { eventId: event.id, userId: "other-reviewer", roles: [EventMembershipRole.REVIEWER] },
+    ],
+  });
+
   const [reviewer, otherReviewer] = await Promise.all([
     client.evaluationReviewer.create({
       data: {
@@ -263,6 +282,7 @@ describe("reviewer workspace authorization", () => {
 
   beforeEach(async () => {
     await client.event.deleteMany();
+    await client.user.deleteMany({ where: { id: { in: ["authenticated-reviewer", "other-reviewer"] } } });
   });
 
   after(async () => {
@@ -327,6 +347,7 @@ describe("reviewer workspace evaluation drafts and submission", () => {
 
   beforeEach(async () => {
     await client.event.deleteMany();
+    await client.user.deleteMany({ where: { id: { in: ["authenticated-reviewer", "other-reviewer"] } } });
   });
 
   after(async () => {

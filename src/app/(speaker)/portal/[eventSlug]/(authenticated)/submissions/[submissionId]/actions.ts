@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
+import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
+import { CustomFieldRepository, validateCustomFieldValue } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { validateFileUpload } from "@/server/speakers/file-policy";
 import type { UpdateSubmissionParticipantFilesInput } from "@/server/speakers/repositories";
 import { SpeakerRepository } from "@/server/speakers/repositories";
@@ -16,6 +20,59 @@ export type SubmissionFilePurpose = "slides" | "supportingDocument";
 export interface SubmissionFileActionState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
+}
+
+export interface SubmissionCustomFieldActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+  readonly errors?: Readonly<Record<string, readonly string[]>>;
+}
+
+export async function saveSubmissionCustomFields(
+  eventSlug: string,
+  submissionId: string,
+  _previousState: SubmissionCustomFieldActionState,
+  formData: FormData,
+): Promise<SubmissionCustomFieldActionState> {
+  const { viewer } = await requirePortalContent(eventSlug, "submissions");
+  const client = getDatabaseClient();
+  const submission = await new SpeakerPortalRepository(client).getSubmission(viewer, submissionId);
+  if (!submission) return { status: "error", message: "You are not a participant on this submission." };
+
+  const repository = new CustomFieldRepository(client);
+  const definitions = (await repository.listDefinitions(viewer.eventId, CustomFieldEntityType.CFP_SUBMISSION)).filter(
+    ({ type }) => type !== CustomFieldType.FILE,
+  );
+  let parsed: ReturnType<typeof parseCustomFieldFormData>;
+  try {
+    parsed = parseCustomFieldFormData(formData, definitions);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "The custom fields are invalid." };
+  }
+  const errors: Record<string, readonly string[]> = {};
+  for (const entry of parsed.values) {
+    try {
+      validateCustomFieldValue(entry.definition, entry.value);
+    } catch (error) {
+      errors[entry.definition.id] = [error instanceof Error ? error.message : "This custom field is invalid."];
+    }
+  }
+  if (Object.keys(errors).length > 0) {
+    return { status: "error", message: "Review the highlighted custom fields.", errors };
+  }
+
+  try {
+    await repository.setValues(
+      viewer.eventId,
+      { entityType: "CFP_SUBMISSION", submissionId },
+      parsed.values.map(({ definition, value }) => ({ definitionId: definition.id, value })),
+    );
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+  revalidatePath(portalHref(eventSlug, `/submissions/${submissionId}`));
+  return { status: "success", message: "Additional information updated." };
 }
 
 function participantFileKey(

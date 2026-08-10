@@ -17,6 +17,27 @@ const database = new PrismaClient({ adapter: new PrismaPg({ connectionString: da
 await database.integrationSyncRecord.deleteMany();
 await database.event.deleteMany();
 const fixture = await createRepresentativeFixtures(database);
+const submissionCustomField = await database.customFieldDefinition.create({
+  data: {
+    eventId: fixture.eventId,
+    entityType: "CFP_SUBMISSION",
+    key: "room_setup",
+    label: "Room setup notes",
+    description: "Tell the organizers what the session room needs.",
+    type: "LONG_TEXT",
+    required: true,
+    position: 0,
+  },
+});
+await database.customFieldValue.create({
+  data: {
+    eventId: fixture.eventId,
+    definitionId: submissionCustomField.id,
+    submissionId: fixture.submissionId,
+    value: "Six tables in a circle",
+    normalizedText: "six tables in a circle",
+  },
+});
 
 const emptySpeaker = await database.speaker.create({
   data: {

@@ -5,6 +5,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
+import { authorizeEventResource } from "@/server/authorization/policy";
 import { getDatabaseClient } from "@/server/database/client";
 import { type PortalContentKey, resolveParticipantPortal } from "@/server/participant-portals";
 import { SpeakerAuthService } from "@/server/speaker-auth";
@@ -28,6 +29,16 @@ export const getPortalViewer = cache(async (eventSlug: string) => {
     select: { id: true },
   });
   if (!speaker) notFound();
+
+  authorizeEventResource(
+    { id: identity.speakerId, memberships: [{ eventId: identity.eventId, roles: ["speaker"] }] },
+    {
+      eventId: identity.eventId,
+      kind: "profile",
+      action: "read",
+      ownerPrincipalIds: [identity.speakerId],
+    },
+  );
 
   return { eventId: identity.eventId, speakerId: identity.speakerId } as const;
 });

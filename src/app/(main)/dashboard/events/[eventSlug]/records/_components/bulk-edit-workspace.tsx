@@ -2,7 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react";
 
-import { History, PencilLine } from "lucide-react";
+import Link from "next/link";
+
+import { Filter, History, PencilLine } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -23,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -37,6 +40,11 @@ interface RecordRow {
   readonly name: string;
   readonly detail: string;
   readonly values: string;
+  readonly customFields: readonly {
+    readonly definitionId: string;
+    readonly label: string;
+    readonly value: unknown;
+  }[];
 }
 
 interface AuditRow {
@@ -54,6 +62,16 @@ interface BulkEditWorkspaceProps {
   readonly contacts: readonly RecordRow[];
   readonly sessions: readonly RecordRow[];
   readonly groups: readonly RecordRow[];
+  readonly customFieldDefinitions: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly entityType: EntityType;
+  }[];
+  readonly customFieldFilter: {
+    readonly definitionId: string;
+    readonly entityType: EntityType;
+    readonly query: string;
+  } | null;
   readonly tracks: readonly { readonly id: string; readonly name: string }[];
   readonly audits: readonly AuditRow[];
 }
@@ -80,6 +98,16 @@ const FIELD_OPTIONS = {
 
 function auditEntityLabel(entityType: EntityType): string {
   return ENTITY_LABELS[entityType].slice(0, -1);
+}
+
+function customFieldValueLabel(value: unknown): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string").join(", ");
+  if (value && typeof value === "object" && "fileName" in value && typeof value.fileName === "string") {
+    return value.fileName;
+  }
+  return "Not set";
 }
 
 interface RecordTableProps {
@@ -131,6 +159,7 @@ function RecordTable({ entityType, records, selected, onSelectionChange }: Recor
           </TableHead>
           <TableHead>Record</TableHead>
           <TableHead>Current details</TableHead>
+          <TableHead>Custom fields</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -150,6 +179,20 @@ function RecordTable({ entityType, records, selected, onSelectionChange }: Recor
               </div>
             </TableCell>
             <TableCell>{record.values}</TableCell>
+            <TableCell>
+              {record.customFields.length === 0 ? (
+                <span className="text-muted-foreground">None configured</span>
+              ) : (
+                <dl className="flex min-w-44 flex-col gap-2 whitespace-normal">
+                  {record.customFields.map((field) => (
+                    <div key={field.definitionId}>
+                      <dt className="text-muted-foreground text-xs">{field.label}</dt>
+                      <dd>{customFieldValueLabel(field.value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -157,14 +200,24 @@ function RecordTable({ entityType, records, selected, onSelectionChange }: Recor
   );
 }
 
-export function BulkEditWorkspace({ event, contacts, sessions, groups, tracks, audits }: BulkEditWorkspaceProps) {
+export function BulkEditWorkspace({
+  event,
+  contacts,
+  sessions,
+  groups,
+  customFieldDefinitions,
+  customFieldFilter,
+  tracks,
+  audits,
+}: BulkEditWorkspaceProps) {
+  const initialEntityType = customFieldFilter?.entityType ?? "CONTACT";
   const recordsByType = useMemo(
     () => ({ CONTACT: contacts, SESSION: sessions, GROUP: groups }),
     [contacts, sessions, groups],
   );
-  const [entityType, setEntityType] = useState<EntityType>("CONTACT");
+  const [entityType, setEntityType] = useState<EntityType>(initialEntityType);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [field, setField] = useState<string>(FIELD_OPTIONS.CONTACT[0].value);
+  const [field, setField] = useState<string>(FIELD_OPTIONS[initialEntityType][0].value);
   const [value, setValue] = useState("");
   const [result, setResult] = useState<BulkEditActionState | null>(null);
   const [pending, startTransition] = useTransition();
@@ -229,6 +282,64 @@ export function BulkEditWorkspace({ event, contacts, sessions, groups, tracks, a
             <CardDescription>Only active records owned by this event are available.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            {customFieldDefinitions.length > 0 ? (
+              <form method="get">
+                <FieldGroup className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
+                  <Field>
+                    <FieldLabel htmlFor="record-custom-field-filter">Custom field</FieldLabel>
+                    <NativeSelect
+                      className="w-full"
+                      defaultValue={customFieldFilter?.definitionId ?? ""}
+                      id="record-custom-field-filter"
+                      name="customField"
+                      required
+                    >
+                      <NativeSelectOption disabled value="">
+                        Choose a custom field
+                      </NativeSelectOption>
+                      {(Object.keys(ENTITY_LABELS) as EntityType[]).map((type) => {
+                        const definitions = customFieldDefinitions.filter(({ entityType }) => entityType === type);
+                        return definitions.length > 0 ? (
+                          <NativeSelectOptGroup key={type} label={ENTITY_LABELS[type]}>
+                            {definitions.map((definition) => (
+                              <NativeSelectOption key={definition.id} value={definition.id}>
+                                {definition.label}
+                              </NativeSelectOption>
+                            ))}
+                          </NativeSelectOptGroup>
+                        ) : null;
+                      })}
+                    </NativeSelect>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="record-custom-field-value">Value contains</FieldLabel>
+                    <Input
+                      defaultValue={customFieldFilter?.query ?? ""}
+                      id="record-custom-field-value"
+                      name="customValue"
+                      placeholder="Search saved values"
+                      required
+                      type="search"
+                    />
+                  </Field>
+                  <Field orientation="horizontal" className="self-end">
+                    <Button type="submit" variant="outline">
+                      <Filter data-icon="inline-start" />
+                      Apply filter
+                    </Button>
+                    <Button asChild type="button" variant="ghost">
+                      <Link href={`/dashboard/events/${encodeURIComponent(event.slug)}/records`}>Clear</Link>
+                    </Button>
+                  </Field>
+                </FieldGroup>
+              </form>
+            ) : null}
+            {customFieldFilter ? (
+              <p className="text-muted-foreground text-sm">
+                Showing {ENTITY_LABELS[customFieldFilter.entityType].toLowerCase()} whose selected custom field contains
+                “{customFieldFilter.query}”.
+              </p>
+            ) : null}
             <ToggleGroup
               type="single"
               value={entityType}

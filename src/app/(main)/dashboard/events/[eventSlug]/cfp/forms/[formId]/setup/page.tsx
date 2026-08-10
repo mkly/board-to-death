@@ -82,9 +82,7 @@ export default async function CfpFormSetupPage({
   const assignments = new Map(
     policy?.definition.adminAssignments.map((assignment) => [assignment.administratorId, assignment]) ?? [],
   );
-  const currentAdministrator = eligibleAdministrators.find(
-    ({ externalId }) => externalId.toLowerCase() === shell.user.email.toLowerCase(),
-  );
+  const currentAdministrator = eligibleAdministrators.find(({ externalId }) => externalId === shell.user.id);
   const canManageAdministrators = assignments.get(currentAdministrator?.id ?? "")?.role === "OWNER";
   const administrators = eligibleAdministrators.map(({ displayName, externalId, id }) => {
     const assignment = assignments.get(id);

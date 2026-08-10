@@ -27,7 +27,7 @@ export async function GET(_request: Request, context: AdminTaskFileRouteContext)
   const { assignmentId, attemptNumber: inputAttemptNumber, eventSlug, workspace } = await context.params;
   const session = await auth.api.getSession({ headers: await headers() });
   const attemptNumber = Number(inputAttemptNumber);
-  if (!isAuthorizedAdminSession(session) || workspace !== "onboarding") return notFound();
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug })) || workspace !== "onboarding") return notFound();
   if (!Number.isSafeInteger(attemptNumber) || attemptNumber < 1) return notFound();
 
   const assignment = await getDatabaseClient().speakerTaskAssignment.findFirst({

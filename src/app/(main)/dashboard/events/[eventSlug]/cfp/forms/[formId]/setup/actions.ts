@@ -409,13 +409,13 @@ export async function saveCfpPolicySettings(
   _previousState: SaveCfpPolicySettingsState,
   formData: FormData,
 ): Promise<SaveCfpPolicySettingsState> {
+  const eventSlug = value(formData, "eventSlug");
+  const formId = value(formData, "formId");
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!isAuthorizedAdminSession(session)) {
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
     return { status: "error", message: "Your session expired. Sign in and try again." };
   }
 
-  const eventSlug = value(formData, "eventSlug");
-  const formId = value(formData, "formId");
   const client = getDatabaseClient();
   const event = await client.event.findUnique({
     where: { slug: eventSlug },
@@ -458,7 +458,7 @@ export async function saveCfpPolicySettings(
     } else {
       const administrator = await new CfpAdministratorRepository(client).ensure({
         eventId: event.id,
-        externalId: session.user.email,
+        externalId: session.user.id,
         displayName: session.user.name.trim() || session.user.email,
       });
       await policies.create({
@@ -567,7 +567,7 @@ export async function saveCfpMessageSettings(
   formData: FormData,
 ): Promise<SaveCfpMessageSettingsState> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!isAuthorizedAdminSession(session)) {
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
     return { status: "error", message: "Your session expired. Sign in and try again." };
   }
 
@@ -615,7 +615,7 @@ export async function saveCfpMessageSettings(
     } else {
       const administrator = await new CfpAdministratorRepository(client).ensure({
         eventId: event.id,
-        externalId: session.user.email,
+        externalId: session.user.id,
         displayName: session.user.name.trim() || session.user.email,
       });
       await createPolicyForForm(event, form, administrator.id, validation.fields);
@@ -666,7 +666,7 @@ export async function saveCfpAdministrators(
     await policies.updateAdministratorAssignments(
       event.id,
       policy.id,
-      shell.user.email.toLowerCase(),
+      shell.user.id,
       validation.data.administratorIds.map((administratorId) => ({
         administratorId,
         role: currentAssignments.get(administratorId)?.role ?? CfpAdminRole.EDITOR,
@@ -717,13 +717,13 @@ export async function updateCfpPublication(
   const policies = new CfpPolicyRepository(client);
   try {
     if (intent === "publish") {
-      await policies.publishByForm(event.id, formId, expectedVersionNumber, shell.user.email);
+      await policies.publishByForm(event.id, formId, expectedVersionNumber, shell.user.id);
     } else {
       await policies.transitionByForm(
         event.id,
         formId,
         intent === "close" ? CfpPolicyStatus.CLOSED : CfpPolicyStatus.PUBLISHED,
-        shell.user.email,
+        shell.user.id,
       );
     }
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp`);

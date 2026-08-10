@@ -24,6 +24,8 @@ test("finalizes one published submission and shows it in the correct event dashb
   const categoryId = randomUUID();
   const policyId = randomUUID();
   const publicId = randomUUID();
+  const customFieldId = randomUUID();
+  const otherEventId = randomUUID();
   const eventSlug = `public-questionnaire-${publicId.slice(0, 8)}`;
   const now = new Date();
 
@@ -31,6 +33,18 @@ test("finalizes one published submission and shows it in the correct event dashb
     `INSERT INTO "events" ("id", "name", "slug", "type", "timezone", "startsAt", "endsAt", "updatedAt")
      VALUES ($1, 'Plan Screen 20 Conference', $2, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5)`,
     [eventId, eventSlug, new Date("2027-03-13"), new Date("2027-03-15"), now],
+  );
+  await database.query(
+    `INSERT INTO "events" ("id", "name", "slug", "type", "timezone", "startsAt", "endsAt", "updatedAt")
+     VALUES ($1, 'Other custom-field event', $2, 'CONFERENCE', 'America/Los_Angeles', $3, $4, $5)`,
+    [otherEventId, `other-custom-fields-${publicId.slice(0, 8)}`, new Date("2027-04-01"), new Date("2027-04-03"), now],
+  );
+  await database.query(
+    `INSERT INTO "custom_field_definitions"
+     ("id", "eventId", "entityType", "key", "label", "type", "required", "position", "updatedAt")
+     VALUES ($1, $2, 'CFP_SUBMISSION', 'audience_experience', 'Audience experience', 'SINGLE_LINE_TEXT', true, 0, $5),
+            ($3, $4, 'CFP_SUBMISSION', 'private_other_event', 'Private other-event field', 'SINGLE_LINE_TEXT', false, 0, $5)`,
+    [customFieldId, eventId, randomUUID(), otherEventId, now],
   );
   await database.query(`INSERT INTO "cfp_forms" ("id", "eventId", "key", "updatedAt") VALUES ($1, $2, 'main', $3)`, [
     formId,
@@ -156,6 +170,8 @@ test("finalizes one published submission and shows it in the correct event dashb
     await expect(page.getByRole("heading", { name: "Share your session" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Proposal details" })).toBeVisible();
     await expect(page.getByText("A clear, concise title.")).toBeVisible();
+    await expect(page.getByLabel("Audience experience")).toBeVisible();
+    await expect(page.getByLabel("Private other-event field")).toHaveCount(0);
     await expect(page.getByLabel("Workshop room needs", { exact: false })).toBeHidden();
 
     await page.locator("form").evaluate((form) => {
@@ -181,6 +197,9 @@ test("finalizes one published submission and shows it in the correct event dashb
     await page.getByLabel("Available date", { exact: false }).fill("2026-10-05");
     await page.getByLabel("Workshop room needs", { exact: false }).fill("Tables and power outlets");
     await page.getByLabel("I agree to the terms and consent to this submission.").check();
+    await page.getByRole("button", { name: "Submit proposal" }).click();
+    await expect(page.getByText("Audience experience is required.")).toBeVisible();
+    await page.getByLabel("Audience experience").fill("Strategy game enthusiasts");
     await page.locator("form").evaluate((element) => {
       const form = element as HTMLFormElement;
       form.requestSubmit();
@@ -227,6 +246,14 @@ test("finalizes one published submission and shows it in the correct event dashb
       [eventId],
     );
     expect(routedCategory.rows).toEqual([{ categoryId }]);
+    const customValues = await database.query(
+      `SELECT d."label", v."value"
+       FROM "custom_field_values" v
+       JOIN "custom_field_definitions" d ON d."id" = v."definitionId"
+       WHERE v."eventId" = $1`,
+      [eventId],
+    );
+    expect(customValues.rows).toEqual([{ label: "Audience experience", value: "Strategy game enthusiasts" }]);
     const thankYou = await database.query(
       `SELECT d."idempotencyKey", r."email", r."subjectSnapshot", r."textSnapshot"
        FROM "message_deliveries" d
@@ -238,8 +265,10 @@ test("finalizes one published submission and shows it in the correct event dashb
     expect(thankYou.rows[0]).toMatchObject({
       email: "speaker@example.com",
       subjectSnapshot: "Thank you for submitting to Plan Screen 20 Conference",
-      textSnapshot: "Thank you, speaker@example.com, for sharing your proposal with Plan Screen 20 Conference.",
     });
+    expect(thankYou.rows[0].textSnapshot).toContain(
+      "Thank you, speaker@example.com, for sharing your proposal with Plan Screen 20 Conference.",
+    );
     expect(thankYou.rows[0].idempotencyKey).toBe(`cfp-thank-you:${submission.rows[0].id}`);
 
     await signInAsAdmin(page);
@@ -248,7 +277,11 @@ test("finalizes one published submission and shows it in the correct event dashb
     await expect(page.getByText("Showing 1–1 of 1")).toBeVisible();
     await expect(page.getByText("Share your session")).toBeVisible();
     await expect(page.getByRole("link", { name: "Submitted 1" })).toBeVisible();
+    await page.goto(`/dashboard/events/${eventSlug}/submissions/${submission.rows[0].id}`);
+    await expect(page.getByText("Additional information", { exact: true })).toBeVisible();
+    await expect(page.getByText("Strategy game enthusiasts")).toBeVisible();
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [eventId]);
+    await database.query(`DELETE FROM "events" WHERE "id" = $1`, [otherEventId]);
   }
 });

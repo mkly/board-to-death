@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { runReport } from "@/server/reports/engine";
@@ -30,7 +30,9 @@ export async function GET(request: Request, { params }: ReportExportRouteContext
     params,
     auth.api.getSession({ headers: await headers() }),
   ]);
-  if (!session || !isAllowedAdminEmail(session.user.email)) return new Response("Not found", { status: 404 });
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
+    return new Response("Not found", { status: 404 });
+  }
 
   const client = getDatabaseClient();
   const event = await client.event.findUnique({ where: { slug: eventSlug }, select: { id: true } });

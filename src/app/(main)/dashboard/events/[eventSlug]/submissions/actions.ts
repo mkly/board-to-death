@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import { parseSubmissionView } from "@/lib/cfp/submission-table";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -15,7 +15,7 @@ export interface SubmissionViewActionState {
 
 async function authorizedContext(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   const event = await getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
     select: { id: true, slug: true },

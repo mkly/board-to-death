@@ -9,6 +9,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { type CfpFormDefinition, parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { resolvePersonIdentity } from "../contacts/person-identity.ts";
+import { type CustomFieldValueAssignment, setCustomFieldValues } from "../custom-fields/repositories.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { type SpeakerProfileInput, validateSpeakerProfileInput } from "../speakers/repositories.ts";
 import { cfpDefinitionInputFromStored } from "./definition.ts";
@@ -42,6 +43,7 @@ export interface CreateCfpSubmissionDraftInput {
   readonly answers: readonly CfpSubmissionAnswerInput[];
   readonly categoryIds?: readonly string[];
   readonly participants?: readonly CfpSubmissionParticipantInput[];
+  readonly customFieldValues?: readonly CustomFieldValueAssignment[];
 }
 
 export interface CreateFinalizedCfpSubmissionInput extends CreateCfpSubmissionDraftInput {
@@ -624,6 +626,12 @@ async function createSubmission(
     },
     select: { id: true },
   });
+  await setCustomFieldValues(
+    transaction,
+    input.eventId,
+    { entityType: "CFP_SUBMISSION", submissionId: submission.id },
+    input.customFieldValues ?? [],
+  );
   return submission.id;
 }
 

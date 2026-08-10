@@ -169,6 +169,7 @@ describe("event custom fields", () => {
   test("rejects cross-event targets", async () => {
     const firstEventId = await createEvent("first-custom-fields-event");
     const secondEventId = await createEvent("second-custom-fields-event");
+    const firstTargets = await createTargets(firstEventId);
     const secondTargets = await createTargets(secondEventId);
     const definition = await fields.createDefinition(firstEventId, {
       entityType: CustomFieldEntityType.CONTACT,
@@ -176,6 +177,32 @@ describe("event custom fields", () => {
       label: "Private note",
       type: CustomFieldType.LONG_TEXT,
     });
+    const secondDefinition = await fields.createDefinition(secondEventId, {
+      entityType: CustomFieldEntityType.CONTACT,
+      key: "private-note",
+      label: "Private note",
+      type: CustomFieldType.LONG_TEXT,
+    });
+    await fields.setValue(
+      firstEventId,
+      definition.id,
+      { entityType: "CONTACT", contactId: firstTargets.contact.id },
+      "Shared search phrase",
+    );
+    await fields.setValue(
+      secondEventId,
+      secondDefinition.id,
+      { entityType: "CONTACT", contactId: secondTargets.contact.id },
+      "Shared search phrase",
+    );
+    assert.deepEqual(
+      await fields.matchingTargetIds(firstEventId, { definitionId: definition.id, query: "search phrase" }),
+      [firstTargets.contact.id],
+    );
+    await expectRepositoryError(
+      fields.matchingTargetIds(firstEventId, { definitionId: secondDefinition.id, query: "search phrase" }),
+      "not-found",
+    );
     await expectRepositoryError(
       fields.setValue(
         firstEventId,
@@ -184,6 +211,47 @@ describe("event custom fields", () => {
         "Must not cross events",
       ),
       "not-found",
+    );
+  });
+
+  test("validates a submission custom-field batch atomically", async () => {
+    const eventId = await createEvent("atomic-submission-custom-fields");
+    const { submission } = await createTargets(eventId);
+    const notes = await fields.createDefinition(eventId, {
+      entityType: CustomFieldEntityType.CFP_SUBMISSION,
+      key: "room-notes",
+      label: "Room notes",
+      type: CustomFieldType.LONG_TEXT,
+    });
+    const consent = await fields.createDefinition(eventId, {
+      entityType: CustomFieldEntityType.CFP_SUBMISSION,
+      key: "recording-consent",
+      label: "Recording consent",
+      type: CustomFieldType.CHECKBOX,
+      required: true,
+    });
+
+    await expectRepositoryError(
+      fields.setValues(eventId, { entityType: "CFP_SUBMISSION", submissionId: submission.id }, [
+        { definitionId: notes.id, value: "Persist only if the full batch is valid" },
+        { definitionId: consent.id, value: false },
+      ]),
+      "invalid-input",
+    );
+    assert.equal(await client.customFieldValue.count({ where: { submissionId: submission.id } }), 0);
+
+    await fields.setValues(eventId, { entityType: "CFP_SUBMISSION", submissionId: submission.id }, [
+      { definitionId: notes.id, value: "Eight tables" },
+      { definitionId: consent.id, value: true },
+    ]);
+    assert.deepEqual(
+      (await fields.listValues(eventId, { entityType: "CFP_SUBMISSION", submissionId: submission.id })).map(
+        ({ definitionId, value }) => ({ definitionId, value }),
+      ),
+      [
+        { definitionId: notes.id, value: "Eight tables" },
+        { definitionId: consent.id, value: true },
+      ],
     );
   });
 });
