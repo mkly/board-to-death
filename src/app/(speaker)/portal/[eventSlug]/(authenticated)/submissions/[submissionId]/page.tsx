@@ -3,17 +3,20 @@ import { notFound } from "next/navigation";
 
 import { ArrowLeftIcon, CircleCheckIcon, FileTextIcon, UsersRoundIcon } from "lucide-react";
 
+import type { CustomFieldInputDefinition } from "@/components/custom-fields/custom-field-inputs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { Prisma } from "@/generated/prisma/client";
+import { CustomFieldEntityType, CustomFieldType, type Prisma } from "@/generated/prisma/client";
+import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
 import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 import { PortalSectionHeading, SubmissionStatus } from "../../_components/portal-content";
+import { SubmissionCustomFields } from "./_components/submission-custom-fields";
 import { SubmissionParticipantFiles } from "./_components/submission-participant-files";
 
 interface SpeakerSubmissionPageProps {
@@ -29,11 +32,33 @@ function answerText(value: Prisma.JsonValue): string {
   return JSON.stringify(value);
 }
 
+function inputDefinition(
+  field: Awaited<ReturnType<CustomFieldRepository["listDefinitions"]>>[number],
+): CustomFieldInputDefinition {
+  return {
+    id: field.id,
+    label: field.label,
+    description: field.description,
+    type: field.type,
+    required: field.required,
+    characterLimit: field.characterLimit,
+    options:
+      Array.isArray(field.options) && field.options.every((option) => typeof option === "string") ? field.options : [],
+  };
+}
+
 export default async function SpeakerSubmissionPage({ params, searchParams }: SpeakerSubmissionPageProps) {
   const [{ eventSlug, submissionId }, query] = await Promise.all([params, searchParams]);
   const { viewer } = await requirePortalContent(eventSlug, "submissions");
-  const submission = await new SpeakerPortalRepository(getDatabaseClient()).getSubmission(viewer, submissionId);
+  const client = getDatabaseClient();
+  const submission = await new SpeakerPortalRepository(client).getSubmission(viewer, submissionId);
   if (!submission) notFound();
+  const customFields = new CustomFieldRepository(client);
+  const [definitions, values] = await Promise.all([
+    customFields.listDefinitions(viewer.eventId, CustomFieldEntityType.CFP_SUBMISSION),
+    customFields.listValues(viewer.eventId, { entityType: "CFP_SUBMISSION", submissionId }),
+  ]);
+  const editableDefinitions = definitions.filter(({ type }) => type !== CustomFieldType.FILE);
 
   return (
     <>
@@ -125,6 +150,12 @@ export default async function SpeakerSubmissionPage({ params, searchParams }: Sp
           </CardContent>
         </Card>
       </div>
+      <SubmissionCustomFields
+        definitions={editableDefinitions.map(inputDefinition)}
+        eventSlug={eventSlug}
+        submissionId={submissionId}
+        values={values.map(({ definitionId, value }) => ({ definitionId, value }))}
+      />
     </>
   );
 }

@@ -186,4 +186,45 @@ describe("event custom fields", () => {
       "not-found",
     );
   });
+
+  test("validates a submission custom-field batch atomically", async () => {
+    const eventId = await createEvent("atomic-submission-custom-fields");
+    const { submission } = await createTargets(eventId);
+    const notes = await fields.createDefinition(eventId, {
+      entityType: CustomFieldEntityType.CFP_SUBMISSION,
+      key: "room-notes",
+      label: "Room notes",
+      type: CustomFieldType.LONG_TEXT,
+    });
+    const consent = await fields.createDefinition(eventId, {
+      entityType: CustomFieldEntityType.CFP_SUBMISSION,
+      key: "recording-consent",
+      label: "Recording consent",
+      type: CustomFieldType.CHECKBOX,
+      required: true,
+    });
+
+    await expectRepositoryError(
+      fields.setValues(eventId, { entityType: "CFP_SUBMISSION", submissionId: submission.id }, [
+        { definitionId: notes.id, value: "Persist only if the full batch is valid" },
+        { definitionId: consent.id, value: false },
+      ]),
+      "invalid-input",
+    );
+    assert.equal(await client.customFieldValue.count({ where: { submissionId: submission.id } }), 0);
+
+    await fields.setValues(eventId, { entityType: "CFP_SUBMISSION", submissionId: submission.id }, [
+      { definitionId: notes.id, value: "Eight tables" },
+      { definitionId: consent.id, value: true },
+    ]);
+    assert.deepEqual(
+      (await fields.listValues(eventId, { entityType: "CFP_SUBMISSION", submissionId: submission.id })).map(
+        ({ definitionId, value }) => ({ definitionId, value }),
+      ),
+      [
+        { definitionId: notes.id, value: "Eight tables" },
+        { definitionId: consent.id, value: true },
+      ],
+    );
+  });
 });

@@ -11,6 +11,7 @@ import type { CfpSubmissionDetail as SubmissionDetailData } from "@/server/cfp/s
 
 interface SubmissionDetailProps {
   readonly submission: SubmissionDetailData;
+  readonly customFields?: readonly { readonly id: string; readonly label: string; readonly value: unknown }[];
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -107,7 +108,7 @@ function ParticipantList({ participants }: { readonly participants: SubmissionDe
   );
 }
 
-function AnswerList({ submission }: SubmissionDetailProps) {
+function AnswerList({ submission }: Pick<SubmissionDetailProps, "submission">) {
   const revision = submission.revision;
   if (!revision) {
     return (
@@ -157,7 +158,30 @@ function AnswerList({ submission }: SubmissionDetailProps) {
   );
 }
 
-export function SubmissionDetail({ submission }: SubmissionDetailProps) {
+function CustomFieldList({ customFields = [] }: Pick<SubmissionDetailProps, "customFields">) {
+  if (customFields.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Additional information</CardTitle>
+        <CardDescription>Current event-scoped custom field values for this submission.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="flex flex-col gap-5">
+          {customFields.map((field, index) => (
+            <div key={field.id} className="flex flex-col gap-2">
+              {index > 0 ? <Separator className="mb-3" /> : null}
+              <dt className="font-medium">{field.label}</dt>
+              <dd className="whitespace-pre-wrap text-muted-foreground text-sm">{answerText(field.value)}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function SubmissionDetail({ submission, customFields = [] }: SubmissionDetailProps) {
   const submittedAt = submission.submittedAt ?? submission.createdAt;
 
   return (
@@ -204,6 +228,7 @@ export function SubmissionDetail({ submission }: SubmissionDetailProps) {
         <AnswerList submission={submission} />
         <div className="flex min-w-0 flex-col gap-6">
           <ParticipantList participants={submission.participants} />
+          <CustomFieldList customFields={customFields} />
           <Card>
             <CardHeader>
               <CardTitle>Categories</CardTitle>

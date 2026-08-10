@@ -39,6 +39,11 @@ export interface CustomFieldValueFilter {
   readonly query: string;
 }
 
+export interface CustomFieldValueAssignment {
+  readonly definitionId: string;
+  readonly value: CustomFieldInputValue;
+}
+
 function invalid(message: string): never {
   throw new RepositoryError("invalid-input", message);
 }
@@ -160,6 +165,48 @@ export function validateCustomFieldValue(
     invalid(`${definition.label} contains an unavailable option.`);
   }
   return value;
+}
+
+export async function setCustomFieldValues(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  target: CustomFieldTarget,
+  assignments: readonly CustomFieldValueAssignment[],
+): Promise<void> {
+  if (new Set(assignments.map(({ definitionId }) => definitionId)).size !== assignments.length) {
+    invalid("A custom field value was supplied more than once.");
+  }
+  for (const assignment of assignments) {
+    const definition = await transaction.customFieldDefinition.findUnique({
+      where: { eventId_id: { eventId, id: assignment.definitionId } },
+    });
+    if (!definition || definition.entityType !== target.entityType) {
+      throw new RepositoryError("not-found", "The custom field is not available for this record.");
+    }
+    const value = validateCustomFieldValue(definition, assignment.value);
+    const where = { definitionId: definition.id, ...targetWhere(eventId, target) };
+    if ((value === "" || (Array.isArray(value) && value.length === 0)) && !definition.required) {
+      await transaction.customFieldValue.deleteMany({ where });
+      continue;
+    }
+    const existing = await transaction.customFieldValue.findFirst({ where, select: { id: true } });
+    if (existing) {
+      await transaction.customFieldValue.update({
+        where: { id: existing.id },
+        data: { value, normalizedText: normalizeForSearch(value) },
+      });
+    } else {
+      await transaction.customFieldValue.create({
+        data: {
+          eventId,
+          definitionId: definition.id,
+          ...targetData(target),
+          value,
+          normalizedText: normalizeForSearch(value),
+        },
+      });
+    }
+  }
 }
 
 function normalizeForSearch(value: Prisma.InputJsonValue): string | null {
@@ -330,38 +377,24 @@ export class CustomFieldRepository {
     input: CustomFieldInputValue,
   ): Promise<CustomFieldValue | null> {
     try {
-      return await this.client.$transaction(async (transaction) => {
-        const definition = await transaction.customFieldDefinition.findUnique({
-          where: { eventId_id: { eventId, id: definitionId } },
-        });
-        if (!definition || definition.entityType !== target.entityType) {
-          throw new RepositoryError("not-found", "The custom field is not available for this record.");
-        }
-        const value = validateCustomFieldValue(definition, input);
-        const where = { definitionId, ...targetWhere(eventId, target) };
-        if ((value === "" || (Array.isArray(value) && value.length === 0)) && !definition.required) {
-          await transaction.customFieldValue.deleteMany({ where });
-          return null;
-        }
-        const existing = await transaction.customFieldValue.findFirst({ where, select: { id: true } });
-        if (existing) {
-          return transaction.customFieldValue.update({
-            where: { id: existing.id },
-            data: { value, normalizedText: normalizeForSearch(value) },
-          });
-        }
-        return transaction.customFieldValue.create({
-          data: {
-            eventId,
-            definitionId,
-            ...targetData(target),
-            value,
-            normalizedText: normalizeForSearch(value),
-          },
-        });
+      await this.client.$transaction(async (transaction) => {
+        await setCustomFieldValues(transaction, eventId, target, [{ definitionId, value: input }]);
       });
+      return this.client.customFieldValue.findFirst({ where: { definitionId, ...targetWhere(eventId, target) } });
     } catch (error) {
       return mapDatabaseError(error);
+    }
+  }
+
+  async setValues(
+    eventId: string,
+    target: CustomFieldTarget,
+    assignments: readonly CustomFieldValueAssignment[],
+  ): Promise<void> {
+    try {
+      await this.client.$transaction((transaction) => setCustomFieldValues(transaction, eventId, target, assignments));
+    } catch (error) {
+      mapDatabaseError(error);
     }
   }
 

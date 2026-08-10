@@ -1,7 +1,15 @@
 "use client";
 
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,11 +54,13 @@ export function CustomFieldInputs({
   values = [],
   disabled = false,
   idPrefix = "",
+  errors,
 }: {
   readonly definitions: readonly CustomFieldInputDefinition[];
   readonly values?: readonly CustomFieldInputValue[];
   readonly disabled?: boolean;
   readonly idPrefix?: string;
+  readonly errors?: Readonly<Record<string, readonly string[]>>;
 }) {
   if (definitions.length === 0) return null;
   return (
@@ -61,9 +71,11 @@ export function CustomFieldInputs({
           const name = `${customFieldFormPrefix}${definition.id}`;
           const id = `${idPrefix}custom-field-${definition.id}`;
           const stored = storedValue(values, definition.id);
+          const messages = errors?.[definition.id]?.map((message) => ({ message }));
+          const invalid = Boolean(messages?.length);
           if (definition.type === CustomFieldType.LONG_TEXT) {
             return (
-              <Field key={definition.id} data-disabled={disabled || undefined}>
+              <Field key={definition.id} data-disabled={disabled || undefined} data-invalid={invalid || undefined}>
                 <FieldLabel htmlFor={id}>{definition.label}</FieldLabel>
                 <Textarea
                   id={id}
@@ -72,8 +84,10 @@ export function CustomFieldInputs({
                   maxLength={definition.characterLimit ?? undefined}
                   required={definition.required}
                   disabled={disabled}
+                  aria-invalid={invalid || undefined}
                 />
                 <Description>{definition.description}</Description>
+                <FieldError errors={messages} />
               </Field>
             );
           }
@@ -82,10 +96,10 @@ export function CustomFieldInputs({
             if (typeof stored === "string" && stored) defaultValue = stored;
             else if (!definition.required) defaultValue = "__empty__";
             return (
-              <Field key={definition.id} data-disabled={disabled || undefined}>
+              <Field key={definition.id} data-disabled={disabled || undefined} data-invalid={invalid || undefined}>
                 <FieldLabel htmlFor={id}>{definition.label}</FieldLabel>
                 <Select name={name} defaultValue={defaultValue} required={definition.required} disabled={disabled}>
-                  <SelectTrigger id={id} className="w-full">
+                  <SelectTrigger id={id} className="w-full" aria-invalid={invalid || undefined}>
                     <SelectValue placeholder="Select an option" />
                   </SelectTrigger>
                   <SelectContent>
@@ -100,6 +114,7 @@ export function CustomFieldInputs({
                   </SelectContent>
                 </Select>
                 <Description>{definition.description}</Description>
+                <FieldError errors={messages} />
               </Field>
             );
           }
@@ -108,7 +123,7 @@ export function CustomFieldInputs({
               ? stored.filter((entry): entry is string => typeof entry === "string")
               : [];
             return (
-              <FieldSet key={definition.id} disabled={disabled}>
+              <FieldSet key={definition.id} disabled={disabled} data-invalid={invalid || undefined}>
                 <FieldLegend variant="label">{definition.label}</FieldLegend>
                 <Description>{definition.description}</Description>
                 <FieldGroup className="gap-3">
@@ -120,21 +135,36 @@ export function CustomFieldInputs({
                         value={option}
                         defaultChecked={selected.includes(option)}
                         disabled={disabled}
+                        aria-invalid={invalid || undefined}
                       />
                       <FieldLabel htmlFor={`${id}-${option}`}>{option}</FieldLabel>
                     </Field>
                   ))}
                 </FieldGroup>
+                <FieldError errors={messages} />
               </FieldSet>
             );
           }
           if (definition.type === CustomFieldType.CHECKBOX) {
             return (
-              <Field key={definition.id} orientation="horizontal" data-disabled={disabled || undefined}>
-                <Checkbox id={id} name={name} value="true" defaultChecked={stored === true} disabled={disabled} />
+              <Field
+                key={definition.id}
+                orientation="horizontal"
+                data-disabled={disabled || undefined}
+                data-invalid={invalid || undefined}
+              >
+                <Checkbox
+                  id={id}
+                  name={name}
+                  value="true"
+                  defaultChecked={stored === true}
+                  disabled={disabled}
+                  aria-invalid={invalid || undefined}
+                />
                 <div className="flex flex-col gap-1">
                   <FieldLabel htmlFor={id}>{definition.label}</FieldLabel>
                   <Description>{definition.description}</Description>
+                  <FieldError errors={messages} />
                 </div>
               </Field>
             );
@@ -148,7 +178,7 @@ export function CustomFieldInputs({
                 ? stored.fileName
                 : null;
             return (
-              <Field key={definition.id} data-disabled={disabled || undefined}>
+              <Field key={definition.id} data-disabled={disabled || undefined} data-invalid={invalid || undefined}>
                 <FieldLabel htmlFor={id}>{definition.label}</FieldLabel>
                 <Input
                   id={id}
@@ -156,13 +186,15 @@ export function CustomFieldInputs({
                   type="file"
                   required={definition.required && !fileName}
                   disabled={disabled}
+                  aria-invalid={invalid || undefined}
                 />
                 <FieldDescription>{fileName ? `Current file: ${fileName}` : definition.description}</FieldDescription>
+                <FieldError errors={messages} />
               </Field>
             );
           }
           return (
-            <Field key={definition.id} data-disabled={disabled || undefined}>
+            <Field key={definition.id} data-disabled={disabled || undefined} data-invalid={invalid || undefined}>
               <FieldLabel htmlFor={id}>{definition.label}</FieldLabel>
               <Input
                 id={id}
@@ -172,8 +204,10 @@ export function CustomFieldInputs({
                 maxLength={definition.characterLimit ?? undefined}
                 required={definition.required}
                 disabled={disabled}
+                aria-invalid={invalid || undefined}
               />
               <Description>{definition.description}</Description>
+              <FieldError errors={messages} />
             </Field>
           );
         })}
