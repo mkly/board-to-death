@@ -376,10 +376,14 @@ export async function acceptAssistedSchedule(
     return { status: "error", message: "The agenda changed after this preview. Generate a new proposal." };
   }
 
-  const repository = new AgendaPlacementRepository(getDatabaseClient());
+  const client = getDatabaseClient();
+  const repository = new AgendaPlacementRepository(client);
+  // Each placement is saved in its own transaction, so a mid-batch failure leaves the earlier ones
+  // persisted; revalidate either way so the agenda never renders without placements that were saved.
+  let saved = 0;
   try {
     for (const proposal of result.plan.proposals) {
-      await repository.place(
+      const placement = await repository.place(
         {
           eventId: event.id,
           sessionId: proposal.sessionId,
@@ -391,10 +395,28 @@ export async function acceptAssistedSchedule(
         },
         { policy: "prevent" },
       );
+      saved += 1;
+      await emitWebhookEvent(client, {
+        eventId: event.id,
+        type: "session.scheduled",
+        data: {
+          sessionId: placement.sessionId,
+          placementId: placement.id,
+          startsAt: placement.startsAt.toISOString(),
+          durationMinutes: placement.durationMinutes,
+        },
+      });
     }
   } catch (error) {
+    revalidatePath(`/dashboard/events/${event.slug}/agenda`);
     if (error instanceof RepositoryError) {
-      return { status: "error", message: "The agenda changed while saving. Reload it before trying again." };
+      return {
+        status: "error",
+        message:
+          saved === 0
+            ? "The agenda changed while saving. Reload it before trying again."
+            : `Only ${saved} of ${result.plan.proposals.length} placements were saved before the agenda changed. Reload it before trying again.`,
+      };
     }
     throw error;
   }
