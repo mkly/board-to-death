@@ -1,21 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { AuthHeroBackground } from "../../_components/auth-hero-background";
 import { RegisterForm } from "../../_components/register-form";
 
 export default function RegisterV1() {
   return (
     <div className="flex h-dvh">
-      <div className="relative hidden bg-primary lg:block lg:w-1/3">
-        <Image
-          src="/auth-background.png"
-          alt=""
-          fill
-          priority
-          sizes="(min-width: 1024px) 33vw, 0px"
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-primary/40" />
+      <div className="relative hidden bg-slate-950 lg:block lg:w-1/3">
+        <AuthHeroBackground sizes="(min-width: 1024px) 33vw, 0px" />
+        <div className="absolute inset-0 bg-black/30" />
         <div className="relative flex h-full flex-col items-center justify-center p-12 text-center">
           <div className="flex flex-col gap-6">
             <Image
@@ -27,8 +21,8 @@ export default function RegisterV1() {
               className="mx-auto size-12 object-contain"
             />
             <div className="flex flex-col gap-2">
-              <p className="font-light text-5xl text-primary-foreground">Your event workspace</p>
-              <p className="text-primary-foreground/80 text-xl">One link away.</p>
+              <p className="font-light text-5xl text-white">Your event workspace</p>
+              <p className="text-white/80 text-xl">One link away.</p>
             </div>
           </div>
         </div>
