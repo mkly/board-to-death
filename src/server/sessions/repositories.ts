@@ -12,6 +12,7 @@ import { RepositoryError } from "../events/repositories.ts";
 
 export interface ListProgramSessionsOptions {
   readonly includeArchived?: boolean;
+  readonly ids?: readonly string[];
   readonly cursor?: string | null;
   readonly limit?: number;
 }
@@ -503,7 +504,11 @@ export class ProgramSessionRepository {
   ): Promise<ListPage<PersistedProgramSession>> {
     const limit = boundedLimit(options.limit, LIST_BOUNDS.programSessions);
     const sessions = await this.client.programSession.findMany({
-      where: { eventId, ...(options.includeArchived ? {} : { archivedAt: null }) },
+      where: {
+        eventId,
+        ...(options.includeArchived ? {} : { archivedAt: null }),
+        ...(options.ids ? { id: { in: [...options.ids] } } : {}),
+      },
       include: programSessionInclude,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: limit + 1,
