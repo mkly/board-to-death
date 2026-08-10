@@ -18,8 +18,15 @@ interface EventTeamWorkspaceProps {
   readonly error?: string;
 }
 
+const roleLabels: Record<EventMembershipRole, string> = {
+  [EventMembershipRole.ORGANIZER_ADMIN]: "Organizer staff",
+  [EventMembershipRole.REVIEWER]: "Reviewer",
+  [EventMembershipRole.APPLICANT]: "Applicant",
+  [EventMembershipRole.SPEAKER]: "Speaker",
+};
+
 function roleLabel(role: EventMembershipRole): string {
-  return role === EventMembershipRole.REVIEWER ? "Reviewer" : "Organizer staff";
+  return roleLabels[role];
 }
 
 function rolesLabel(roles: readonly EventMembershipRole[]): string {

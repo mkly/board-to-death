@@ -31,14 +31,20 @@ export const getDashboardShellData = cache(async (): Promise<DashboardShellData>
 
   const authorizedEventIds = organizerEventIds(authorization.principal);
 
-  const events = await getDatabaseClient().event.findMany({
-    where: {
-      id: { in: [...authorizedEventIds] },
-      archivedAt: null,
-      ...(authorization.activeOrganization ? { orgId: authorization.activeOrganization.id } : {}),
-    },
+  const authorizedEvents = await getDatabaseClient().event.findMany({
+    where: { id: { in: [...authorizedEventIds] }, archivedAt: null },
     orderBy: [{ startsAt: "asc" }, { name: "asc" }],
   });
+
+  // An invited event-only organizer reaches an event whose organization they are not a member of,
+  // so the active-organization filter applies only to organizations they can actually switch between.
+  const activeOrganizationId = authorization.activeOrganization?.id;
+  const memberOrganizationIds = new Set(authorization.organizations.map(({ id }) => id));
+  const events = activeOrganizationId
+    ? authorizedEvents.filter(
+        (event) => event.orgId === activeOrganizationId || !memberOrganizationIds.has(event.orgId),
+      )
+    : authorizedEvents;
 
   return {
     user: {
