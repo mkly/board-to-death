@@ -53,6 +53,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ProgramSessionParticipantRole } from "@/generated/prisma/client";
 
 import { archiveProgramSession, cloneProgramSession, type SessionMutationState, saveProgramSession } from "../actions";
+import { SessionContentHistory, type SessionContentVersion } from "./session-content-history";
 
 export interface SessionWorkspaceSession {
   readonly id: string;
@@ -71,6 +72,7 @@ export interface SessionWorkspaceSession {
     readonly role: ProgramSessionParticipantRole;
   }[];
   readonly versionNumber: number;
+  readonly versions: readonly SessionContentVersion[];
   readonly customFieldValues: readonly CustomFieldInputValue[];
 }
 
@@ -537,19 +539,30 @@ export function SessionWorkspace({
 
         <div className="flex min-w-0 flex-col gap-3">
           {creating || selectedSession ? (
-            <SessionForm
-              key={selectedSession?.id ?? "new"}
-              eventSlug={event.slug}
-              session={selectedSession}
-              speakers={speakers}
-              tracks={tracks}
-              customFieldDefinitions={customFieldDefinitions}
-              sessions={sessions}
-              onSaved={(sessionId) => {
-                setSelectedSessionId(sessionId);
-                setCreating(false);
-              }}
-            />
+            <>
+              <SessionForm
+                key={selectedSession?.id ?? "new"}
+                eventSlug={event.slug}
+                session={selectedSession}
+                speakers={speakers}
+                tracks={tracks}
+                customFieldDefinitions={customFieldDefinitions}
+                sessions={sessions}
+                onSaved={(sessionId) => {
+                  setSelectedSessionId(sessionId);
+                  setCreating(false);
+                }}
+              />
+              {selectedSession ? (
+                <SessionContentHistory
+                  eventSlug={event.slug}
+                  sessionId={selectedSession.id}
+                  sessionTitle={selectedSession.title}
+                  archived={selectedSession.archived}
+                  versions={selectedSession.versions}
+                />
+              ) : null}
+            </>
           ) : (
             <Empty className="min-h-80 border">
               <EmptyHeader>

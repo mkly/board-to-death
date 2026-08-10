@@ -6,6 +6,8 @@ import { ProgramSessionParticipantRole } from "@/generated/prisma/client";
 
 const actionMocks = vi.hoisted(() => ({
   archiveProgramSession: vi.fn(),
+  cloneProgramSession: vi.fn(),
+  restoreProgramSessionContent: vi.fn(),
   saveProgramSession: vi.fn(),
 }));
 
@@ -47,6 +49,24 @@ const sessions: readonly SessionWorkspaceSession[] = [
       },
     ],
     versionNumber: 2,
+    versions: [
+      {
+        versionNumber: 1,
+        title: "Cooperative design",
+        description: "The original abstract.",
+        createdAt: "2026-08-09T12:00:00.000Z",
+        createdBy: "Maya Chen",
+        restoredFromVersionNumber: null,
+      },
+      {
+        versionNumber: 2,
+        title: "Designing cooperative tension",
+        description: "A practical workshop.",
+        createdAt: "2026-08-10T12:00:00.000Z",
+        createdBy: "Alex Rivera",
+        restoredFromVersionNumber: null,
+      },
+    ],
     customFieldValues: [],
   },
   {
@@ -62,6 +82,16 @@ const sessions: readonly SessionWorkspaceSession[] = [
     parentSessionTitle: null,
     participants: [],
     versionNumber: 1,
+    versions: [
+      {
+        versionNumber: 1,
+        title: "Opening keynote",
+        description: null,
+        createdAt: "2026-08-09T12:00:00.000Z",
+        createdBy: null,
+        restoredFromVersionNumber: null,
+      },
+    ],
     customFieldValues: [],
   },
   {
@@ -77,6 +107,16 @@ const sessions: readonly SessionWorkspaceSession[] = [
     parentSessionTitle: null,
     participants: [],
     versionNumber: 3,
+    versions: [
+      {
+        versionNumber: 3,
+        title: "Retired workshop",
+        description: null,
+        createdAt: "2026-08-09T12:00:00.000Z",
+        createdBy: "Alex Rivera",
+        restoredFromVersionNumber: 1,
+      },
+    ],
     customFieldValues: [],
   },
 ];
@@ -98,6 +138,10 @@ describe("SessionWorkspace", () => {
     vi.clearAllMocks();
     actionMocks.saveProgramSession.mockResolvedValue({ status: "success", message: "Session changes saved." });
     actionMocks.archiveProgramSession.mockResolvedValue({ status: "success", message: "Session archived." });
+    actionMocks.restoreProgramSessionContent.mockResolvedValue({
+      status: "success",
+      message: "Version 1 restored as version 3.",
+    });
   });
   afterEach(cleanup);
 
@@ -129,7 +173,7 @@ describe("SessionWorkspace", () => {
     renderWorkspace();
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect Designing cooperative tension" }));
-    expect(screen.getAllByText("Designing cooperative tension")).toHaveLength(2);
+    expect(screen.getAllByText("Designing cooperative tension")).toHaveLength(3);
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Designing cooperative tension");
     expect((screen.getByLabelText("Duration (minutes)") as HTMLInputElement).value).toBe("60");
     expect(screen.getByRole("combobox", { name: /Alex Rivera/ }).textContent).toContain("Moderator");
@@ -144,6 +188,36 @@ describe("SessionWorkspace", () => {
     expect(formData.get("sessionId")).toBe("11111111-1111-4111-8111-111111111111");
     expect(formData.get("title")).toBe("Cooperative tension lab");
     expect(formData.get("participantRole:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")).toBe("MODERATOR");
+  });
+
+  test("shows attributed title and abstract history and restores an older version", async () => {
+    renderWorkspace();
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect Designing cooperative tension" }));
+    expect(screen.getByText("Version 2 · Title changed · Abstract changed")).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" && element.textContent?.startsWith("Alex Rivera · Aug 10, 2026") === true,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, element) => element?.tagName === "P" && element.textContent?.startsWith("Maya Chen · Aug 9, 2026") === true,
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore as new version" }));
+
+    await waitFor(() =>
+      expect(actionMocks.restoreProgramSessionContent).toHaveBeenCalledWith(
+        "board-to-death-2027",
+        "11111111-1111-4111-8111-111111111111",
+        1,
+      ),
+    );
+    expect(await screen.findByText("Version 1 restored as version 3.")).toBeTruthy();
   });
 
   test("creates a manual session and renders field-level server validation", async () => {

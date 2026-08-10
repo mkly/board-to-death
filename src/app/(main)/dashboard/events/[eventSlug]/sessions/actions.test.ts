@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   isAuthorizedAdminSession: vi.fn(),
   listDefinitions: vi.fn(),
   listValues: vi.fn(),
+  restoreContentVersion: vi.fn(),
   setValue: vi.fn(),
   update: vi.fn(),
 }));
@@ -43,11 +44,12 @@ vi.mock("@/server/infrastructure", () => ({
 vi.mock("@/server/sessions/repositories", () => ({
   ProgramSessionRepository: class {
     readonly createManual = mocks.createManual;
+    readonly restoreContentVersion = mocks.restoreContentVersion;
     readonly update = mocks.update;
   },
 }));
 
-import { saveProgramSession } from "./actions";
+import { restoreProgramSessionContent, saveProgramSession } from "./actions";
 
 const eventId = "11111111-1111-4111-8111-111111111111";
 
@@ -84,10 +86,30 @@ function sessionForm(): FormData {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getSession.mockResolvedValue({ user: { email: "admin@example.test" } });
+  mocks.getSession.mockResolvedValue({ user: { email: "admin@example.test", name: "Admin User" } });
   mocks.isAuthorizedAdminSession.mockResolvedValue(true);
   mocks.findEvent.mockResolvedValue({ id: eventId, slug: "event-one" });
   mocks.listValues.mockResolvedValue([]);
+});
+
+describe("restoreProgramSessionContent", () => {
+  it("attributes a restored title and abstract to the authorized organizer", async () => {
+    mocks.restoreContentVersion.mockResolvedValue({ version: { versionNumber: 4 } });
+
+    const result = await restoreProgramSessionContent("event-one", "33333333-3333-4333-8333-333333333333", 2);
+
+    expect(mocks.restoreContentVersion).toHaveBeenCalledWith(
+      eventId,
+      "33333333-3333-4333-8333-333333333333",
+      2,
+      "Admin User",
+    );
+    expect(result).toEqual({
+      status: "success",
+      message: "Version 2 restored as version 4.",
+      sessionId: "33333333-3333-4333-8333-333333333333",
+    });
+  });
 });
 
 describe("saveProgramSession custom field validation", () => {
