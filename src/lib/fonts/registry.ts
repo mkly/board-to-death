@@ -12,6 +12,7 @@ import {
   Nunito_Sans,
   Outfit,
   Playfair_Display,
+  Plus_Jakarta_Sans,
   Public_Sans,
   Raleway,
   Roboto,
@@ -44,6 +45,11 @@ const geist = Geist({
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
+});
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-plus-jakarta-sans",
 });
 
 const geistMono = Geist_Mono({
@@ -147,6 +153,10 @@ export const fontRegistry = {
   outfit: {
     label: "Outfit",
     font: outfit,
+  },
+  plusJakartaSans: {
+    label: "Plus Jakarta Sans",
+    font: plusJakartaSans,
   },
   geistMono: {
     label: "Geist Mono",
