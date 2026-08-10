@@ -11,6 +11,7 @@ import {
 import { EventRepository } from "../events/repositories.ts";
 import { ProgramSessionRepository } from "../sessions/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
+import { DirectorySegmentRepository } from "./directory-segments.ts";
 import {
   archiveContact,
   createContact,
@@ -34,6 +35,7 @@ const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: data
 const events = new EventRepository(client);
 const sessions = new ProgramSessionRepository(client);
 const speakers = new SpeakerRepository(client);
+const segments = new DirectorySegmentRepository(client);
 
 async function createEvent(slug: string, startsAt: string) {
   return events.create({
@@ -52,6 +54,7 @@ describe("organization contact directory", () => {
   });
 
   beforeEach(async () => {
+    await client.directorySegment.deleteMany();
     await client.event.deleteMany();
     await client.person.deleteMany();
   });
@@ -271,6 +274,58 @@ describe("organization contact directory", () => {
     await client.event.deleteMany({ where: { orgId: otherOrganization.id } });
     await client.person.deleteMany({ where: { orgId: otherOrganization.id } });
     await client.organization.delete({ where: { id: otherOrganization.id } });
+  });
+
+  test("combines directory criteria and re-resolves saved segment membership", async () => {
+    const aiEvent = await createEvent("directory-ai", "2027-11-01T17:00:00.000Z");
+    const designEvent = await createEvent("directory-design", "2027-12-01T17:00:00.000Z");
+    await createContact(client, {
+      eventId: aiEvent.id,
+      email: "researcher@example.test",
+      givenName: "Rhea",
+      familyName: "Search",
+      organization: "AI Labs",
+      jobTitle: "Researcher",
+    });
+    await createContact(client, {
+      eventId: designEvent.id,
+      email: "designer@example.test",
+      givenName: "Des",
+      familyName: "Ign",
+      organization: "AI Labs",
+      jobTitle: "Designer",
+    });
+    await createContact(client, {
+      eventId: aiEvent.id,
+      email: "other@example.test",
+      givenName: "Otto",
+      familyName: "Mation",
+      organization: "Other Co",
+      jobTitle: "Researcher",
+    });
+
+    const filters = { organization: "AI", jobTitle: "research", eventId: aiEvent.id };
+    assert.deepEqual(
+      (await searchDirectoryPeople(client, aiEvent.id, filters)).map(({ givenName }) => givenName),
+      ["Rhea"],
+    );
+    assert.equal((await searchDirectoryPeople(client, aiEvent.id, {})).length, 3);
+
+    const saved = await segments.createForEvent(aiEvent.id, "AI Experts", filters);
+    assert.equal((await segments.listForEvent(aiEvent.id))[0]?.name, "AI Experts");
+
+    await createContact(client, {
+      eventId: aiEvent.id,
+      email: "new-researcher@example.test",
+      givenName: "Nia",
+      familyName: "Expert",
+      organization: "AI Labs",
+      jobTitle: "Research engineer",
+    });
+    assert.deepEqual(
+      (await searchDirectoryPeople(client, aiEvent.id, saved.filters)).map(({ givenName }) => givenName),
+      ["Nia", "Rhea"],
+    );
   });
 
   test("revives an archived event contact instead of stranding the person as already linked", async () => {

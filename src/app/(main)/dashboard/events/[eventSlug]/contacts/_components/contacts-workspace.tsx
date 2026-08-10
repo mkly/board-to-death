@@ -4,7 +4,17 @@ import { useActionState, useState } from "react";
 
 import Link from "next/link";
 
-import { GitMerge, Pencil, Save, Search, TriangleAlert, UserPlus, UsersRound } from "lucide-react";
+import {
+  BookmarkPlus,
+  FilterX,
+  GitMerge,
+  Pencil,
+  Save,
+  Search,
+  TriangleAlert,
+  UserPlus,
+  UsersRound,
+} from "lucide-react";
 
 import type { DashboardEvent } from "@/app/(main)/dashboard/_lib/dashboard-shell";
 import {
@@ -35,6 +45,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Field,
@@ -48,12 +67,15 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { DirectorySegmentRecord } from "@/server/contacts/directory-segments";
 import type {
   DirectoryDuplicateMatch,
   DirectoryDuplicatePerson,
+  DirectoryPeopleFilters,
   DirectoryPersonSummary,
 } from "@/server/contacts/repositories";
 
@@ -62,6 +84,7 @@ import {
   linkDirectoryPersonAction,
   mergeDirectoryPeopleAction,
   saveContactRecord,
+  saveDirectorySegmentAction,
 } from "../actions";
 
 interface ContactRecord {
@@ -82,9 +105,12 @@ interface ContactsWorkspaceProps {
   readonly duplicateMatches: readonly DirectoryDuplicateMatch[];
   readonly error?: string;
   readonly event: DashboardEvent;
+  readonly events: readonly { readonly id: string; readonly name: string }[];
+  readonly filters: DirectoryPeopleFilters;
   readonly notice?: string;
   readonly people: readonly DirectoryPersonSummary[];
-  readonly query: string;
+  readonly segments: readonly DirectorySegmentRecord[];
+  readonly selectedSegmentId?: string;
 }
 
 const INITIAL_STATE: ContactRecordMutationState = { status: "idle" };
@@ -351,15 +377,165 @@ function ContactEditor({
   );
 }
 
+function SaveSegmentDialog({
+  eventSlug,
+  filters,
+  disabled,
+}: {
+  readonly eventSlug: string;
+  readonly filters: DirectoryPeopleFilters;
+  readonly disabled: boolean;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button disabled={disabled} type="button" variant="outline">
+          <BookmarkPlus data-icon="inline-start" />
+          Save segment
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form action={saveDirectorySegmentAction.bind(null, eventSlug)} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>Save dynamic segment</DialogTitle>
+            <DialogDescription>
+              Save these criteria as a reusable view. Membership updates whenever the segment is reopened.
+            </DialogDescription>
+          </DialogHeader>
+          <input name="q" type="hidden" value={filters.query ?? ""} />
+          <input name="organization" type="hidden" value={filters.organization ?? ""} />
+          <input name="jobTitle" type="hidden" value={filters.jobTitle ?? ""} />
+          <input name="participatedEventId" type="hidden" value={filters.eventId ?? ""} />
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="segment-name">Segment name</FieldLabel>
+              <Input id="segment-name" maxLength={100} name="name" placeholder="AI Experts" required />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="submit">
+              <BookmarkPlus data-icon="inline-start" />
+              Save segment
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DirectoryFilters({
+  event,
+  events,
+  filters,
+}: {
+  readonly event: DashboardEvent;
+  readonly events: readonly { readonly id: string; readonly name: string }[];
+  readonly filters: DirectoryPeopleFilters;
+}) {
+  const hasActiveFilters = Object.values(filters).some((value) => Boolean(value?.trim()));
+  const activeLabels = [
+    filters.query ? `Search: ${filters.query}` : null,
+    filters.organization ? `Organization: ${filters.organization}` : null,
+    filters.jobTitle ? `Job title: ${filters.jobTitle}` : null,
+    filters.eventId ? `Event: ${events.find(({ id }) => id === filters.eventId)?.name ?? "Selected event"}` : null,
+  ].filter((label): label is string => label !== null);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <form method="get">
+        <FieldGroup>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field>
+              <FieldLabel htmlFor="directory-search">Search directory</FieldLabel>
+              <Input
+                defaultValue={filters.query}
+                id="directory-search"
+                name="q"
+                placeholder="Name, email, or organization"
+                type="search"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="directory-organization">Organization</FieldLabel>
+              <Input
+                defaultValue={filters.organization}
+                id="directory-organization"
+                name="organization"
+                placeholder="Company or organization"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="directory-job-title">Job title</FieldLabel>
+              <Input
+                defaultValue={filters.jobTitle}
+                id="directory-job-title"
+                name="jobTitle"
+                placeholder="Role or title"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="directory-event">Participated in event</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                defaultValue={filters.eventId ?? ""}
+                id="directory-event"
+                name="participatedEventId"
+              >
+                <NativeSelectOption value="">Any event</NativeSelectOption>
+                {events.map(({ id, name }) => (
+                  <NativeSelectOption key={id} value={id}>
+                    {name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">
+              <Search data-icon="inline-start" />
+              Apply filters
+            </Button>
+            <Button asChild type="button" variant="outline">
+              <Link href={`/dashboard/events/${encodeURIComponent(event.slug)}/contacts`}>
+                <FilterX data-icon="inline-start" />
+                Clear filters
+              </Link>
+            </Button>
+          </div>
+        </FieldGroup>
+      </form>
+      <section aria-labelledby="active-directory-filters" className="flex flex-wrap items-center gap-2">
+        <h3 className="sr-only" id="active-directory-filters">
+          Active directory filters
+        </h3>
+        {activeLabels.length > 0 ? (
+          activeLabels.map((label) => (
+            <Badge key={label} variant="outline">
+              {label}
+            </Badge>
+          ))
+        ) : (
+          <p className="text-muted-foreground text-sm">No filters applied.</p>
+        )}
+      </section>
+      <SaveSegmentDialog disabled={!hasActiveFilters} eventSlug={event.slug} filters={filters} />
+    </div>
+  );
+}
+
 export function ContactsWorkspace({
   contacts,
   customFieldDefinitions,
   duplicateMatches,
   error,
   event,
+  events,
+  filters,
   notice,
   people,
-  query,
+  segments,
+  selectedSegmentId,
 }: ContactsWorkspaceProps) {
   const [selectedContactId, setSelectedContactId] = useState<string | null>(contacts[0]?.id ?? null);
   const selectedContact = contacts.find(({ id }) => id === selectedContactId) ?? null;
@@ -376,7 +552,7 @@ export function ContactsWorkspace({
 
       {notice ? (
         <Alert>
-          <AlertTitle>Contacts updated</AlertTitle>
+          <AlertTitle>Directory updated</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
@@ -414,28 +590,42 @@ export function ContactsWorkspace({
         <CardHeader>
           <CardTitle>Organization directory</CardTitle>
           <CardDescription>
-            Search by name, email, or organization, then add an existing person to this event.
+            Combine search, profile, and event-history criteria, then save the result as a reusable segment.
           </CardDescription>
+          <CardAction>
+            <Badge variant="secondary">
+              {people.length} {people.length === 1 ? "person" : "people"}
+            </Badge>
+          </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <form method="get">
-            <FieldGroup>
-              <Field orientation="responsive">
-                <FieldLabel htmlFor="directory-search">Search directory</FieldLabel>
-                <Input
-                  defaultValue={query}
-                  id="directory-search"
-                  name="q"
-                  placeholder="Name, email, or organization"
-                  type="search"
-                />
-                <Button type="submit" variant="outline">
-                  <Search data-icon="inline-start" />
-                  Search
-                </Button>
-              </Field>
-            </FieldGroup>
-          </form>
+          <section aria-labelledby="saved-segments-heading" className="flex flex-col gap-2">
+            <h3 className="font-medium" id="saved-segments-heading">
+              Saved segments
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {segments.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Save a filtered view to create your first segment.</p>
+              ) : (
+                segments.map((segment) => (
+                  <Button
+                    asChild
+                    key={segment.id}
+                    size="sm"
+                    variant={selectedSegmentId === segment.id ? "secondary" : "outline"}
+                  >
+                    <Link
+                      href={`/dashboard/events/${encodeURIComponent(event.slug)}/contacts?segment=${encodeURIComponent(segment.id)}`}
+                    >
+                      {segment.name}
+                    </Link>
+                  </Button>
+                ))
+              )}
+            </div>
+          </section>
+
+          <DirectoryFilters event={event} events={events} filters={filters} />
 
           {people.length === 0 ? (
             <Empty className="min-h-40 border">
@@ -444,7 +634,7 @@ export function ContactsWorkspace({
                   <UsersRound />
                 </EmptyMedia>
                 <EmptyTitle>No directory contacts found</EmptyTitle>
-                <EmptyDescription>Try a different name, email address, or organization.</EmptyDescription>
+                <EmptyDescription>Clear one or more criteria to broaden this directory view.</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (

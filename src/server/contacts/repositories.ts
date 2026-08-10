@@ -46,6 +46,13 @@ export interface DirectoryPersonSummary extends Person {
   readonly linkedEventIds: readonly string[];
 }
 
+export interface DirectoryPeopleFilters {
+  readonly query?: string;
+  readonly organization?: string;
+  readonly jobTitle?: string;
+  readonly eventId?: string;
+}
+
 export interface DirectoryPersonEventLink {
   readonly contact: Contact;
   readonly event: {
@@ -205,26 +212,35 @@ export async function createContact(client: Prisma.TransactionClient, input: Cre
 export async function searchDirectoryPeople(
   client: Prisma.TransactionClient,
   eventId: string,
-  query: string,
+  input: string | DirectoryPeopleFilters,
 ): Promise<readonly DirectoryPersonSummary[]> {
   const event = await client.event.findUniqueOrThrow({ where: { id: eventId }, select: { orgId: true } });
-  const normalized = query.trim();
+  const filters = typeof input === "string" ? { query: input } : input;
+  const query = filters.query?.trim() ?? "";
+  const organization = filters.organization?.trim() ?? "";
+  const jobTitle = filters.jobTitle?.trim() ?? "";
+  const participatedEventId = filters.eventId?.trim() ?? "";
+  const and: Prisma.PersonWhereInput[] = [];
+  if (query !== "") {
+    and.push({
+      OR: [
+        { email: { contains: query, mode: "insensitive" } },
+        { givenName: { contains: query, mode: "insensitive" } },
+        { familyName: { contains: query, mode: "insensitive" } },
+        { organization: { contains: query, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (organization !== "") and.push({ organization: { contains: organization, mode: "insensitive" } });
+  if (jobTitle !== "") and.push({ jobTitle: { contains: jobTitle, mode: "insensitive" } });
+  if (participatedEventId !== "") {
+    and.push({ contacts: { some: { eventId: participatedEventId, archivedAt: null } } });
+  }
   const people = await client.person.findMany({
-    where:
-      normalized === ""
-        ? { orgId: event.orgId }
-        : {
-            orgId: event.orgId,
-            OR: [
-              { email: { contains: normalized, mode: "insensitive" } },
-              { givenName: { contains: normalized, mode: "insensitive" } },
-              { familyName: { contains: normalized, mode: "insensitive" } },
-              { organization: { contains: normalized, mode: "insensitive" } },
-            ],
-          },
+    where: { orgId: event.orgId, AND: and },
     include: { contacts: { where: { archivedAt: null }, select: { eventId: true } } },
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-    take: 50,
+    take: 200,
   });
 
   return people.map(({ contacts, ...person }) => ({

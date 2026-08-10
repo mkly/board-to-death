@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import type { CustomFieldInputDefinition } from "@/components/custom-fields/custom-field-inputs";
 import { CustomFieldEntityType } from "@/generated/prisma/client";
+import { DirectorySegmentRepository } from "@/server/contacts/directory-segments";
 import { listContacts, listDirectoryDuplicateMatches, searchDirectoryPeople } from "@/server/contacts/repositories";
 import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
@@ -30,7 +31,15 @@ export default async function ContactsPage({
   searchParams,
 }: {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ q?: string; notice?: string; error?: string }>;
+  readonly searchParams: Promise<{
+    q?: string;
+    organization?: string;
+    jobTitle?: string;
+    participatedEventId?: string;
+    segment?: string;
+    notice?: string;
+    error?: string;
+  }>;
 }) {
   const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
@@ -44,12 +53,21 @@ export default async function ContactsPage({
 
   const client = getDatabaseClient();
   const customFields = new CustomFieldRepository(client);
-  const [contacts, people, duplicateMatches, definitions] = await Promise.all([
+  const directorySegments = new DirectorySegmentRepository(client);
+  const [contacts, duplicateMatches, definitions, segments] = await Promise.all([
     listContacts(client, event.id),
-    searchDirectoryPeople(client, event.id, query.q ?? ""),
     listDirectoryDuplicateMatches(client, event.id),
     customFields.listDefinitions(event.id, CustomFieldEntityType.CONTACT),
+    directorySegments.listForEvent(event.id),
   ]);
+  const selectedSegment = segments.find(({ id }) => id === query.segment);
+  const filters = selectedSegment?.filters ?? {
+    query: query.q,
+    organization: query.organization,
+    jobTitle: query.jobTitle,
+    eventId: query.participatedEventId,
+  };
+  const people = await searchDirectoryPeople(client, event.id, filters);
   const values = await client.customFieldValue.findMany({
     where: { eventId: event.id, contactId: { in: contacts.map(({ id }) => id) } },
     select: { id: true, contactId: true, definitionId: true, value: true },
@@ -74,9 +92,12 @@ export default async function ContactsPage({
       duplicateMatches={duplicateMatches}
       error={query.error}
       event={event}
+      events={shell.events.map(({ id, name }) => ({ id, name }))}
+      filters={filters}
       notice={query.notice}
       people={people}
-      query={query.q ?? ""}
+      segments={segments}
+      selectedSegmentId={selectedSegment?.id}
     />
   );
 }
