@@ -1,8 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 
-import { Dices } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -68,11 +68,15 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="h-auto py-1.5">
               <Link prefetch={false} href={activeEvent ? dashboardEventHref(activeEvent.slug) : "/dashboard"}>
-                <span
-                  data-brand-mark
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-xs"
-                >
-                  <Dices className="size-4.5" />
+                <span data-brand-mark className="flex size-8 shrink-0 overflow-hidden rounded-lg shadow-xs">
+                  <Image
+                    src="/brand-mark.png"
+                    alt=""
+                    width={64}
+                    height={64}
+                    priority
+                    className="size-full object-cover"
+                  />
                 </span>
                 <span className="font-heading font-bold text-base tracking-tight">{APP_CONFIG.name}</span>
               </Link>
