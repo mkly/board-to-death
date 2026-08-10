@@ -9,14 +9,13 @@ import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { CustomFieldEntityType, CustomFieldType, ProgramSessionParticipantRole } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { type PreparedCustomFieldFile, prepareCustomFieldFile, putCustomFieldFile } from "@/server/custom-fields/files";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, validateCustomFieldValue } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
-import { contentDisposition, createFileStorage, safeFileName } from "@/server/infrastructure";
+import { createFileStorage } from "@/server/infrastructure";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
-
-import { randomUUID } from "node:crypto";
 
 export interface SessionMutationState {
   readonly status: "idle" | "success" | "error";
@@ -128,7 +127,7 @@ export async function saveProgramSession(
   const definitions = await customFields.listDefinitions(event.id, CustomFieldEntityType.PROGRAM_SESSION);
   let customInput: ReturnType<typeof parseCustomFieldFormData>;
   let existingValues: Awaited<ReturnType<CustomFieldRepository["listValues"]>> = [];
-  let files: readonly { definition: (typeof definitions)[number]; file: File; fileName: string }[];
+  let files: readonly { definition: (typeof definitions)[number]; prepared: PreparedCustomFieldFile }[];
   try {
     customInput = parseCustomFieldFormData(formData, definitions);
     for (const entry of customInput.values) validateCustomFieldValue(entry.definition, entry.value);
@@ -147,11 +146,12 @@ export async function saveProgramSession(
         !existingValues.some((stored) => stored.definitionId === definition.id),
     );
     if (missingRequiredFile) return { status: "error", message: `${missingRequiredFile.label} is required.` };
-    files = customInput.files.map(({ definition, file }) => {
-      const fileName = safeFileName(file.name);
-      if (!fileName) throw new RepositoryError("invalid-input", `${definition.label} has an invalid file name.`);
-      return { definition, file, fileName };
-    });
+    files = await Promise.all(
+      customInput.files.map(async ({ definition, file }) => ({
+        definition,
+        prepared: await prepareCustomFieldFile(file, definition.label),
+      })),
+    );
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;
@@ -181,26 +181,25 @@ export async function saveProgramSession(
       driver: "local",
       rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
     });
-    for (const { definition, file, fileName } of files) {
-      const objectKey = `events/${event.id}/custom-fields/${definition.id}/sessions/${saved.id}/${randomUUID()}`;
-      const stored = await storage.put({
-        key: objectKey,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-        contentType: file.type || "application/octet-stream",
-        contentDisposition: contentDisposition(fileName),
-        metadata: { eventId: event.id, definitionId: definition.id, sessionId: saved.id },
+    for (const { definition, prepared } of files) {
+      const stored = await putCustomFieldFile({
+        eventId: event.id,
+        definitionId: definition.id,
+        fieldLabel: definition.label,
+        pathSegment: `sessions/${saved.id}`,
+        prepared,
+        storage,
       });
-      if (!stored.ok) return { status: "error", message: `${definition.label} could not be stored. Try again.` };
       try {
-        await customFields.setValue(event.id, definition.id, target, { objectKey, fileName });
+        await customFields.setValue(event.id, definition.id, target, stored);
       } catch (error) {
-        await storage.delete(objectKey);
+        await storage.delete(stored.objectKey);
         throw error;
       }
       const previous = existingValues.find(({ definitionId }) => definitionId === definition.id)?.value;
       if (typeof previous === "object" && previous !== null && !Array.isArray(previous) && "objectKey" in previous) {
         const previousKey = previous.objectKey;
-        if (typeof previousKey === "string" && previousKey !== objectKey) await storage.delete(previousKey);
+        if (typeof previousKey === "string" && previousKey !== stored.objectKey) await storage.delete(previousKey);
       }
     }
     revalidatePath(`/dashboard/events/${event.slug}/sessions`);

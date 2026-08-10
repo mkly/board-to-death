@@ -51,7 +51,7 @@ export default async function ContactsPage({
   ]);
   const values = await client.customFieldValue.findMany({
     where: { eventId: event.id, contactId: { in: contacts.map(({ id }) => id) } },
-    select: { contactId: true, definitionId: true, value: true },
+    select: { id: true, contactId: true, definitionId: true, value: true },
   });
 
   return (
@@ -67,7 +67,7 @@ export default async function ContactsPage({
         phone: contact.phone,
         customFieldValues: values
           .filter(({ contactId }) => contactId === contact.id)
-          .map(({ definitionId, value }) => ({ definitionId, value })),
+          .map(({ id, definitionId, value }) => ({ id, definitionId, value })),
       }))}
       customFieldDefinitions={definitions.map(inputDefinition)}
       error={query.error}

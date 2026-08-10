@@ -318,6 +318,7 @@ function SessionForm({
               definitions={customFieldDefinitions}
               values={session?.customFieldValues}
               disabled={session?.archived}
+              fileDownloadBasePath={`/dashboard/events/${encodeURIComponent(eventSlug)}/custom-fields/files`}
             />
           </FieldGroup>
         </CardContent>

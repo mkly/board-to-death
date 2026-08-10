@@ -66,7 +66,7 @@ export default async function GroupsPage({
   });
   const customFieldValues = await client.customFieldValue.findMany({
     where: { eventId: authorizedEvent.id, groupId: { in: groups.map(({ id }) => id) } },
-    select: { groupId: true, definitionId: true, value: true },
+    select: { id: true, groupId: true, definitionId: true, value: true },
   });
 
   return (
@@ -85,7 +85,7 @@ export default async function GroupsPage({
           ...group,
           customFieldValues: customFieldValues
             .filter(({ groupId }) => groupId === group.id)
-            .map(({ definitionId, value }) => ({ definitionId, value })),
+            .map(({ id, definitionId, value }) => ({ id, definitionId, value })),
         }))}
         notice={query.notice}
         tiers={tiers}
