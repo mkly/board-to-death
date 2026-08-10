@@ -402,6 +402,7 @@ export default async function PublishedEmbedPreview({
       <ItineraryWorkspace
         density={configuration.density}
         enabledFilters={configuration.filters}
+        eventSlug={eventSlug}
         eventName={itinerary.eventName}
         sessions={itinerary.sessions}
         storageKey={`board-to-death:itinerary:${itinerary.eventId}`}
