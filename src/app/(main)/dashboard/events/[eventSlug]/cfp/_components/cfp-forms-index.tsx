@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-import { ClipboardList, Users } from "lucide-react";
+import { CircleIcon, ClipboardList, Users } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { CfpFormSummary } from "@/server/cfp/repositories";
@@ -37,12 +37,14 @@ export function CfpFormsIndex({
   readonly error?: string;
 }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <p className="font-medium text-muted-foreground text-sm">{event.name}</p>
-          <h1 className="font-medium text-2xl leading-tight tracking-tight sm:text-3xl sm:leading-none">CFP forms</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="font-heading font-semibold text-3xl leading-tight tracking-tight sm:text-4xl sm:leading-none">
+            CFP forms
+          </h1>
+          <p className="max-w-2xl text-base text-muted-foreground">
             Create and manage the forms prospective speakers use to submit sessions.
           </p>
         </div>
@@ -62,7 +64,7 @@ export function CfpFormsIndex({
         </Alert>
       ) : null}
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Forms</CardTitle>
           <CardDescription>
@@ -70,6 +72,9 @@ export function CfpFormsIndex({
               ? "No forms have been created for this event."
               : `${forms.length} event form${forms.length === 1 ? "" : "s"}`}
           </CardDescription>
+          <CardAction className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20">
+            <ClipboardList aria-hidden="true" />
+          </CardAction>
         </CardHeader>
         <CardContent className={forms.length === 0 ? undefined : "px-0"}>
           {forms.length === 0 ? (
@@ -118,6 +123,7 @@ export function CfpFormsIndex({
                       <TableCell className="hidden sm:table-cell">Call for proposals</TableCell>
                       <TableCell>
                         <Badge variant={form.status === "PUBLISHED" ? "default" : "secondary"}>
+                          <CircleIcon aria-hidden="true" className="fill-current" data-icon="inline-start" />
                           {statusLabel(form.status)}
                         </Badge>
                       </TableCell>
