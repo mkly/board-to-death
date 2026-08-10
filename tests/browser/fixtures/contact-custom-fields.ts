@@ -137,6 +137,16 @@ const verified = await browserAuth.handler(new Request(deliveredLink, { redirect
 const sessionCookie = verified.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
 if (!sessionCookie) throw new Error("Expected Better Auth to issue a browser session cookie.");
 
+if (event.orgId !== otherEvent.orgId)
+  throw new Error("The contact custom-field fixture expects both events in one organization.");
+const adminUser = await database.user.findFirst({ where: { email: adminEmail }, select: { id: true } });
+if (!adminUser) throw new Error("Expected the contact custom-field fixture to create an admin user.");
+await database.organizationMember.upsert({
+  where: { orgId_userId: { orgId: event.orgId, userId: adminUser.id } },
+  update: { role: "OWNER", status: "ACTIVE", revokedAt: null },
+  create: { orgId: event.orgId, userId: adminUser.id, role: "OWNER", status: "ACTIVE" },
+});
+
 process.stdout.write(
   JSON.stringify({
     eventId: event.id,
