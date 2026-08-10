@@ -7,6 +7,7 @@ import {
   SpeakerTaskAssignmentStatus,
 } from "../../generated/prisma/client.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
+import { addSpeakerTaskFileComment } from "./file-comments.ts";
 import { SpeakerOnboardingRepository } from "./onboarding.ts";
 import { SpeakerRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
@@ -366,6 +367,63 @@ describe("speaker onboarding persistence", () => {
       ],
     );
     await expectRepositoryError(onboarding.withdraw(eventId, assignment.id), "invalid-input");
+  });
+
+  test("shares attributed comments on an uploaded attempt between its speaker and organizers", async () => {
+    const eventId = await createEvent("file-comments");
+    const otherEventId = await createEvent("other-file-comments");
+    const speaker = await createSpeaker(eventId);
+    await addEligibleSubmission(eventId, speaker.id, CfpSubmissionStatus.CONFIRMED);
+    const definition = await createDefinition(eventId);
+    const assignment = await onboarding.assign({ eventId, definitionId: definition.id, speakerId: speaker.id });
+    const submitted = await onboarding.submit(
+      eventId,
+      assignment.id,
+      { objectKey: "headshots/commented.png", fileName: "commented.png" },
+      speaker.id,
+    );
+    const submission = submitted.submissions[0];
+    assert.ok(submission);
+    const organizer = await client.user.create({
+      data: { id: "file-comment-organizer", name: "Olivia Organizer", email: "olivia@example.test" },
+    });
+
+    await addSpeakerTaskFileComment(
+      client,
+      eventId,
+      submission.id,
+      { role: "SPEAKER", speakerId: speaker.id },
+      "Here is the revised crop.",
+    );
+    await addSpeakerTaskFileComment(
+      client,
+      eventId,
+      submission.id,
+      { role: "ORGANIZER", userId: organizer.id },
+      "This size works for the program.",
+    );
+
+    const comments = await client.speakerTaskFileComment.findMany({
+      where: { submissionId: submission.id },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    assert.deepEqual(
+      comments.map(({ authorLabel, authorRole, body }) => [authorLabel, authorRole, body]),
+      [
+        ["Board Speaker", "SPEAKER", "Here is the revised crop."],
+        ["Olivia Organizer", "ORGANIZER", "This size works for the program."],
+      ],
+    );
+    await expectRepositoryError(
+      addSpeakerTaskFileComment(
+        client,
+        otherEventId,
+        submission.id,
+        { role: "SPEAKER", speakerId: speaker.id },
+        "Cross-event comment",
+      ),
+      "not-found",
+    );
   });
 
   test("records withdrawal and protects assignment history until the event is deleted", async () => {

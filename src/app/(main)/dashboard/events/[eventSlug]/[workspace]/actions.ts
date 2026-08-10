@@ -10,6 +10,7 @@ import { auth } from "@/server/auth/auth";
 import { AuthorizationError } from "@/server/authorization/policy";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { addSpeakerTaskFileComment } from "@/server/speakers/file-comments";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
 import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
 
@@ -48,14 +49,32 @@ function timeField(formData: FormData, name: string): number {
 
 async function requireAdminEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) throw new AuthorizationError("unauthenticated");
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
+    throw new AuthorizationError("unauthenticated");
+  }
 
   const event = await getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
     select: { id: true, slug: true, timezone: true },
   });
   if (!event) throw new AuthorizationError("not-found");
-  return event;
+  return { ...event, userId: session.user.id };
+}
+
+export async function commentOnSpeakerTaskFile(
+  eventSlug: string,
+  submissionId: string,
+  formData: FormData,
+): Promise<void> {
+  const event = await requireAdminEvent(eventSlug);
+  await addSpeakerTaskFileComment(
+    getDatabaseClient(),
+    event.id,
+    submissionId,
+    { role: "ORGANIZER", userId: event.userId },
+    fieldValue(formData, "comment"),
+  );
+  revalidateOnboarding(event.slug);
 }
 
 function revalidateOnboarding(eventSlug: string): void {

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BellOff, BellRing, CalendarClock, Check, ClipboardCheck, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
+import { SpeakerTaskFileComments } from "@/components/speaker-task-file-comments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import {
   approveSpeakerTask,
   assignSpeakerTasks,
   cancelSpeakerTaskReminderRule,
+  commentOnSpeakerTaskFile,
   requestSpeakerTaskRevision,
   saveSpeakerTaskReminderRule,
   setSpeakerTaskReminderOptOut,
@@ -104,7 +106,10 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
       include: {
         definitionVersion: true,
         speaker: { include: { profileVersions: { orderBy: { versionNumber: "asc" } } } },
-        submissions: { orderBy: { attemptNumber: "asc" } },
+        submissions: {
+          orderBy: { attemptNumber: "asc" },
+          include: { fileComments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
+        },
         transitions: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }] },
       },
       orderBy: [{ assignedAt: "desc" }, { id: "asc" }],
@@ -475,8 +480,10 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                     // organizer gets the whole version history rather than only the newest file.
                     const fileAttempts = assignment.submissions
                       .map((submission) => ({
+                        id: submission.id,
                         attemptNumber: submission.attemptNumber,
                         file: objectValue(submission.response),
+                        comments: submission.fileComments,
                       }))
                       .filter((attempt) => typeof attempt.file?.objectKey === "string")
                       .reverse();
@@ -491,9 +498,17 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                                 Download {typeof attempt.file?.fileName === "string" ? attempt.file.fileName : "file"}
                               </a>
                             </Button>
-                            <Badge variant={index === 0 ? "secondary" : "outline"}>
-                              {index === 0 ? "Latest" : `Version ${fileAttempts.length - index}`}
-                            </Badge>
+                            <div className="flex flex-col gap-2">
+                              <Badge variant={index === 0 ? "secondary" : "outline"}>
+                                {index === 0 ? "Latest" : `Version ${fileAttempts.length - index}`}
+                              </Badge>
+                              <SpeakerTaskFileComments
+                                comments={attempt.comments}
+                                formAction={commentOnSpeakerTaskFile.bind(null, event.slug, attempt.id)}
+                                inputId={`organizer-file-comment-${assignment.id}-${attempt.attemptNumber}`}
+                                timezone={event.timezone}
+                              />
+                            </div>
                           </li>
                         ))}
                       </ul>

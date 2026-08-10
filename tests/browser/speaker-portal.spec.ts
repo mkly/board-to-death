@@ -534,6 +534,24 @@ test("submits text and file tasks, preserves revisions, and enforces speaker own
   await page.getByRole("button", { name: "Submit task" }).click();
   await expect(page.getByText("Awaiting event-team review")).toBeVisible();
   await expect(page.getByRole("link", { name: "slides.txt" })).toBeVisible();
+  await page.getByLabel("Add a file comment").fill("The speaker has supplied the final slides.");
+  await page.getByRole("button", { name: "Add comment" }).click();
+  await expect(page.getByText("The speaker has supplied the final slides.")).toBeVisible();
+
+  await context.addCookies([
+    { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
+    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+  ]);
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/onboarding`);
+  const fileRow = page.getByRole("row", { name: /Ada Lovelace Upload your slides/ });
+  await expect(fileRow).toContainText("The speaker has supplied the final slides.");
+  await fileRow.getByLabel("Add a file comment").fill("Thanks — these are ready for production.");
+  await fileRow.getByRole("button", { name: "Add comment" }).click();
+  await expect(fileRow).toContainText("Thanks — these are ready for production.");
+
+  await page.goto(fixture.populatedAuthHref);
+  await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.fileTaskId}`);
+  await expect(page.getByText("Thanks — these are ready for production.")).toBeVisible();
 
   const denied = await page.goto(`/portal/${fixture.eventSlug}/tasks/${fixture.outsiderTaskId}`);
   expect(denied?.status()).toBe(404);

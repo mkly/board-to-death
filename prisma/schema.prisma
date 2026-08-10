@@ -24,6 +24,7 @@ model User {
   eventMemberships   EventMembership[]
   cfpSubmissionViews CfpSubmissionView[]
   contactGroupIntakeReviews ContactGroupIntakeSubmission[]
+  speakerTaskFileComments SpeakerTaskFileComment[]
 
   @@unique([email])
   @@map("user")
@@ -1386,6 +1387,7 @@ model Speaker {
   sessions                   SpeakerSession[]
   programSessionParticipants ProgramSessionParticipant[]
   agendaPlacementSpeakers    AgendaPlacementSpeaker[]
+  taskFileComments           SpeakerTaskFileComment[]
 
   @@unique([eventId, normalizedEmail])
   @@unique([eventId, id])
@@ -1516,10 +1518,35 @@ model SpeakerTaskSubmission {
   response      Json?
   submittedAt   DateTime              @default(now()) @db.Timestamptz(3)
   assignment    SpeakerTaskAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  fileComments  SpeakerTaskFileComment[]
 
   @@unique([assignmentId, attemptNumber])
   @@index([assignmentId, submittedAt])
   @@map("speaker_task_submissions")
+}
+
+enum SpeakerTaskFileCommentAuthorRole {
+  ORGANIZER
+  SPEAKER
+}
+
+model SpeakerTaskFileComment {
+  id              String                           @id @default(uuid()) @db.Uuid
+  submissionId    String                           @db.Uuid
+  authorRole      SpeakerTaskFileCommentAuthorRole
+  authorLabel     String
+  authorUserId    String?
+  authorSpeakerId String?                          @db.Uuid
+  body            String
+  createdAt       DateTime                         @default(now()) @db.Timestamptz(3)
+  submission      SpeakerTaskSubmission            @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  authorUser      User?                            @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorSpeaker   Speaker?                         @relation(fields: [authorSpeakerId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId, createdAt])
+  @@index([authorUserId])
+  @@index([authorSpeakerId])
+  @@map("speaker_task_file_comments")
 }
 
 model SpeakerTaskAssignmentTransition {

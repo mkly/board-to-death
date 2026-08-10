@@ -420,7 +420,13 @@ export class SpeakerPortalRepository {
         },
         submissions: {
           orderBy: { attemptNumber: "asc" },
-          select: { attemptNumber: true, response: true, submittedAt: true },
+          select: {
+            id: true,
+            attemptNumber: true,
+            response: true,
+            submittedAt: true,
+            fileComments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+          },
         },
         transitions: {
           orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
