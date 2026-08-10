@@ -11,6 +11,7 @@ if (!databaseUrl?.includes("_test"))
 const database = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const adminEmail = "admin@example.test";
 
+await database.integrationSyncRecord.deleteMany();
 await database.event.deleteMany();
 await database.verification.deleteMany();
 await database.account.deleteMany();
