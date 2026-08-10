@@ -1,6 +1,13 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { EventType, PrismaClient, ProgramSessionParticipantRole } from "../../generated/prisma/client.ts";
+import {
+  EventType,
+  PrismaClient,
+  ProgramSessionParticipantRole,
+  SpeakerProspectActivityActor,
+  SpeakerProspectActivityKind,
+  SpeakerProspectStageBehavior,
+} from "../../generated/prisma/client.ts";
 import { EventRepository } from "../events/repositories.ts";
 import { ProgramSessionRepository } from "../sessions/repositories.ts";
 import { SpeakerRepository } from "../speakers/repositories.ts";
@@ -11,6 +18,8 @@ import {
   linkDirectoryPersonToEvent,
   listContactProgramSessionParticipations,
   listContacts,
+  listDirectoryDuplicateMatches,
+  mergeDirectoryPeople,
   reassignContactProgramSessionParticipations,
   searchDirectoryPeople,
   updateContact,
@@ -100,6 +109,99 @@ describe("organization contact directory", () => {
         { event: firstEvent.slug, name: "Dani", organization: "Event-specific sponsor", relationship: "new" },
         { event: nextEvent.slug, name: "Dana", organization: "Reed Robotics", relationship: "returning" },
       ],
+    );
+  });
+
+  test("surfaces same-name people and merges their event history and pipeline notes", async () => {
+    const sourceEvent = await createEvent("duplicate-source", "2027-03-01T17:00:00.000Z");
+    const primaryEvent = await createEvent("duplicate-primary", "2028-03-01T17:00:00.000Z");
+    const sharedEvent = await createEvent("duplicate-shared", "2029-03-01T17:00:00.000Z");
+    const sourceContact = await createContact(client, {
+      eventId: sourceEvent.id,
+      email: "priya.alt@example.test",
+      givenName: "Priya",
+      familyName: "Raman",
+      organization: "Alternate Labs",
+    });
+    const primaryContact = await createContact(client, {
+      eventId: primaryEvent.id,
+      email: "priya@example.test",
+      givenName: "Priya",
+      familyName: "Raman",
+      organization: "Primary Labs",
+    });
+    assert.ok(sourceContact.personId);
+    assert.ok(primaryContact.personId);
+    const sourceSharedContact = await linkDirectoryPersonToEvent(client, sharedEvent.id, sourceContact.personId);
+    await linkDirectoryPersonToEvent(client, sharedEvent.id, primaryContact.personId);
+
+    const stage = await client.speakerProspectStage.create({
+      data: {
+        eventId: sharedEvent.id,
+        name: "Researching",
+        behavior: SpeakerProspectStageBehavior.OPEN,
+        sortOrder: 0,
+      },
+    });
+    const sourceProspect = await client.speakerProspect.create({
+      data: {
+        eventId: sharedEvent.id,
+        personId: sourceContact.personId,
+        stageId: stage.id,
+        sourceLabel: "Manual",
+      },
+    });
+    const primaryProspect = await client.speakerProspect.create({
+      data: {
+        eventId: sharedEvent.id,
+        personId: primaryContact.personId,
+        stageId: stage.id,
+        sourceLabel: "Manual",
+      },
+    });
+    await client.speakerProspectActivity.create({
+      data: {
+        eventId: sharedEvent.id,
+        prospectId: sourceProspect.id,
+        kind: SpeakerProspectActivityKind.NOTE_ADDED,
+        actor: SpeakerProspectActivityActor.USER,
+        actorLabel: "Jordan Organizer",
+        note: "Met at DevFlow 2026 - shortlist for keynote.",
+      },
+    });
+
+    const duplicates = await listDirectoryDuplicateMatches(client, sourceEvent.id);
+    assert.deepEqual(
+      duplicates.map(({ people, reasons }) => ({
+        emails: people.map(({ email }) => email),
+        reasons,
+      })),
+      [
+        {
+          emails: ["priya.alt@example.test", "priya@example.test"],
+          reasons: ["name"],
+        },
+      ],
+    );
+
+    await mergeDirectoryPeople(client, sourceEvent.id, primaryContact.personId, sourceContact.personId);
+
+    assert.equal(await client.person.findUnique({ where: { id: sourceContact.personId } }), null);
+    assert.deepEqual(
+      (await getDirectoryPersonProfile(client, primaryContact.personId))?.events.map(({ event }) => event.slug),
+      [sourceEvent.slug, primaryEvent.slug, sharedEvent.slug],
+    );
+    assert.equal(await client.contact.count({ where: { eventId: sharedEvent.id, archivedAt: null } }), 1);
+    const archivedSourceContact = await client.contact.findUniqueOrThrow({ where: { id: sourceSharedContact.id } });
+    assert.ok(archivedSourceContact.archivedAt instanceof Date);
+    assert.equal(archivedSourceContact.personId, null);
+    assert.equal(await client.speakerProspect.findUnique({ where: { id: sourceProspect.id } }), null);
+    assert.deepEqual(
+      await client.speakerProspectActivity.findMany({
+        where: { prospectId: primaryProspect.id },
+        select: { note: true },
+      }),
+      [{ note: "Met at DevFlow 2026 - shortlist for keynote." }],
     );
   });
 

@@ -62,6 +62,22 @@ export interface DirectoryPersonProfile {
   readonly events: readonly DirectoryPersonEventLink[];
 }
 
+export interface DirectoryDuplicatePerson {
+  readonly id: string;
+  readonly email: string;
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly organization: string | null;
+  readonly jobTitle: string | null;
+  readonly eventCount: number;
+  readonly noteCount: number;
+}
+
+export interface DirectoryDuplicateMatch {
+  readonly people: readonly [DirectoryDuplicatePerson, DirectoryDuplicatePerson];
+  readonly reasons: readonly ("email" | "name")[];
+}
+
 export interface CreateContactGroupTierInput {
   readonly eventId: string;
   readonly kind: ContactGroupKind;
@@ -103,6 +119,25 @@ function normalizeEmail(value: string): string {
     invalid("email must be a valid address.");
   }
   return normalized;
+}
+
+function normalizeDuplicatePart(value: string): string {
+  return value.normalize("NFKC").trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
+}
+
+function duplicateReasons(
+  first: Pick<Person, "email" | "givenName" | "familyName">,
+  second: Pick<Person, "email" | "givenName" | "familyName">,
+): readonly ("email" | "name")[] {
+  const reasons: ("email" | "name")[] = [];
+  if (normalizeDuplicatePart(first.email) === normalizeDuplicatePart(second.email)) reasons.push("email");
+  if (
+    normalizeDuplicatePart(first.givenName) === normalizeDuplicatePart(second.givenName) &&
+    normalizeDuplicatePart(first.familyName) === normalizeDuplicatePart(second.familyName)
+  ) {
+    reasons.push("name");
+  }
+  return reasons;
 }
 
 /**
@@ -196,6 +231,275 @@ export async function searchDirectoryPeople(
     ...person,
     linkedEventIds: contacts.map(({ eventId }) => eventId),
   }));
+}
+
+/** Surface exact email and full-name matches inside the event owner's organization. */
+export async function listDirectoryDuplicateMatches(
+  client: Prisma.TransactionClient,
+  eventId: string,
+): Promise<readonly DirectoryDuplicateMatch[]> {
+  const event = await client.event.findUniqueOrThrow({ where: { id: eventId }, select: { orgId: true } });
+  const people = await client.person.findMany({
+    where: { orgId: event.orgId },
+    include: {
+      contacts: { where: { archivedAt: null }, select: { id: true } },
+      prospects: {
+        select: { activities: { where: { note: { not: null } }, select: { id: true } } },
+      },
+    },
+    orderBy: [{ familyName: "asc" }, { givenName: "asc" }, { email: "asc" }],
+  });
+
+  const matches: DirectoryDuplicateMatch[] = [];
+  for (const [index, first] of people.entries()) {
+    for (const second of people.slice(index + 1)) {
+      const reasons = duplicateReasons(first, second);
+      if (reasons.length === 0) continue;
+      const { contacts: firstContacts, prospects: firstProspects, ...firstPerson } = first;
+      const { contacts: secondContacts, prospects: secondProspects, ...secondPerson } = second;
+      matches.push({
+        people: [
+          {
+            ...firstPerson,
+            eventCount: firstContacts.length,
+            noteCount: firstProspects.reduce((count, prospect) => count + prospect.activities.length, 0),
+          },
+          {
+            ...secondPerson,
+            eventCount: secondContacts.length,
+            noteCount: secondProspects.reduce((count, prospect) => count + prospect.activities.length, 0),
+          },
+        ],
+        reasons,
+      });
+    }
+  }
+  return matches;
+}
+
+async function mergeContactRows(
+  client: Prisma.TransactionClient,
+  source: Pick<Contact, "id" | "eventId">,
+  target: Pick<Contact, "id" | "eventId">,
+): Promise<void> {
+  const memberships = await client.contactGroupMember.findMany({
+    where: { eventId: source.eventId, contactId: source.id },
+    select: { groupId: true },
+  });
+  if (memberships.length > 0) {
+    await client.contactGroupMember.createMany({
+      data: memberships.map(({ groupId }) => ({ eventId: target.eventId, groupId, contactId: target.id })),
+      skipDuplicates: true,
+    });
+    await client.contactGroupMember.deleteMany({ where: { eventId: source.eventId, contactId: source.id } });
+  }
+
+  await Promise.all([
+    client.contactGroup.updateMany({
+      where: { eventId: source.eventId, primaryContactId: source.id },
+      data: { primaryContactId: target.id },
+    }),
+    client.contactGroupIntakeSubmission.updateMany({
+      where: { eventId: source.eventId, acceptedContactId: source.id },
+      data: { acceptedContactId: target.id },
+    }),
+    client.fileRequestFile.updateMany({
+      where: { uploadedByContactId: source.id },
+      data: { uploadedByContactId: target.id },
+    }),
+    client.fileRequestFulfillmentLink.updateMany({
+      where: { contactId: source.id },
+      data: { contactId: target.id },
+    }),
+  ]);
+
+  const assignments = await client.fileRequestAssignment.findMany({
+    where: { eventId: source.eventId, contactId: source.id },
+    select: { id: true, requestId: true },
+  });
+  for (const assignment of assignments) {
+    const targetAssignment = await client.fileRequestAssignment.findUnique({
+      where: { requestId_contactId: { requestId: assignment.requestId, contactId: target.id } },
+      select: { id: true },
+    });
+    if (!targetAssignment) {
+      await client.fileRequestAssignment.update({ where: { id: assignment.id }, data: { contactId: target.id } });
+      continue;
+    }
+    await Promise.all([
+      client.fileRequestFile.updateMany({
+        where: { assignmentId: assignment.id },
+        data: { assignmentId: targetAssignment.id },
+      }),
+      client.fileRequestFulfillmentLink.updateMany({
+        where: { assignmentId: assignment.id },
+        data: { assignmentId: targetAssignment.id, contactId: target.id },
+      }),
+    ]);
+    await client.fileRequestAssignment.delete({ where: { id: assignment.id } });
+  }
+
+  const values = await client.customFieldValue.findMany({
+    where: { eventId: source.eventId, contactId: source.id },
+    select: { id: true, definitionId: true },
+  });
+  for (const value of values) {
+    const targetValue = await client.customFieldValue.findUnique({
+      where: { definitionId_contactId: { definitionId: value.definitionId, contactId: target.id } },
+      select: { id: true },
+    });
+    if (targetValue) await client.customFieldValue.delete({ where: { id: value.id } });
+    else await client.customFieldValue.update({ where: { id: value.id }, data: { contactId: target.id } });
+  }
+
+  // Keep the old event snapshot as an archived audit record after its live relationships move.
+  await client.contact.update({
+    where: { eventId_id: { eventId: source.eventId, id: source.id } },
+    data: { personId: null, archivedAt: new Date() },
+  });
+}
+
+async function moveProgramSessionParticipations(
+  client: Prisma.TransactionClient,
+  eventId: string,
+  sourceSpeakerId: string,
+  targetSpeakerId: string,
+): Promise<number> {
+  const sourceParticipations = await client.programSessionParticipant.findMany({
+    where: { eventId, speakerId: sourceSpeakerId },
+    select: { sessionVersionId: true },
+  });
+  for (const participation of sourceParticipations) {
+    const targetParticipation = await client.programSessionParticipant.findUnique({
+      where: {
+        sessionVersionId_speakerId: {
+          sessionVersionId: participation.sessionVersionId,
+          speakerId: targetSpeakerId,
+        },
+      },
+      select: { speakerId: true },
+    });
+    if (targetParticipation) {
+      await client.programSessionParticipant.delete({
+        where: {
+          sessionVersionId_speakerId: {
+            sessionVersionId: participation.sessionVersionId,
+            speakerId: sourceSpeakerId,
+          },
+        },
+      });
+    } else {
+      await client.programSessionParticipant.update({
+        where: {
+          sessionVersionId_speakerId: {
+            sessionVersionId: participation.sessionVersionId,
+            speakerId: sourceSpeakerId,
+          },
+        },
+        data: { speakerId: targetSpeakerId },
+      });
+    }
+  }
+  return sourceParticipations.length;
+}
+
+/** Merge one likely duplicate into a chosen primary while retaining cross-event history and notes. */
+export async function mergeDirectoryPeople(
+  client: PrismaClient,
+  eventId: string,
+  primaryPersonId: string,
+  duplicatePersonId: string,
+): Promise<Person> {
+  if (primaryPersonId === duplicatePersonId) invalid("Choose two different directory people to merge.");
+
+  try {
+    return await client.$transaction(
+      async (transaction) => {
+        const event = await transaction.event.findUnique({ where: { id: eventId }, select: { orgId: true } });
+        if (!event) throw new RepositoryError("not-found", "The event was not found.");
+        const [primary, duplicate] = await Promise.all([
+          transaction.person.findFirst({ where: { id: primaryPersonId, orgId: event.orgId } }),
+          transaction.person.findFirst({ where: { id: duplicatePersonId, orgId: event.orgId } }),
+        ]);
+        if (!primary || !duplicate) {
+          throw new RepositoryError("not-found", "A directory person was not found in this organization.");
+        }
+        if (duplicateReasons(primary, duplicate).length === 0) {
+          invalid("These people no longer match by email or full name.");
+        }
+
+        const sourceContacts = await transaction.contact.findMany({ where: { personId: duplicate.id } });
+        for (const sourceContact of sourceContacts) {
+          const targetContact = await transaction.contact.findUnique({
+            where: { eventId_personId: { eventId: sourceContact.eventId, personId: primary.id } },
+          });
+          if (targetContact) await mergeContactRows(transaction, sourceContact, targetContact);
+          else {
+            await transaction.contact.update({
+              where: { eventId_id: { eventId: sourceContact.eventId, id: sourceContact.id } },
+              data: { personId: primary.id },
+            });
+          }
+        }
+
+        const sourceProspects = await transaction.speakerProspect.findMany({ where: { personId: duplicate.id } });
+        for (const sourceProspect of sourceProspects) {
+          const targetProspect = await transaction.speakerProspect.findUnique({
+            where: { eventId_personId: { eventId: sourceProspect.eventId, personId: primary.id } },
+            select: { id: true },
+          });
+          if (!targetProspect) {
+            await transaction.speakerProspect.update({
+              where: { id: sourceProspect.id },
+              data: { personId: primary.id },
+            });
+            continue;
+          }
+          await transaction.speakerProspectActivity.updateMany({
+            where: { eventId: sourceProspect.eventId, prospectId: sourceProspect.id },
+            data: { prospectId: targetProspect.id },
+          });
+          await transaction.speakerProspect.delete({ where: { id: sourceProspect.id } });
+        }
+
+        const sourceSpeakers = await transaction.speaker.findMany({
+          where: { personId: duplicate.id },
+          select: { id: true, eventId: true },
+        });
+        for (const sourceSpeaker of sourceSpeakers) {
+          const targetSpeaker = await transaction.speaker.findUnique({
+            where: { eventId_personId: { eventId: sourceSpeaker.eventId, personId: primary.id } },
+            select: { id: true },
+          });
+          if (!targetSpeaker) {
+            await transaction.speaker.update({
+              where: { id: sourceSpeaker.id },
+              data: { personId: primary.id },
+              select: { id: true },
+            });
+            continue;
+          }
+          await moveProgramSessionParticipations(
+            transaction,
+            sourceSpeaker.eventId,
+            sourceSpeaker.id,
+            targetSpeaker.id,
+          );
+          await transaction.speaker.update({
+            where: { id: sourceSpeaker.id },
+            data: { personId: null },
+            select: { id: true },
+          });
+        }
+
+        await transaction.person.delete({ where: { id: duplicate.id } });
+        return primary;
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    mapDatabaseError(error);
+  }
 }
 
 async function reviveContact(client: Prisma.TransactionClient, contactId: string, personId: string): Promise<Contact> {

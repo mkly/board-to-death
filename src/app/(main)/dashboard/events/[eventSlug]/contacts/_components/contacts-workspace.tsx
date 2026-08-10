@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 
 import Link from "next/link";
 
-import { Pencil, Save, Search, UserPlus, UsersRound } from "lucide-react";
+import { GitMerge, Pencil, Save, Search, TriangleAlert, UserPlus, UsersRound } from "lucide-react";
 
 import type { DashboardEvent } from "@/app/(main)/dashboard/_lib/dashboard-shell";
 import {
@@ -13,17 +13,56 @@ import {
   type CustomFieldInputValue,
 } from "@/components/custom-fields/custom-field-inputs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  FieldTitle,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { DirectoryPersonSummary } from "@/server/contacts/repositories";
+import type {
+  DirectoryDuplicateMatch,
+  DirectoryDuplicatePerson,
+  DirectoryPersonSummary,
+} from "@/server/contacts/repositories";
 
-import { type ContactRecordMutationState, linkDirectoryPersonAction, saveContactRecord } from "../actions";
+import {
+  type ContactRecordMutationState,
+  linkDirectoryPersonAction,
+  mergeDirectoryPeopleAction,
+  saveContactRecord,
+} from "../actions";
 
 interface ContactRecord {
   readonly id: string;
@@ -40,6 +79,7 @@ interface ContactRecord {
 interface ContactsWorkspaceProps {
   readonly contacts: readonly ContactRecord[];
   readonly customFieldDefinitions: readonly CustomFieldInputDefinition[];
+  readonly duplicateMatches: readonly DirectoryDuplicateMatch[];
   readonly error?: string;
   readonly event: DashboardEvent;
   readonly notice?: string;
@@ -55,6 +95,129 @@ function personPath(eventSlug: string, personId: string): string {
 
 function fieldError(state: ContactRecordMutationState, field: string): string | undefined {
   return state.errors?.[field]?.[0];
+}
+
+function personName(person: Pick<DirectoryDuplicatePerson, "givenName" | "familyName">): string {
+  return `${person.givenName} ${person.familyName}`;
+}
+
+function DuplicatePersonCard({ person }: { readonly person: DirectoryDuplicatePerson }) {
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle>{personName(person)}</CardTitle>
+        <CardDescription>{person.email}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <dt className="text-muted-foreground text-xs">Organization</dt>
+            <dd>{person.organization ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground text-xs">Job title</dt>
+            <dd>{person.jobTitle ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground text-xs">Event history</dt>
+            <dd>{person.eventCount} linked events</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground text-xs">Pipeline notes</dt>
+            <dd>{person.noteCount} saved notes</dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DuplicateMergeCard({
+  eventSlug,
+  match,
+}: {
+  readonly eventSlug: string;
+  readonly match: DirectoryDuplicateMatch;
+}) {
+  const [first, second] = match.people;
+  const mergeAction = mergeDirectoryPeopleAction.bind(null, eventSlug);
+  const reason = match.reasons.map((value) => (value === "email" ? "same email" : "same name")).join(" and ");
+
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle>
+          {personName(first)} and {personName(second)}
+        </CardTitle>
+        <CardDescription>Compare both records and choose which identity should survive.</CardDescription>
+        <CardAction>
+          <Badge variant="secondary">{reason}</Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-3 lg:grid-cols-2">
+        <DuplicatePersonCard person={first} />
+        <DuplicatePersonCard person={second} />
+      </CardContent>
+      <CardFooter className="justify-end">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline">
+              <GitMerge data-icon="inline-start" />
+              Compare and merge
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="sm:max-w-2xl">
+            <form action={mergeAction} className="flex flex-col gap-4">
+              <input name="firstPersonId" type="hidden" value={first.id} />
+              <input name="secondPersonId" type="hidden" value={second.id} />
+              <AlertDialogHeader>
+                <AlertDialogTitle>Merge these duplicate people?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The primary record keeps its identity fields. Event links, pipeline notes, stage history, and session
+                  participation from both records are consolidated under it.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <FieldSet>
+                <FieldLegend variant="label">Choose the primary record</FieldLegend>
+                <RadioGroup defaultValue={first.id} name="primaryPersonId">
+                  {match.people.map((person) => {
+                    const id = `merge-primary-${first.id}-${person.id}`;
+                    return (
+                      <FieldLabel htmlFor={id} key={person.id}>
+                        <Field orientation="horizontal">
+                          <FieldContent>
+                            <FieldTitle>{personName(person)}</FieldTitle>
+                            <FieldDescription>
+                              {person.email} · {person.eventCount} events · {person.noteCount} notes
+                            </FieldDescription>
+                          </FieldContent>
+                          <RadioGroupItem id={id} value={person.id} />
+                        </Field>
+                      </FieldLabel>
+                    );
+                  })}
+                </RadioGroup>
+              </FieldSet>
+              <Alert variant="destructive">
+                <TriangleAlert />
+                <AlertTitle>This merge cannot be undone</AlertTitle>
+                <AlertDescription>
+                  The non-primary directory record will be removed after its history moves.
+                </AlertDescription>
+              </Alert>
+              <AlertDialogFooter>
+                <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                <AlertDialogAction type="submit" variant="destructive">
+                  <GitMerge data-icon="inline-start" />
+                  Merge records
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </form>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardFooter>
+    </Card>
+  );
 }
 
 function valueLabel(value: unknown): string {
@@ -191,6 +354,7 @@ function ContactEditor({
 export function ContactsWorkspace({
   contacts,
   customFieldDefinitions,
+  duplicateMatches,
   error,
   event,
   notice,
@@ -212,7 +376,7 @@ export function ContactsWorkspace({
 
       {notice ? (
         <Alert>
-          <AlertTitle>Contact linked</AlertTitle>
+          <AlertTitle>Contacts updated</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
@@ -221,6 +385,29 @@ export function ContactsWorkspace({
           <AlertTitle>Unable to link contact</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {duplicateMatches.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Possible duplicates</CardTitle>
+            <CardDescription>
+              People with the same full name or email may represent one person. Review the comparison before merging.
+            </CardDescription>
+            <CardAction>
+              <Badge variant="secondary">{duplicateMatches.length} found</Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {duplicateMatches.map((match) => (
+              <DuplicateMergeCard
+                eventSlug={event.slug}
+                key={match.people.map(({ id }) => id).join("-")}
+                match={match}
+              />
+            ))}
+          </CardContent>
+        </Card>
       ) : null}
 
       <Card>
