@@ -50,6 +50,7 @@ import {
 } from "../actions";
 import { AgendaScheduleBoard } from "./agenda-schedule-board";
 import { type AgendaFilter, AgendaViews } from "./agenda-views";
+import { AssistedSchedulingCard } from "./assisted-scheduling-card";
 
 export interface AgendaWorkspaceSession {
   readonly id: string;
@@ -398,6 +399,13 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
           <AlertDescription>Agenda placements require an event-owned room.</AlertDescription>
         </Alert>
       ) : null}
+
+      <AssistedSchedulingCard
+        eventSlug={event.slug}
+        timezone={event.timezone}
+        unscheduledCount={sessions.filter(({ placement }) => placement === null).length}
+        roomCount={rooms.length}
+      />
 
       <AgendaScheduleBoard event={event} sessions={sessions} rooms={rooms} tracks={tracks} />
 

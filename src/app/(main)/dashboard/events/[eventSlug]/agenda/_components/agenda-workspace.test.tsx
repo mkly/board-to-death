@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const actionMocks = vi.hoisted(() => ({
+  acceptAssistedSchedule: vi.fn(),
+  previewAssistedSchedule: vi.fn(),
   removeAgendaPlacement: vi.fn(),
   saveAgendaPlacement: vi.fn(),
 }));
@@ -91,6 +93,26 @@ function agendaViews() {
 describe("AgendaWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    actionMocks.acceptAssistedSchedule.mockResolvedValue({
+      status: "success",
+      message: "1 placement was added to the agenda.",
+    });
+    actionMocks.previewAssistedSchedule.mockResolvedValue({
+      status: "preview",
+      message: "Review 1 proposed placement.",
+      proposals: [
+        {
+          sessionId: OPENING_ID,
+          title: "Opening keynote",
+          startsAt: "2027-03-13T17:00:00.000Z",
+          endsAt: "2027-03-13T17:45:00.000Z",
+          durationMinutes: 45,
+          roomId: ROOM_ID,
+          roomName: "Main Hall",
+        },
+      ],
+      unplaced: [],
+    });
     actionMocks.saveAgendaPlacement.mockResolvedValue({
       status: "success",
       message: "Session added to the agenda.",
@@ -100,6 +122,30 @@ describe("AgendaWorkspace", () => {
       status: "success",
       message: "Session removed from the agenda.",
     });
+  });
+
+  test("keeps assisted proposals transient until the organizer accepts them", async () => {
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("button", { name: "Propose schedule" }));
+
+    expect(await screen.findByText("Review 1 proposed placement.")).toBeTruthy();
+    expect(actionMocks.acceptAssistedSchedule).not.toHaveBeenCalled();
+    const discardButton = screen.getByRole("button", { name: "Discard" });
+    await waitFor(() => expect((discardButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(discardButton);
+    await waitFor(() => expect(screen.queryByText("Review 1 proposed placement.")).toBeNull());
+    expect(actionMocks.acceptAssistedSchedule).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Propose schedule" }));
+    await screen.findByText("Review 1 proposed placement.");
+    const acceptTrigger = screen.getByRole("button", { name: "Accept proposals" });
+    await waitFor(() => expect((acceptTrigger as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(acceptTrigger);
+    const confirmation = await screen.findByRole("alertdialog");
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Accept proposals" }));
+
+    await waitFor(() => expect(actionMocks.acceptAssistedSchedule).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("1 placement was added to the agenda.")).toBeTruthy();
   });
   afterEach(cleanup);
 

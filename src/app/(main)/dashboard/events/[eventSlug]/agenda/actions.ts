@@ -6,7 +6,13 @@ import { headers } from "next/headers";
 import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
-import { AgendaConflictError, type AgendaConflictPolicy, AgendaPlacementRepository } from "@/server/agenda";
+import {
+  AgendaConflictError,
+  type AgendaConflictPolicy,
+  AgendaPlacementRepository,
+  type AgendaProposalPlan,
+  proposeAgendaSchedule,
+} from "@/server/agenda";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { AuthorizationError } from "@/server/authorization/policy";
@@ -90,7 +96,7 @@ async function authorizedEvent(eventSlug: string) {
   if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   return getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
-    select: { id: true, slug: true, timezone: true },
+    select: { id: true, slug: true, timezone: true, startsAt: true, endsAt: true },
   });
 }
 
@@ -237,6 +243,189 @@ export async function removeAgendaPlacement(
     if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
     throw error;
   }
+}
+
+export interface AssistedScheduleProposalState {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly durationMinutes: number;
+  readonly roomId: string;
+  readonly roomName: string;
+}
+
+export interface AssistedScheduleState {
+  readonly status: "idle" | "preview" | "success" | "error";
+  readonly message?: string;
+  readonly proposals?: readonly AssistedScheduleProposalState[];
+  readonly unplaced?: readonly { readonly sessionId: string; readonly title: string; readonly reason: string }[];
+}
+
+const assistedProposalSchema = z
+  .array(
+    z.object({
+      sessionId: z.string().uuid(),
+      startsAt: z.iso.datetime(),
+      endsAt: z.iso.datetime(),
+      durationMinutes: z.number().int().positive(),
+      roomId: z.string().uuid(),
+    }),
+  )
+  .max(500);
+
+function serializeProposalPlan(plan: AgendaProposalPlan): {
+  readonly proposals: readonly AssistedScheduleProposalState[];
+  readonly unplaced: readonly { readonly sessionId: string; readonly title: string; readonly reason: string }[];
+} {
+  return {
+    proposals: plan.proposals.map(({ sessionId, title, startsAt, endsAt, durationMinutes, roomId, roomName }) => ({
+      sessionId,
+      title,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      durationMinutes,
+      roomId,
+      roomName,
+    })),
+    unplaced: plan.unplaced.map((session) => ({ ...session })),
+  };
+}
+
+async function buildAssistedSchedulePlan(event: NonNullable<Awaited<ReturnType<typeof authorizedEvent>>>) {
+  const client = getDatabaseClient();
+  const [sessionPage, placementPage, rooms] = await Promise.all([
+    new ProgramSessionRepository(client).listPage(event.id),
+    new AgendaPlacementRepository(client).listPage(event.id),
+    client.room.findMany({ where: { eventId: event.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+  ]);
+  if (sessionPage.hasMore || placementPage.hasMore) {
+    return { error: "Assisted scheduling is unavailable while this agenda is only partially loaded." } as const;
+  }
+  return {
+    plan: proposeAgendaSchedule(
+      { startsAt: event.startsAt, endsAt: event.endsAt },
+      sessionPage.items.map((session) => ({
+        id: session.id,
+        title: session.version.title,
+        durationMinutes: session.version.durationMinutes,
+        parentSessionId: session.parentSessionId,
+        trackIds: session.version.trackId ? [session.version.trackId] : [],
+        speakerIds: session.version.speakerIds,
+      })),
+      rooms.map(({ id, name }) => ({ id, name })),
+      placementPage.items.map((placement) => ({
+        sessionId: placement.sessionId,
+        startsAt: placement.startsAt,
+        endsAt: placement.endsAt,
+        roomId: placement.roomId,
+        trackIds: placement.trackIds,
+        speakerIds: placement.speakerIds,
+      })),
+    ),
+  } as const;
+}
+
+function proposalFingerprint(
+  proposals: readonly Pick<
+    AssistedScheduleProposalState,
+    "sessionId" | "startsAt" | "endsAt" | "durationMinutes" | "roomId"
+  >[],
+): string {
+  return JSON.stringify(
+    proposals.map(({ sessionId, startsAt, endsAt, durationMinutes, roomId }) => ({
+      sessionId,
+      startsAt,
+      endsAt,
+      durationMinutes,
+      roomId,
+    })),
+  );
+}
+
+export async function previewAssistedSchedule(eventSlug: string): Promise<AssistedScheduleState> {
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  const result = await buildAssistedSchedulePlan(event);
+  if ("error" in result) return { status: "error", message: result.error };
+  const serialized = serializeProposalPlan(result.plan);
+  return {
+    status: "preview",
+    message:
+      serialized.proposals.length === 0
+        ? "No conflict-free placements are available."
+        : `Review ${serialized.proposals.length} proposed ${serialized.proposals.length === 1 ? "placement" : "placements"}.`,
+    ...serialized,
+  };
+}
+
+export async function acceptAssistedSchedule(
+  eventSlug: string,
+  expectedProposals: readonly AssistedScheduleProposalState[],
+): Promise<AssistedScheduleState> {
+  const parsed = assistedProposalSchema.safeParse(expectedProposals);
+  if (!parsed.success || parsed.data.length === 0) {
+    return { status: "error", message: "Preview a valid assisted schedule before accepting it." };
+  }
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  const result = await buildAssistedSchedulePlan(event);
+  if ("error" in result) return { status: "error", message: result.error };
+  const serialized = serializeProposalPlan(result.plan);
+  if (proposalFingerprint(parsed.data) !== proposalFingerprint(serialized.proposals ?? [])) {
+    return { status: "error", message: "The agenda changed after this preview. Generate a new proposal." };
+  }
+
+  const client = getDatabaseClient();
+  const repository = new AgendaPlacementRepository(client);
+  // Each placement is saved in its own transaction, so a mid-batch failure leaves the earlier ones
+  // persisted; revalidate either way so the agenda never renders without placements that were saved.
+  let saved = 0;
+  try {
+    for (const proposal of result.plan.proposals) {
+      const placement = await repository.place(
+        {
+          eventId: event.id,
+          sessionId: proposal.sessionId,
+          startsAt: proposal.startsAt,
+          durationMinutes: proposal.durationMinutes,
+          roomId: proposal.roomId,
+          trackIds: proposal.trackIds,
+          speakerIds: proposal.speakerIds,
+        },
+        { policy: "prevent" },
+      );
+      saved += 1;
+      await emitWebhookEvent(client, {
+        eventId: event.id,
+        type: "session.scheduled",
+        data: {
+          sessionId: placement.sessionId,
+          placementId: placement.id,
+          startsAt: placement.startsAt.toISOString(),
+          durationMinutes: placement.durationMinutes,
+        },
+      });
+    }
+  } catch (error) {
+    revalidatePath(`/dashboard/events/${event.slug}/agenda`);
+    if (error instanceof RepositoryError) {
+      return {
+        status: "error",
+        message:
+          saved === 0
+            ? "The agenda changed while saving. Reload it before trying again."
+            : `Only ${saved} of ${result.plan.proposals.length} placements were saved before the agenda changed. Reload it before trying again.`,
+      };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/dashboard/events/${event.slug}/agenda`);
+  return {
+    status: "success",
+    message: `${result.plan.proposals.length} ${result.plan.proposals.length === 1 ? "placement was" : "placements were"} added to the agenda.`,
+  };
 }
 
 export interface ProgramPublicationMutationState {
