@@ -280,8 +280,13 @@ export function ItineraryWorkspace({
       const link = document.createElement("a");
       link.href = url;
       link.download = `${eventSlug}-itinerary.ics`;
+      // Firefox only follows a synthetic click on an anchor that is in the
+      // document, and revokes an object URL out from under an in-flight
+      // download, so attach it and release the URL on the next tick.
+      document.body.append(link);
       link.click();
-      URL.revokeObjectURL(url);
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
       setStatus("Your itinerary calendar download is ready.");
     } catch {
       setStatus("Your itinerary calendar could not be downloaded. Please try again.");
