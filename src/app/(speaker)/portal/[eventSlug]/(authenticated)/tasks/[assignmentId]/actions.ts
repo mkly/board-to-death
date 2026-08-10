@@ -1,6 +1,4 @@
-import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
-
-("use server");
+"use server";
 
 import { revalidatePath } from "next/cache";
 
@@ -9,6 +7,7 @@ import { answersFromFormData, parsePortalFormDefinition, validatePortalFormAnswe
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 import { SpeakerFileService } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { SpeakerOnboardingRepository, speakerTaskResponseKind } from "@/server/speakers";
 import { addSpeakerTaskFileComment } from "@/server/speakers/file-comments";

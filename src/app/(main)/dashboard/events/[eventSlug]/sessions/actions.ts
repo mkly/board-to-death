@@ -1,6 +1,4 @@
-import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
-
-("use server");
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -20,6 +18,7 @@ import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, validateCustomFieldValue } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
 
 export interface SessionMutationState {

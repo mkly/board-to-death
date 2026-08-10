@@ -1,6 +1,4 @@
-import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
-
-("use server");
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
@@ -31,6 +29,7 @@ import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, type CustomFieldTarget } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
