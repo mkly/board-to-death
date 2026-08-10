@@ -1,4 +1,9 @@
-import { type Prisma, type PrismaClient, PublishedProgramState } from "../../generated/prisma/client.ts";
+import {
+  type Prisma,
+  type PrismaClient,
+  ProgramSessionContentApprovalStatus,
+  PublishedProgramState,
+} from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export interface PublishedProgramEventSnapshot {
@@ -112,7 +117,12 @@ const snapshotEventSelect = {
     include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },
   },
   agendaPlacements: {
-    where: { session: { archivedAt: null } },
+    where: {
+      session: {
+        archivedAt: null,
+        contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
+      },
+    },
     orderBy: [{ startsAt: "asc" }, { roomId: "asc" }, { id: "asc" }],
     include: {
       session: {

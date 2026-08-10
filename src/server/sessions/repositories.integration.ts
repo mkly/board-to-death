@@ -7,6 +7,7 @@ import {
   EventType,
   type Prisma,
   PrismaClient,
+  ProgramSessionContentApprovalStatus,
   ProgramSessionKind,
   ProgramSessionParticipantRole,
 } from "../../generated/prisma/client.ts";
@@ -137,6 +138,7 @@ describe("program session persistence", () => {
       ],
     });
     assert.equal(manual.kind, ProgramSessionKind.MANUAL);
+    assert.equal(manual.contentApprovalStatus, ProgramSessionContentApprovalStatus.DRAFT);
     assert.deepEqual(manual.version.speakerIds, [coSpeaker.id, primary.id]);
     assert.deepEqual(manual.version.participants, [
       { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.MODERATOR },
@@ -176,6 +178,7 @@ describe("program session persistence", () => {
     );
 
     const edited = await sessions.update(eventId, manual.id, {
+      contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
       title: "Designing Better Together",
       durationMinutes: 60,
       participants: [
@@ -183,6 +186,7 @@ describe("program session persistence", () => {
         { speakerId: coSpeaker.id, role: ProgramSessionParticipantRole.SPEAKER },
       ],
     });
+    assert.equal(edited.contentApprovalStatus, ProgramSessionContentApprovalStatus.APPROVED);
     assert.deepEqual(
       edited.versions.map(({ versionNumber, title, durationMinutes, participants }) => ({
         versionNumber,
@@ -279,6 +283,7 @@ describe("program session persistence", () => {
     const speaker = await createSpeaker(eventId, "clone@example.test", "Clone");
     const source = await sessions.createGuaranteed({
       eventId,
+      contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
       title: "Opening Keynote",
       description: "Original details",
       durationMinutes: 45,
@@ -288,6 +293,7 @@ describe("program session persistence", () => {
     const clone = await sessions.clone(eventId, source.id);
 
     assert.equal(clone.kind, ProgramSessionKind.MANUAL);
+    assert.equal(clone.contentApprovalStatus, ProgramSessionContentApprovalStatus.DRAFT);
     assert.equal(clone.sourceSubmissionId, null);
     assert.equal(clone.version.title, "Opening Keynote (copy)");
     assert.equal(clone.version.description, source.version.description);

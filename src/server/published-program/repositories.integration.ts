@@ -1,6 +1,11 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { EventType, PrismaClient, PublishedProgramState } from "../../generated/prisma/client.ts";
+import {
+  EventType,
+  PrismaClient,
+  ProgramSessionContentApprovalStatus,
+  PublishedProgramState,
+} from "../../generated/prisma/client.ts";
 import { AgendaPlacementRepository } from "../agenda/placements.ts";
 import { type AuthenticatedPrincipal, AuthorizationError } from "../authorization/policy.ts";
 import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "../events/repositories.ts";
@@ -71,6 +76,7 @@ async function createProgramFixture() {
   });
   const session = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Published session",
     description: "The public description",
     durationMinutes: 45,
@@ -85,6 +91,22 @@ async function createProgramFixture() {
     durationMinutes: 45,
     trackIds: [track.id],
     speakerIds: [publicSpeaker.id, privateSpeaker.id],
+  });
+  const scheduledDraft = await sessions.createManual({
+    eventId: event.id,
+    title: "Scheduled draft",
+    durationMinutes: 30,
+    trackId: track.id,
+    speakerIds: [publicSpeaker.id],
+  });
+  await placements.place({
+    eventId: event.id,
+    sessionId: scheduledDraft.id,
+    roomId: room.id,
+    startsAt: new Date("2027-03-13T19:00:00.000Z"),
+    durationMinutes: 30,
+    trackIds: [track.id],
+    speakerIds: [publicSpeaker.id],
   });
   await sessions.createManual({
     eventId: event.id,
@@ -162,7 +184,7 @@ describe("published-program lifecycle", () => {
     assert.doesNotMatch(serialized, /public@example\.test|private@example\.test|555 01/);
     assert.doesNotMatch(serialized, new RegExp(fixture.privateSpeaker.id));
     assert.doesNotMatch(serialized, new RegExp(fixture.outsider.id));
-    assert.doesNotMatch(serialized, /Unscheduled draft|Outside session|Draft room|Draft track/);
+    assert.doesNotMatch(serialized, /Scheduled draft|Unscheduled draft|Outside session|Draft room|Draft track/);
   });
 
   test("keeps immutable publish, republish, unpublish, and restore history", async () => {
