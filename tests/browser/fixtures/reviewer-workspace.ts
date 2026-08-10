@@ -7,7 +7,9 @@ import {
   EvaluationAssignmentStatus,
   EvaluationPlanVersionStatus,
   EvaluationRoundStatus,
+  EventMembershipRole,
   EventType,
+  MembershipStatus,
   PrismaClient,
   ReviewerVisibility,
 } from "../../../src/generated/prisma/client.ts";
@@ -216,6 +218,16 @@ async function setup() {
   await database.evaluationPlanVersion.update({
     where: { id: planVersion.id },
     data: { status: EvaluationPlanVersionStatus.ACTIVE, activatedAt: new Date("2027-03-01T18:00:00.000Z") },
+  });
+  // The reviewer workspace resolves assignments through an ACTIVE REVIEWER event membership, not
+  // through the EvaluationReviewer row alone, so a reviewer without one sees an empty list.
+  await database.eventMembership.createMany({
+    data: [reviewerSession, emptySession, otherSession].map(({ userId }) => ({
+      eventId: event.id,
+      userId,
+      roles: [EventMembershipRole.REVIEWER],
+      status: MembershipStatus.ACTIVE,
+    })),
   });
   const [reviewer, emptyReviewer, otherReviewer] = await Promise.all([
     database.evaluationReviewer.create({
