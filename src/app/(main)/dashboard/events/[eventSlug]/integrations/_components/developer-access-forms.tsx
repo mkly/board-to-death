@@ -80,7 +80,7 @@ export function WebhookEndpointForm({ eventSlug }: { readonly eventSlug: string 
         </Field>
         <FieldSet>
           <FieldLegend variant="label">Events</FieldLegend>
-          <FieldGroup className="grid gap-3 sm:grid-cols-3">
+          <FieldGroup className="grid gap-3">
             {webhookEventTypes.map((eventType) => (
               <Field key={eventType} orientation="horizontal">
                 <Checkbox id={`event-${eventType}`} name="events" value={eventType} defaultChecked />

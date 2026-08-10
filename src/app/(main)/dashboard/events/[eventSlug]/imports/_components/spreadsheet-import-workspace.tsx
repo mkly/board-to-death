@@ -197,6 +197,7 @@ export function SpreadsheetImportWorkspace({ event, recentImports }: Spreadsheet
                     setMapping({});
                   }}
                   type="file"
+                  className="text-muted-foreground file:me-3 file:rounded-sm file:bg-muted file:px-2.5 file:text-foreground"
                 />
                 <FieldDescription>CSV or XLSX, up to 500 rows and 1 MB.</FieldDescription>
               </Field>

@@ -19,7 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -153,6 +153,9 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
             {templates.length === 0 ? (
               <Empty className="py-8">
                 <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FilePlus2 />
+                  </EmptyMedia>
                   <EmptyTitle>No templates yet</EmptyTitle>
                   <EmptyDescription>Create the first reusable email for this event.</EmptyDescription>
                 </EmptyHeader>

@@ -77,9 +77,8 @@ export function FileRequestsIndex({
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <p className="font-medium text-muted-foreground text-sm">{event.name}</p>
-          <h1 className="flex items-center gap-2 font-medium text-2xl leading-tight tracking-tight sm:text-3xl sm:leading-none">
-            <FileUp aria-hidden="true" className="size-6 text-muted-foreground" />
-            File Requests
+          <h1 className="font-medium text-2xl leading-tight tracking-tight sm:text-3xl sm:leading-none">
+            File requests
           </h1>
           <p className="max-w-2xl text-muted-foreground text-sm">
             Collect files (e.g. documents, contracts) from your portals. Uploaded files are stored here for download or

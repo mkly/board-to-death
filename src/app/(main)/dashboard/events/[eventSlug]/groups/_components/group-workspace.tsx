@@ -257,10 +257,7 @@ export function GroupWorkspace({
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <p className="text-muted-foreground text-sm">{event.name}</p>
-        <h1 className="flex items-center gap-2 font-heading font-semibold text-2xl tracking-tight">
-          <Building2 aria-hidden="true" className="size-6 text-muted-foreground" />
-          Sponsors and exhibitors
-        </h1>
+        <h1 className="font-heading font-semibold text-2xl tracking-tight">Sponsors &amp; exhibitors</h1>
         <p className="text-muted-foreground text-sm">
           Organize partner groups by event tier and choose the contact who receives official communications.
         </p>

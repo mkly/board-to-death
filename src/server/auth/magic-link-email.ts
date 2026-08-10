@@ -84,7 +84,8 @@ export function createConfiguredMagicLinkSender({
         });
 
         if (!response.ok) {
-          throw new Error(`Resend rejected magic-link delivery with status ${response.status}`);
+          const body = await response.text().catch(() => "");
+          throw new Error(`Resend rejected magic-link delivery with status ${response.status}: ${body.slice(0, 500)}`);
         }
       });
       return;

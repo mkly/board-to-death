@@ -386,11 +386,12 @@ export function ReportWorkspace({
     <section className="flex flex-col gap-6" aria-labelledby="reports-heading">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-1">
+          <p className="text-muted-foreground text-sm">{event.name}</p>
           <h1 id="reports-heading" className="font-semibold text-2xl tracking-tight">
-            Report builder
+            Reports
           </h1>
           <p className="text-muted-foreground">
-            Build reusable, event-scoped views over sessions, contacts, groups, and evaluation plans for {event.name}.
+            Build reusable, event-scoped views over sessions, contacts, groups, and evaluation plans.
           </p>
         </div>
         <ReportEditor eventSlug={event.slug} catalog={catalog} action={action} pending={pending} state={state} />

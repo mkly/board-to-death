@@ -46,7 +46,14 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
           <input name="eventSlug" type="hidden" value={eventSlug} />
           <Field className="flex-1">
             <FieldLabel htmlFor="speaker-csv-file">Speaker CSV</FieldLabel>
-            <Input accept=".csv,text/csv" id="speaker-csv-file" name="csvFile" required type="file" />
+            <Input
+              accept=".csv,text/csv"
+              id="speaker-csv-file"
+              name="csvFile"
+              required
+              type="file"
+              className="text-muted-foreground file:me-3 file:rounded-sm file:bg-muted file:px-2.5 file:text-foreground"
+            />
             <FieldDescription>
               Use name, email, title, company, and bio columns. Maximum 500 rows and 1 MB.
             </FieldDescription>

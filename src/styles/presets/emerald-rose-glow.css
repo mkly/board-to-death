@@ -198,6 +198,37 @@ value: emerald-rose-glow
   box-shadow: 0 3px 12px -2px rgba(167, 207, 192, 0.55);
 }
 
+/* Disabled primary actions drop the bloom: the gradient painted under the
+   disabled opacity reads as a broken washed-out button, not an inactive one. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="default"]:disabled {
+  background-image: none;
+  box-shadow: none;
+}
+
+/* Secondary is the brand rose — an accent, not a neutral. The app uses
+   variant="secondary" badges and buttons for quiet tags, counts, and selected
+   filters, where a filled rose reads as an error state. Give those a calm
+   mint tint instead; rose stays for charts and deliberate accents. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="badge"][data-variant="secondary"],
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="secondary"] {
+  background-color: rgba(149, 211, 186, 0.28);
+  color: #0b513d;
+}
+
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="secondary"]:hover {
+  background-color: rgba(149, 211, 186, 0.4);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="badge"][data-variant="secondary"],
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="secondary"] {
+  background-color: rgba(167, 207, 192, 0.14);
+  color: #a7cfc0;
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="secondary"]:hover {
+  background-color: rgba(167, 207, 192, 0.22);
+}
+
 /* Display typography: heavier, tighter headings per the mocks' type treatment. */
 :root[data-theme-preset="emerald-rose-glow"] h1 {
   font-weight: 800;
