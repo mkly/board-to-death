@@ -40,7 +40,8 @@ export default async function RecordsPage({
   );
   const selectedDefinition = customFieldDefinitions.find(({ id }) => id === query.customField);
   const customFieldQuery = query.customValue?.trim() ?? "";
-  const filterEntityType = selectedDefinition ? recordEntityType(selectedDefinition.entityType) : null;
+  const filterEntityType =
+    selectedDefinition && customFieldQuery ? recordEntityType(selectedDefinition.entityType) : null;
   const matchingIds =
     selectedDefinition && filterEntityType && customFieldQuery
       ? await customFields.matchingTargetIds(event.id, {
