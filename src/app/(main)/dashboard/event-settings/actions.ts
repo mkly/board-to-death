@@ -11,7 +11,13 @@ import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getRequestAuthorization } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database";
-import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "@/server/events";
+import {
+  EventRepository,
+  RepositoryError,
+  RoomRepository,
+  TrackRepository,
+  type UpdateEventInput,
+} from "@/server/events";
 import { isJpeg, isPng, isWebp } from "@/server/files/content-signatures";
 import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 import { contentDisposition, safeFileName } from "@/server/infrastructure/file-names";
@@ -36,8 +42,6 @@ const eventSchema = z
     theme: z.string().trim(),
     exhibitorsEnabled: z.boolean(),
     sponsorsEnabled: z.boolean(),
-    logoObjectKey: z.string().trim(),
-    backgroundObjectKey: z.string().trim(),
   })
   .superRefine((value, context) => {
     try {
@@ -103,8 +107,6 @@ function parseEventForm(formData: FormData) {
     theme: formData.get("theme"),
     exhibitorsEnabled: formData.get("exhibitorsEnabled") === "on",
     sponsorsEnabled: formData.get("sponsorsEnabled") === "on",
-    logoObjectKey: formData.get("logoObjectKey") ?? "",
-    backgroundObjectKey: formData.get("backgroundObjectKey") ?? "",
   });
 }
 
@@ -172,8 +174,6 @@ function eventInput(value: z.infer<typeof eventSchema>) {
     startsAt: new Date(localDateTimeToInstant(value.startsAt, value.timezone).epochMilliseconds),
     endsAt: new Date(localDateTimeToInstant(value.endsAt, value.timezone).epochMilliseconds),
     theme: value.theme || null,
-    logoObjectKey: value.logoObjectKey || null,
-    backgroundObjectKey: value.backgroundObjectKey || null,
   };
 }
 
@@ -314,8 +314,35 @@ export async function updateEvent(eventId: string, formData: FormData): Promise<
   if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   const parsed = parseEventForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
+
+  const logo = await readBrandingUpload(formData, "logoFile", 5);
+  if ("error" in logo) return uploadInvalid("logoFile", logo.error);
+  const background = await readBrandingUpload(formData, "backgroundFile", 10);
+  if ("error" in background) return uploadInvalid("backgroundFile", background.error);
+
   try {
-    await repositories().events.update(eventId, eventInput(parsed.data));
+    let logoObjectKey: string | null | undefined;
+    let backgroundObjectKey: string | null | undefined;
+    if (logo.upload) {
+      const key = await storeBrandingUpload(eventId, "logo", logo.upload);
+      if (!key) return uploadInvalid("logoFile", "The logo could not be stored. Try again.");
+      logoObjectKey = key;
+    } else if (formData.get("removeLogo") === "true") {
+      logoObjectKey = null;
+    }
+    if (background.upload) {
+      const key = await storeBrandingUpload(eventId, "background", background.upload);
+      if (!key) return uploadInvalid("backgroundFile", "The background image could not be stored. Try again.");
+      backgroundObjectKey = key;
+    } else if (formData.get("removeBackground") === "true") {
+      backgroundObjectKey = null;
+    }
+    const input: UpdateEventInput = {
+      ...eventInput(parsed.data),
+      ...(logoObjectKey !== undefined ? { logoObjectKey } : {}),
+      ...(backgroundObjectKey !== undefined ? { backgroundObjectKey } : {}),
+    };
+    await repositories().events.update(eventId, input);
     return success(eventId, "Event settings saved.");
   } catch (error) {
     return failureResult(error);

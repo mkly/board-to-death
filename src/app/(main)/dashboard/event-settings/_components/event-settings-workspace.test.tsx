@@ -175,4 +175,40 @@ describe("EventSettingsWorkspace", () => {
     await waitFor(() => expect(screen.getByDisplayValue("Quiet Room")).toBeTruthy());
     expect(actionMocks.createRoom).toHaveBeenCalledWith(firstSnapshot.event.id, expect.any(FormData));
   });
+
+  test("preserves existing branding unless the user explicitly removes it", async () => {
+    const brandedSnapshot: EventSettingsSnapshot = {
+      ...firstSnapshot,
+      event: {
+        ...firstSnapshot.event,
+        logoObjectKey: "events/event/logo",
+        backgroundObjectKey: "events/event/background",
+      },
+    };
+    actionMocks.updateEvent.mockResolvedValue({
+      ok: true,
+      message: "Event settings saved.",
+      snapshot: brandedSnapshot,
+    });
+    render(<EventSettingsWorkspace eventOptions={eventOptions} initialSnapshot={brandedSnapshot} />);
+
+    expect(screen.queryByRole("textbox", { name: "Logo asset key" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Background image asset key" })).toBeNull();
+    expect(screen.getByText("Current logo")).toBeTruthy();
+    expect(screen.getByText("Current background image")).toBeTruthy();
+
+    const form = screen.getByRole("button", { name: "Save changes" }).closest("form") as HTMLFormElement;
+    await act(async () => fireEvent.submit(form));
+    const firstSubmission = actionMocks.updateEvent.mock.calls[0]?.[1] as FormData;
+    expect(firstSubmission.has("logoObjectKey")).toBe(false);
+    expect(firstSubmission.has("backgroundObjectKey")).toBe(false);
+    expect(firstSubmission.has("removeLogo")).toBe(false);
+    expect(firstSubmission.has("removeBackground")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Logo" }));
+    await act(async () => fireEvent.submit(form));
+    const secondSubmission = actionMocks.updateEvent.mock.calls[1]?.[1] as FormData;
+    expect(secondSubmission.get("removeLogo")).toBe("true");
+    expect(secondSubmission.has("removeBackground")).toBe(false);
+  });
 });
