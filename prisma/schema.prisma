@@ -227,6 +227,13 @@ enum SpeakerTaskAssignmentStatus {
   WITHDRAWN
 }
 
+enum SpeakerWorkflowStatus {
+  NOT_CONTACTED
+  INVITED
+  CONFIRMED
+  DECLINED
+}
+
 enum ProgramSessionKind {
   GUARANTEED
   MANUAL
@@ -1350,6 +1357,7 @@ model Speaker {
   eventId                    String                      @db.Uuid
   personId                   String?                     @db.Uuid
   normalizedEmail            String
+  workflowStatus             SpeakerWorkflowStatus       @default(NOT_CONTACTED)
   createdAt                  DateTime                    @default(now()) @db.Timestamptz(3)
   updatedAt                  DateTime                    @updatedAt @db.Timestamptz(3)
   event                      Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)

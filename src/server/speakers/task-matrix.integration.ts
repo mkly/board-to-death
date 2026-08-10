@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { PrismaClient, ProgramSessionParticipantRole } from "../../generated/prisma/client.ts";
+import { PrismaClient, ProgramSessionParticipantRole, SpeakerWorkflowStatus } from "../../generated/prisma/client.ts";
 import { createSpeakerTaskMatrixCsv, SpeakerTaskMatrixRepository } from "./task-matrix.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
@@ -24,11 +24,17 @@ async function createEvent(slug: string) {
   });
 }
 
-async function createSpeaker(eventId: string, email: string, status: "ACCEPTED" | "CONFIRMED") {
+async function createSpeaker(
+  eventId: string,
+  email: string,
+  status: "ACCEPTED" | "CONFIRMED",
+  workflowStatus: SpeakerWorkflowStatus = SpeakerWorkflowStatus.NOT_CONTACTED,
+) {
   const speaker = await client.speaker.create({
     data: {
       eventId,
       normalizedEmail: email,
+      workflowStatus,
       profileVersions: {
         create: {
           versionNumber: 1,
@@ -99,7 +105,7 @@ describe("speaker task matrix", () => {
   test("derives authoritative states, event-local overdue dates, filters, and event isolation", async () => {
     const event = await createEvent("matrix-event");
     const otherEvent = await createEvent("other-matrix-event");
-    const ada = await createSpeaker(event.id, "ada@example.test", "CONFIRMED");
+    const ada = await createSpeaker(event.id, "ada@example.test", "CONFIRMED", SpeakerWorkflowStatus.CONFIRMED);
     const grace = await createSpeaker(event.id, "grace@example.test", "ACCEPTED");
     await createSpeaker(otherEvent.id, "other@example.test", "CONFIRMED");
     const biography = await createTask(event.id, "bio", 0);
@@ -175,11 +181,16 @@ describe("speaker task matrix", () => {
     const filtered = await repository.list(event.id, event.timezone, {
       search: "Ada",
       state: "overdue",
+      workflowStatus: SpeakerWorkflowStatus.CONFIRMED,
       dueFrom: "2027-03-13",
       dueTo: "2027-03-13",
     });
     assert.equal(filtered.rows.length, 1);
     assert.equal(filtered.rows[0]?.speakerId, ada.id);
+    assert.deepEqual(
+      filtered.roster.map(({ id, workflowStatus }) => [id, workflowStatus]),
+      [[ada.id, SpeakerWorkflowStatus.CONFIRMED]],
+    );
     const moderators = await repository.list(event.id, event.timezone, {
       participantRole: ProgramSessionParticipantRole.MODERATOR,
     });
@@ -207,6 +218,7 @@ describe("speaker task matrix", () => {
             speakerId: "speaker",
             speakerName: "=Ada Lovelace",
             speakerEmail: "+ada@example.test",
+            workflowStatus: SpeakerWorkflowStatus.CONFIRMED,
             participantRoles: [ProgramSessionParticipantRole.MODERATOR],
             taskId: "task",
             taskTitle: "Review biography",
@@ -220,7 +232,7 @@ describe("speaker task matrix", () => {
         "America/Los_Angeles",
       ),
     );
-    assert.match(csv, /^"speakerId","speaker","email","participantRoles","taskId","task","state"/);
+    assert.match(csv, /^"speakerId","speaker","email","workflowStatus","participantRoles","taskId","task","state"/);
     assert.match(csv, /"'=Ada Lovelace","'\+ada@example\.test"/);
     assert.match(csv, /"2027-03-13"/);
   });
@@ -230,7 +242,29 @@ describe("speaker task matrix", () => {
     const empty = await repository.list(emptyEvent.id, emptyEvent.timezone);
     assert.equal(empty.rows.length, 0);
     assert.deepEqual(empty.speakers, []);
+    assert.deepEqual(empty.roster, []);
     assert.deepEqual(empty.tasks, []);
+
+    await client.speaker.create({
+      data: {
+        eventId: emptyEvent.id,
+        normalizedEmail: "roster-only@example.test",
+        profileVersions: {
+          create: {
+            versionNumber: 1,
+            email: "roster-only@example.test",
+            givenName: "Roster",
+            familyName: "Only",
+          },
+        },
+      },
+    });
+    const rosterOnly = await repository.list(emptyEvent.id, emptyEvent.timezone);
+    assert.equal(rosterOnly.rows.length, 0);
+    assert.deepEqual(
+      rosterOnly.roster.map(({ email }) => email),
+      ["roster-only@example.test"],
+    );
 
     const largeEvent = await createEvent("large-matrix");
     for (let taskIndex = 0; taskIndex < 10; taskIndex += 1) {
