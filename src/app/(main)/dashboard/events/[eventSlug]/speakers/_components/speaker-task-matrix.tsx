@@ -12,12 +12,20 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ProgramSessionParticipantRole } from "@/generated/prisma/client";
-import type { SpeakerTaskMatrixFilters, SpeakerTaskMatrixResult, SpeakerTaskMatrixState } from "@/server/speakers";
+import type {
+  PersistedSpeaker,
+  SpeakerTaskMatrixFilters,
+  SpeakerTaskMatrixResult,
+  SpeakerTaskMatrixState,
+} from "@/server/speakers";
+
+import { SpeakerCsvImport } from "./speaker-csv-import";
 
 interface SpeakerTaskMatrixProps {
   readonly event: { readonly name: string; readonly slug: string; readonly timezone: string };
   readonly filters: SpeakerTaskMatrixFilters;
   readonly result: SpeakerTaskMatrixResult;
+  readonly roster: readonly PersistedSpeaker[];
 }
 
 type BadgeVariant = NonNullable<Parameters<typeof badgeVariants>[0]>["variant"];
@@ -60,6 +68,10 @@ function eventHref(eventSlug: string): string {
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/speakers`;
 }
 
+function rosterSpeakerName(speaker: PersistedSpeaker): string {
+  return `${speaker.profile.preferredName ?? speaker.profile.givenName} ${speaker.profile.familyName}`;
+}
+
 function MetricCard({ label, value }: { readonly label: string; readonly value: number }) {
   return (
     <Card size="sm">
@@ -71,7 +83,7 @@ function MetricCard({ label, value }: { readonly label: string; readonly value: 
   );
 }
 
-export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixProps) {
+export function SpeakerTaskMatrix({ event, filters, result, roster }: SpeakerTaskMatrixProps) {
   const exportQuery = filtersParams(filters);
   const exportHref = `${eventHref(event.slug)}/export${exportQuery.size > 0 ? `?${exportQuery.toString()}` : ""}`;
   const dateFormatter = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: event.timezone });
@@ -81,9 +93,9 @@ export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixP
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-muted-foreground text-sm">{event.name}</p>
-          <h1 className="font-semibold text-2xl tracking-tight">Speakers by task</h1>
+          <h1 className="font-semibold text-2xl tracking-tight">Speaker roster</h1>
           <p className="text-muted-foreground text-sm">
-            Track every active speaker task in {event.timezone}, including work that is not applicable.
+            Import and review event speakers, then track every active task in {event.timezone}.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -94,13 +106,74 @@ export function SpeakerTaskMatrix({ event, filters, result }: SpeakerTaskMatrixP
         </Button>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Outstanding" value={result.counts.outstanding} />
-        <MetricCard label="Overdue" value={result.counts.overdue} />
-        <MetricCard label="Complete" value={result.counts.complete} />
-        <MetricCard label="Withdrawn" value={result.counts.withdrawn} />
-        <MetricCard label="Not applicable" value={result.counts["not-applicable"]} />
-      </div>
+      <SpeakerCsvImport eventSlug={event.slug} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Event speakers</CardTitle>
+          <CardDescription>
+            {roster.length} {roster.length === 1 ? "speaker" : "speakers"} in this event
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {roster.length === 0 ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <UsersRound />
+                </EmptyMedia>
+                <EmptyTitle>No speakers yet</EmptyTitle>
+                <EmptyDescription>Import a CSV to start the event roster.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Speaker</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Organization</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {roster.map((speaker) => (
+                  <TableRow key={speaker.id}>
+                    <TableCell>
+                      <Link
+                        className="font-medium underline-offset-4 hover:underline"
+                        href={`${eventHref(event.slug)}/${speaker.id}`}
+                      >
+                        {rosterSpeakerName(speaker)}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{speaker.profile.email}</TableCell>
+                    <TableCell>{speaker.profile.jobTitle ?? "—"}</TableCell>
+                    <TableCell>{speaker.profile.organization ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <section aria-labelledby="task-progress-heading" className="flex flex-col gap-4">
+        <div>
+          <h2 className="font-semibold text-xl" id="task-progress-heading">
+            Task progress
+          </h2>
+          <p className="text-muted-foreground text-sm">Track active speaker onboarding tasks and due dates.</p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Outstanding" value={result.counts.outstanding} />
+          <MetricCard label="Overdue" value={result.counts.overdue} />
+          <MetricCard label="Complete" value={result.counts.complete} />
+          <MetricCard label="Withdrawn" value={result.counts.withdrawn} />
+          <MetricCard label="Not applicable" value={result.counts["not-applicable"]} />
+        </div>
+      </section>
 
       <form action={eventHref(event.slug)} className="rounded-xl border bg-card p-4">
         <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(14rem,1fr)_repeat(6,minmax(9rem,0.55fr))_auto]">
