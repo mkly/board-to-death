@@ -351,7 +351,16 @@ export class EvaluationAssignmentRepository {
           },
         },
         evaluationAssignments: {
-          where: { roundId: selectedRound.id, status: { not: EvaluationAssignmentStatus.REVOKED } },
+          where: {
+            roundId: selectedRound.id,
+            status: {
+              in: [
+                EvaluationAssignmentStatus.ASSIGNED,
+                EvaluationAssignmentStatus.COMPLETED,
+                EvaluationAssignmentStatus.RECUSED,
+              ],
+            },
+          },
           orderBy: { assignedAt: "asc" },
           select: {
             id: true,
@@ -365,26 +374,31 @@ export class EvaluationAssignmentRepository {
       },
     });
 
-    const mappedSubmissions = submissions.map((submission) => ({
-      id: submission.id,
-      kind: submission.kind,
-      status: submission.status,
-      formTitle: submission.formVersion.title,
-      primarySpeaker: speakerName(submission.participants[0]),
-      categories: submission.categories.map(({ category }) => category.label),
-      coverageStatus: coverageStatus(submission.evaluationAssignments),
-      completedAssignmentCount: submission.evaluationAssignments.filter(
-        ({ status }) => status === EvaluationAssignmentStatus.COMPLETED,
-      ).length,
-      assignments: submission.evaluationAssignments.map((assignment) => ({
-        id: assignment.id,
-        reviewerId: assignment.reviewerId,
-        reviewerName: assignment.reviewer.displayName,
-        committeeName: assignment.committee?.name ?? null,
-        status: assignment.status,
-        evaluationVersion: assignment.evaluation?.version ?? null,
-      })),
-    }));
+    const mappedSubmissions = submissions.map((submission) => {
+      const activeAssignments = submission.evaluationAssignments.filter(
+        ({ status }) => status !== EvaluationAssignmentStatus.RECUSED,
+      );
+      return {
+        id: submission.id,
+        kind: submission.kind,
+        status: submission.status,
+        formTitle: submission.formVersion.title,
+        primarySpeaker: speakerName(submission.participants[0]),
+        categories: submission.categories.map(({ category }) => category.label),
+        coverageStatus: coverageStatus(activeAssignments),
+        completedAssignmentCount: activeAssignments.filter(
+          ({ status }) => status === EvaluationAssignmentStatus.COMPLETED,
+        ).length,
+        assignments: submission.evaluationAssignments.map((assignment) => ({
+          id: assignment.id,
+          reviewerId: assignment.reviewerId,
+          reviewerName: assignment.reviewer.displayName,
+          committeeName: assignment.committee?.name ?? null,
+          status: assignment.status,
+          evaluationVersion: assignment.evaluation?.version ?? null,
+        })),
+      };
+    });
 
     return {
       rounds: rounds.map(({ id, title, planVersion }) => ({ id, title, planTitle: planVersion.title })),
@@ -544,6 +558,7 @@ export class EvaluationAssignmentRepository {
                   status: EvaluationAssignmentStatus.ASSIGNED,
                   assignedAt: new Date(),
                   completedAt: null,
+                  recusedAt: null,
                   revokedAt: null,
                 },
               });
@@ -577,6 +592,9 @@ export class EvaluationAssignmentRepository {
           if (assignment.status === EvaluationAssignmentStatus.COMPLETED) {
             conflict("A completed reviewer assignment cannot be reopened.");
           }
+          if (assignment.status === EvaluationAssignmentStatus.RECUSED) {
+            conflict("That reviewer declared a conflict of interest for one of the selected submissions.");
+          }
         }
         const existingBySubmission = new Map(existing.map((assignment) => [assignment.submissionId, assignment]));
         for (const submissionId of submissionIds) {
@@ -589,6 +607,7 @@ export class EvaluationAssignmentRepository {
                 status: EvaluationAssignmentStatus.ASSIGNED,
                 assignedAt: new Date(),
                 completedAt: null,
+                recusedAt: null,
                 revokedAt: null,
               },
             });
@@ -622,7 +641,7 @@ export class EvaluationAssignmentRepository {
               roundId: input.roundId,
               reviewerId: input.fromReviewerId,
               submissionId: { in: submissionIds },
-              status: EvaluationAssignmentStatus.ASSIGNED,
+              status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.RECUSED] },
             },
           }),
           transaction.evaluationAssignment.findMany({
@@ -639,10 +658,16 @@ export class EvaluationAssignmentRepository {
           if (assignment.status === EvaluationAssignmentStatus.COMPLETED) {
             conflict("A completed reviewer assignment cannot be reopened.");
           }
+          if (assignment.status === EvaluationAssignmentStatus.RECUSED) {
+            conflict("The replacement reviewer declared a conflict of interest for one of the selected submissions.");
+          }
         }
         const now = new Date();
         await transaction.evaluationAssignment.updateMany({
-          where: { id: { in: sources.map(({ id }) => id) } },
+          where: {
+            id: { in: sources.map(({ id }) => id) },
+            status: EvaluationAssignmentStatus.ASSIGNED,
+          },
           data: { status: EvaluationAssignmentStatus.REVOKED, revokedAt: now },
         });
         const targetsBySubmission = new Map(targets.map((assignment) => [assignment.submissionId, assignment]));
@@ -656,6 +681,7 @@ export class EvaluationAssignmentRepository {
                 status: EvaluationAssignmentStatus.ASSIGNED,
                 assignedAt: now,
                 completedAt: null,
+                recusedAt: null,
                 revokedAt: null,
               },
             });

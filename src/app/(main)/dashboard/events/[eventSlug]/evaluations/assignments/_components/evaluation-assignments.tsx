@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 
 import { useRouter } from "next/navigation";
 
-import { CircleAlertIcon, ClipboardCheckIcon, LockOpenIcon, UsersRoundIcon } from "lucide-react";
+import { CircleAlertIcon, ClipboardCheckIcon, LockOpenIcon, ShieldAlertIcon, UsersRoundIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +111,25 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
     }
     return common;
   }, [selectedSubmissions]);
+  const commonReassignableReviewerIds = useMemo(() => {
+    if (selectedSubmissions.length === 0) return new Set<string>();
+    const [first, ...rest] = selectedSubmissions;
+    const common = new Set(
+      first?.assignments
+        .filter(({ status }) => status === "ASSIGNED" || status === "RECUSED")
+        .map(({ reviewerId }) => reviewerId),
+    );
+    for (const submission of rest) {
+      const ids = new Set(
+        submission.assignments
+          .filter(({ status }) => status === "ASSIGNED" || status === "RECUSED")
+          .map(({ reviewerId }) => reviewerId),
+      );
+      for (const reviewerId of common) if (!ids.has(reviewerId)) common.delete(reviewerId);
+    }
+    return common;
+  }, [selectedSubmissions]);
+  const sourceReviewerIds = operation === "reassign" ? commonReassignableReviewerIds : commonAssignedReviewerIds;
 
   useEffect(() => {
     if (state.status === "success") {
@@ -259,16 +278,18 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                         Select current reviewer
                       </NativeSelectOption>
                       {workspace.reviewers
-                        .filter(({ id }) => commonAssignedReviewerIds.has(id))
+                        .filter(({ id }) => sourceReviewerIds.has(id))
                         .map((reviewer) => (
                           <NativeSelectOption key={reviewer.id} value={reviewer.id}>
                             {reviewer.displayName}
                           </NativeSelectOption>
                         ))}
                     </NativeSelect>
-                    {selectedIds.length > 0 && commonAssignedReviewerIds.size === 0 ? (
+                    {selectedIds.length > 0 && sourceReviewerIds.size === 0 ? (
                       <FieldDescription>
-                        No reviewer is actively assigned to every selected submission.
+                        {operation === "reassign"
+                          ? "No active or recused reviewer is assigned to every selected submission."
+                          : "No reviewer is actively assigned to every selected submission."}
                       </FieldDescription>
                     ) : null}
                   </Field>
@@ -361,7 +382,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     (operation === "auto-distribute" && distributionReviewerIds.length === 0) ||
                     workspace.reviewers.length === 0 ||
                     (operation === "assign-committee" && workspace.committees.length === 0) ||
-                    ((operation === "reassign" || operation === "withdraw") && commonAssignedReviewerIds.size === 0)
+                    ((operation === "reassign" || operation === "withdraw") && sourceReviewerIds.size === 0)
                   }
                 >
                   {pending ? <Spinner data-icon="inline-start" /> : null}
@@ -449,10 +470,14 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                           {submission.assignments.length > 0 ? (
                             submission.assignments.map((assignment) => (
                               <span key={assignment.id} className="flex items-center gap-1">
-                                <Badge variant="secondary">
+                                <Badge variant={assignment.status === "RECUSED" ? "outline" : "secondary"}>
+                                  {assignment.status === "RECUSED" ? (
+                                    <ShieldAlertIcon data-icon="inline-start" />
+                                  ) : null}
                                   {assignment.reviewerName}
                                   {assignment.committeeName ? ` · ${assignment.committeeName}` : ""}
                                   {assignment.status === "COMPLETED" ? " · completed" : ""}
+                                  {assignment.status === "RECUSED" ? " · conflict" : ""}
                                 </Badge>
                                 {assignment.status === "COMPLETED" && assignment.evaluationVersion !== null ? (
                                   <ReopenAssignmentButton

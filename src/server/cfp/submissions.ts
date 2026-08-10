@@ -5,6 +5,7 @@ import {
   CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
   CfpSubmissionTransitionActor,
+  EvaluationAssignmentStatus,
   Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
@@ -1146,7 +1147,14 @@ export class CfpSubmissionRepository {
       ...(query.kind ? { kind: query.kind } : {}),
       ...(query.categoryId ? { categories: { some: { categoryId: query.categoryId } } } : {}),
       ...(query.assigneeId
-        ? { evaluationAssignments: { some: { reviewerId: query.assigneeId, revokedAt: null } } }
+        ? {
+            evaluationAssignments: {
+              some: {
+                reviewerId: query.assigneeId,
+                status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
+              },
+            },
+          }
         : {}),
       ...(searchRelations.length > 0 ? { OR: searchRelations } : {}),
     } satisfies Prisma.CfpSubmissionWhereInput;

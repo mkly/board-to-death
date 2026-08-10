@@ -180,6 +180,7 @@ enum EvaluationReviewerStatus {
 enum EvaluationAssignmentStatus {
   ASSIGNED
   COMPLETED
+  RECUSED
   REVOKED
 }
 
@@ -2159,6 +2160,7 @@ model EvaluationAssignment {
   status            EvaluationAssignmentStatus   @default(ASSIGNED)
   assignedAt        DateTime                     @default(now()) @db.Timestamptz(3)
   completedAt       DateTime?                    @db.Timestamptz(3)
+  recusedAt         DateTime?                    @db.Timestamptz(3)
   revokedAt         DateTime?                    @db.Timestamptz(3)
   createdAt         DateTime                     @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime                     @updatedAt @db.Timestamptz(3)
