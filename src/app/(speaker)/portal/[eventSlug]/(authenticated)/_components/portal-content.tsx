@@ -37,7 +37,7 @@ const statusLabels = {
   UNDER_REVIEW: "Under review",
   WAITLISTED: "Waitlisted",
   ACCEPTED: "Accepted",
-  REJECTED: "Not accepted",
+  REJECTED: "Rejected",
   CONFIRMED: "Confirmed",
 } as const;
 
