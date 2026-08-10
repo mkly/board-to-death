@@ -28,7 +28,7 @@ export async function resendSpeakerPortalLink(
   if (!parsed.success) return { status: "error", message: "The speaker link request is invalid." };
 
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!isAuthorizedAdminSession(session)) {
+  if (!(await isAuthorizedAdminSession(session, { slug: parsed.data.eventSlug }))) {
     return { status: "error", message: "Administrator access is required." };
   }
 
