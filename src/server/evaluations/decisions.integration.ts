@@ -15,6 +15,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { CfpDecisionNotificationRepository } from "../cfp/decision-notifications.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { SpeakerPortalRepository } from "../speaker-portal/dashboard.ts";
 import { EvaluationDecisionRepository } from "./decisions.ts";
 import { EvaluationResultsRepository } from "./results.ts";
 import assert from "node:assert/strict";
@@ -70,6 +71,23 @@ async function createEvent(slug: string) {
     },
     include: { cfpForms: { include: { versions: true } } },
   });
+}
+
+async function attachApplicant(eventId: string, submissionId: string, label: string): Promise<string> {
+  const email = `${label}@decision.test`;
+  const speaker = await client.speaker.create({
+    data: {
+      eventId,
+      normalizedEmail: email,
+      profileVersions: {
+        create: { versionNumber: 1, email, givenName: label, familyName: "Applicant" },
+      },
+    },
+  });
+  await client.cfpSubmissionParticipant.create({
+    data: { eventId, submissionId, speakerId: speaker.id, sortOrder: 0 },
+  });
+  return speaker.id;
 }
 
 describe("final evaluation decisions", () => {
@@ -211,6 +229,28 @@ describe("final evaluation decisions", () => {
     });
     assert.equal(accepted.decisionNumber, 1);
     assert.equal(rejected.decisionNumber, 1);
+
+    const portal = new SpeakerPortalRepository(client);
+    const portalStatuses = await Promise.all(
+      (
+        [
+          [waitlistedSubmission, "waitlist"],
+          [acceptedSubmission, "accept"],
+          [rejectedSubmission, "reject"],
+        ] as const
+      ).map(async ([submission, label]) => {
+        assert.ok(submission && label);
+        const speakerId = await attachApplicant(event.id, submission.id, label);
+        const dashboard = await portal.getDashboard({ eventId: event.id, speakerId });
+        return dashboard?.submissions[0]?.status;
+      }),
+    );
+    assert.deepEqual(portalStatuses, [
+      CfpSubmissionStatus.WAITLISTED,
+      CfpSubmissionStatus.ACCEPTED,
+      CfpSubmissionStatus.REJECTED,
+    ]);
+
     const acceptedNotification = await decisionNotifications.queue(event.id, accepted.id);
     const repeatedAcceptedNotification = await decisionNotifications.queue(event.id, accepted.id);
     const rejectedNotification = await decisionNotifications.queue(event.id, rejected.id);
@@ -226,12 +266,12 @@ describe("final evaluation decisions", () => {
       {
         email: "accept@decision.test",
         subjectSnapshot: `Proposal accepted: accept proposal — ${event.name}`,
-        textSnapshot: `Congratulations, accept@decision.test. Your proposal **accept proposal** has been accepted for ${event.name}.`,
+        textSnapshot: `Congratulations, accept Applicant. Your proposal **accept proposal** has been accepted for ${event.name}.`,
       },
       {
         email: "reject@decision.test",
         subjectSnapshot: `Proposal decision: reject proposal — ${event.name}`,
-        textSnapshot: `Hello reject@decision.test. Your proposal **reject proposal** was not selected for ${event.name}.`,
+        textSnapshot: `Hello reject Applicant. Your proposal **reject proposal** was not selected for ${event.name}.`,
       },
     ]);
     assert.equal(
