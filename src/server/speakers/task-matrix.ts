@@ -3,6 +3,7 @@ import {
   type PrismaClient,
   ProgramSessionParticipantRole,
   type SpeakerTaskAssignmentStatus,
+  SpeakerWorkflowStatus,
 } from "../../generated/prisma/client.ts";
 
 export const speakerTaskMatrixStates = ["outstanding", "overdue", "complete", "withdrawn", "not-applicable"] as const;
@@ -15,6 +16,7 @@ export interface SpeakerTaskMatrixFilters {
   readonly taskId?: string;
   readonly speakerId?: string;
   readonly participantRole?: ProgramSessionParticipantRole;
+  readonly workflowStatus?: SpeakerWorkflowStatus;
   readonly dueFrom?: string;
   readonly dueTo?: string;
 }
@@ -24,6 +26,7 @@ export interface SpeakerTaskMatrixRow {
   readonly speakerId: string;
   readonly speakerName: string;
   readonly speakerEmail: string;
+  readonly workflowStatus: SpeakerWorkflowStatus;
   readonly participantRoles: readonly ProgramSessionParticipantRole[];
   readonly taskId: string;
   readonly taskTitle: string;
@@ -37,6 +40,14 @@ export interface SpeakerTaskMatrixRow {
 export interface SpeakerTaskMatrixResult {
   readonly rows: readonly SpeakerTaskMatrixRow[];
   readonly speakers: readonly { readonly id: string; readonly name: string }[];
+  readonly roster: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly email: string;
+    readonly organization: string | null;
+    readonly jobTitle: string | null;
+    readonly workflowStatus: SpeakerWorkflowStatus;
+  }[];
   readonly tasks: readonly { readonly id: string; readonly title: string }[];
   readonly counts: Readonly<Record<SpeakerTaskMatrixState, number>>;
 }
@@ -58,6 +69,11 @@ export function parseSpeakerTaskMatrixFilters(searchParams: URLSearchParams): Sp
       searchParams.get("participantRole") as ProgramSessionParticipantRole,
     )
       ? (searchParams.get("participantRole") as ProgramSessionParticipantRole)
+      : undefined,
+    workflowStatus: Object.values(SpeakerWorkflowStatus).includes(
+      searchParams.get("workflowStatus") as SpeakerWorkflowStatus,
+    )
+      ? (searchParams.get("workflowStatus") as SpeakerWorkflowStatus)
       : undefined,
     dueFrom: date("dueFrom"),
     dueTo: date("dueTo"),
@@ -183,7 +199,12 @@ export class SpeakerTaskMatrixRepository {
     timezone: string,
     filters: SpeakerTaskMatrixFilters = {},
   ): Promise<SpeakerTaskMatrixResult> {
-    const [speakers, definitions, assignments] = await Promise.all([
+    const [rosterSpeakers, speakers, definitions, assignments] = await Promise.all([
+      this.client.speaker.findMany({
+        where: { eventId },
+        include: speakerInclude,
+        orderBy: [{ normalizedEmail: "asc" }, { id: "asc" }],
+      }),
       this.client.speaker.findMany({
         where: {
           eventId,
@@ -229,6 +250,7 @@ export class SpeakerTaskMatrixRepository {
           speakerId: speaker.id,
           speakerName: speakerName(profile),
           speakerEmail: profile.email,
+          workflowStatus: speaker.workflowStatus,
           participantRoles,
           taskId: task.id,
           taskTitle: task.title,
@@ -251,17 +273,39 @@ export class SpeakerTaskMatrixRepository {
         (!filters.taskId || row.taskId === filters.taskId) &&
         (!filters.speakerId || row.speakerId === filters.speakerId) &&
         (!filters.participantRole || row.participantRoles.includes(filters.participantRole)) &&
+        (!filters.workflowStatus || row.workflowStatus === filters.workflowStatus) &&
         matchesDueDate(row, filters, timezone),
     );
     const counts = Object.fromEntries(
       speakerTaskMatrixStates.map((state) => [state, allRows.filter((row) => row.state === state).length]),
     ) as Record<SpeakerTaskMatrixState, number>;
+    const roster = rosterSpeakers.flatMap((speaker) => {
+      const profile = speaker.profileVersions[0];
+      if (!profile) return [];
+      return [
+        {
+          id: speaker.id,
+          name: speakerName(profile),
+          email: profile.email,
+          organization: profile.organization,
+          jobTitle: profile.jobTitle,
+          workflowStatus: speaker.workflowStatus,
+        },
+      ];
+    });
     return {
       rows,
-      speakers: speakers.flatMap((speaker) => {
-        const profile = speaker.profileVersions[0];
-        return profile ? [{ id: speaker.id, name: speakerName(profile) }] : [];
-      }),
+      speakers: roster.map(({ id, name }) => ({ id, name })),
+      roster: roster.filter(
+        (speaker) =>
+          (!search ||
+            speaker.name.toLocaleLowerCase().includes(search) ||
+            speaker.email.toLocaleLowerCase().includes(search) ||
+            speaker.organization?.toLocaleLowerCase().includes(search) ||
+            speaker.jobTitle?.toLocaleLowerCase().includes(search)) &&
+          (!filters.speakerId || speaker.id === filters.speakerId) &&
+          (!filters.workflowStatus || speaker.workflowStatus === filters.workflowStatus),
+      ),
       tasks: tasks.map(({ id, title }) => ({ id, title })),
       counts,
     };
@@ -279,6 +323,7 @@ export function createSpeakerTaskMatrixCsv(rows: readonly SpeakerTaskMatrixRow[]
       "speakerId",
       "speaker",
       "email",
+      "workflowStatus",
       "participantRoles",
       "taskId",
       "task",
@@ -291,6 +336,7 @@ export function createSpeakerTaskMatrixCsv(rows: readonly SpeakerTaskMatrixRow[]
       row.speakerId,
       row.speakerName,
       row.speakerEmail,
+      row.workflowStatus,
       row.participantRoles.join("|"),
       row.taskId,
       row.taskTitle,

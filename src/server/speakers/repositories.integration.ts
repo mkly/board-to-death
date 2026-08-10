@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { CfpSubmissionKind, EventType, PrismaClient } from "../../generated/prisma/client.ts";
+import { CfpSubmissionKind, EventType, PrismaClient, SpeakerWorkflowStatus } from "../../generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../lib/cfp/index.ts";
 import { CfpFormRepository } from "../cfp/repositories.ts";
 import { CfpSubmissionRepository } from "../cfp/submissions.ts";
@@ -131,6 +131,21 @@ describe("speaker persistence", () => {
       "conflict",
     );
     assert.equal((await speakers.get(eventId, created.id))?.profile.biography, "Designs cooperative games.");
+  });
+
+  test("persists event-scoped speaker workflow status changes", async () => {
+    const eventId = await createEvent("workflow-status");
+    const otherEventId = await createEvent("other-workflow-status");
+    const speaker = await createSpeaker(eventId, "status@example.test", "Status");
+
+    assert.equal(speaker.workflowStatus, SpeakerWorkflowStatus.NOT_CONTACTED);
+    const updated = await speakers.updateWorkflowStatus(eventId, speaker.id, SpeakerWorkflowStatus.CONFIRMED);
+    assert.equal(updated.workflowStatus, SpeakerWorkflowStatus.CONFIRMED);
+    assert.equal((await speakers.get(eventId, speaker.id))?.workflowStatus, SpeakerWorkflowStatus.CONFIRMED);
+    await expectRepositoryError(
+      speakers.updateWorkflowStatus(otherEventId, speaker.id, SpeakerWorkflowStatus.DECLINED),
+      "not-found",
+    );
   });
 
   test("stores one or many participants in deterministic order and rejects cross-event assignments", async () => {

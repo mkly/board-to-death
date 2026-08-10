@@ -158,6 +158,7 @@ await grantSeededOrganizationAccess(adminEmail);
 
 process.stdout.write(
   JSON.stringify({
+    eventId: event.id,
     eventSlug: event.slug,
     sessionCookie,
     biographyTaskId: biography.id,

@@ -10,6 +10,7 @@ const databaseUrl =
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 
 interface MatrixFixture {
+  readonly eventId: string;
   readonly eventSlug: string;
   readonly sessionCookie: string;
 }
@@ -25,7 +26,7 @@ async function prepareMatrix(context: BrowserContext): Promise<MatrixFixture> {
   return fixture;
 }
 
-test("filters and exports the event-scoped matrix, follows details, and reflects completion", async ({
+test("manages workflow statuses, filters and exports the matrix, and reflects completion", async ({
   context,
   page,
 }) => {
@@ -33,7 +34,25 @@ test("filters and exports the event-scoped matrix, follows details, and reflects
   const fixture = await prepareMatrix(context);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/speakers`);
 
-  await expect(page.getByRole("heading", { name: "Speakers by task" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Speakers" })).toBeVisible();
+  const roster = page.getByTestId("speaker-roster");
+  let adaRosterRow = roster.getByRole("row").filter({ hasText: "Ada Lovelace" });
+  await adaRosterRow.getByRole("combobox", { name: "Workflow status" }).selectOption("CONFIRMED");
+  await adaRosterRow.getByRole("button", { name: "Save status" }).click();
+  await expect(adaRosterRow.locator('[data-slot="badge"]')).toHaveText("Confirmed");
+
+  await page.reload();
+  adaRosterRow = roster.getByRole("row").filter({ hasText: "Ada Lovelace" });
+  await expect(adaRosterRow.getByRole("combobox", { name: "Workflow status" })).toHaveValue("CONFIRMED");
+
+  const filters = page.getByRole("form", { name: "Speaker filters" });
+  await filters.getByLabel("Workflow status").selectOption("CONFIRMED");
+  await filters.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/workflowStatus=CONFIRMED/);
+  await expect(roster.getByRole("link", { name: "Ada Lovelace" })).toBeVisible();
+  await expect(roster.getByRole("link", { name: "Grace Hopper" })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Reset" }).click();
   await expect(page.getByRole("row", { name: /Ada Lovelace.*Review biography.*Overdue/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /Grace Hopper.*Sign agreement.*Not applicable/ })).toBeVisible();
   await expect(page.getByText("Other event secret")).toHaveCount(0);
@@ -41,8 +60,8 @@ test("filters and exports the event-scoped matrix, follows details, and reflects
   await page.getByLabel("State").selectOption("overdue");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=overdue/);
-  await expect(page.getByRole("row", { name: /Ada Lovelace/ })).toBeVisible();
-  await expect(page.getByRole("row", { name: /Grace Hopper/ })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Ada Lovelace.*Review biography.*Overdue/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Grace Hopper.*Review biography/ })).toHaveCount(0);
   const exportResponse = await page.request.get(
     await page
       .getByRole("link", { name: "Export filtered CSV" })
@@ -56,7 +75,7 @@ test("filters and exports the event-scoped matrix, follows details, and reflects
   expect(csv).not.toContain("Grace Hopper");
 
   await page.getByRole("link", { name: "Reset" }).click();
-  await page.getByRole("link", { name: "Ada Lovelace" }).click();
+  await page.getByRole("link", { name: "Ada Lovelace" }).first().click();
   await expect(page.getByRole("heading", { name: "Ada Lovelace" })).toBeVisible();
   await page.getByRole("link", { name: "Back to task matrix" }).click();
   await page.getByRole("link", { name: "Review biography" }).first().click();
