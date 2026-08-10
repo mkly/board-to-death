@@ -278,6 +278,45 @@ describe("program session persistence", () => {
     await expectRepositoryError(sessions.update(eventId, session.id, { title: "Resurrected" }), "invalid-input");
   });
 
+  test("attributes content edits and restores title and abstract without rolling back scheduling fields", async () => {
+    const eventId = await createEvent("restored-session-content");
+    const originalTrack = await tracks.create({ eventId, name: "Original", color: "blue" });
+    const currentTrack = await tracks.create({ eventId, name: "Current", color: "red" });
+    const session = await sessions.createManual({
+      eventId,
+      title: "Original title",
+      description: "Original abstract",
+      durationMinutes: 30,
+      trackId: originalTrack.id,
+      createdBy: "Maya Chen",
+    });
+    await sessions.update(eventId, session.id, {
+      title: "Current title",
+      description: "Current abstract",
+      durationMinutes: 60,
+      trackId: currentTrack.id,
+      createdBy: "Alex Rivera",
+    });
+
+    const restored = await sessions.restoreContentVersion(eventId, session.id, 1, "Jordan Lee");
+
+    assert.equal(restored.version.versionNumber, 3);
+    assert.equal(restored.version.title, "Original title");
+    assert.equal(restored.version.description, "Original abstract");
+    assert.equal(restored.version.durationMinutes, 60);
+    assert.equal(restored.version.trackId, currentTrack.id);
+    assert.equal(restored.version.createdBy, "Jordan Lee");
+    assert.equal(restored.version.restoredFromVersionNumber, 1);
+    assert.deepEqual(
+      restored.versions.map(({ createdBy, restoredFromVersionNumber }) => ({ createdBy, restoredFromVersionNumber })),
+      [
+        { createdBy: "Maya Chen", restoredFromVersionNumber: null },
+        { createdBy: "Alex Rivera", restoredFromVersionNumber: null },
+        { createdBy: "Jordan Lee", restoredFromVersionNumber: 1 },
+      ],
+    );
+  });
+
   test("clones a session as a distinguishable unscheduled manual session", async () => {
     const eventId = await createEvent("cloned-session");
     const speaker = await createSpeaker(eventId, "clone@example.test", "Clone");

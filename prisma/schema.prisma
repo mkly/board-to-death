@@ -1708,6 +1708,8 @@ model ProgramSessionVersion {
   durationMinutes Int
   categoryId      String?                     @db.Uuid
   trackId         String?                     @db.Uuid
+  createdBy       String?
+  restoredFromVersionNumber Int?
   createdAt       DateTime                    @default(now()) @db.Timestamptz(3)
   event           Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   session         ProgramSession              @relation(fields: [eventId, sessionId], references: [eventId, id], onDelete: Cascade)

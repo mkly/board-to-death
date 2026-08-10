@@ -97,6 +97,14 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
             role,
           })),
           versionNumber: session.version.versionNumber,
+          versions: session.versions.map((version) => ({
+            versionNumber: version.versionNumber,
+            title: version.title,
+            description: version.description,
+            createdAt: version.createdAt.toISOString(),
+            createdBy: version.createdBy,
+            restoredFromVersionNumber: version.restoredFromVersionNumber,
+          })),
           customFieldValues: customFieldValues
             .filter((value) => value.sessionId === session.id)
             .map(({ id, definitionId, value }) => ({ id, definitionId, value })),

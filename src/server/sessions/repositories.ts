@@ -47,6 +47,7 @@ export interface PromoteProgramSessionInput {
 export interface CreateProgramSessionInput extends ProgramSessionVersionInput {
   readonly eventId: string;
   readonly contentApprovalStatus?: ProgramSessionContentApprovalStatus;
+  readonly createdBy?: string;
 }
 
 export interface UpdateProgramSessionInput {
@@ -58,6 +59,7 @@ export interface UpdateProgramSessionInput {
   readonly speakerIds?: readonly string[];
   readonly participants?: readonly ProgramSessionParticipantInput[];
   readonly parentSessionId?: string | null;
+  readonly createdBy?: string;
 }
 
 export interface PersistedProgramSessionVersion {
@@ -70,6 +72,8 @@ export interface PersistedProgramSessionVersion {
   readonly trackId: string | null;
   readonly speakerIds: readonly string[];
   readonly participants: readonly ProgramSessionParticipantInput[];
+  readonly createdBy: string | null;
+  readonly restoredFromVersionNumber: number | null;
   readonly createdAt: Date;
 }
 
@@ -201,6 +205,8 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
     trackId: version.trackId,
     speakerIds: version.participants.map(({ speakerId }) => speakerId),
     participants: version.participants.map(({ speakerId, role }) => ({ speakerId, role })),
+    createdBy: version.createdBy,
+    restoredFromVersionNumber: version.restoredFromVersionNumber,
     createdAt: version.createdAt,
   }));
   const version = versions.at(-1);
@@ -244,6 +250,7 @@ async function createVersion(
   sessionId: string,
   versionNumber: number,
   version: ValidatedVersion,
+  metadata: { readonly createdBy?: string; readonly restoredFromVersionNumber?: number } = {},
 ): Promise<void> {
   const created = await transaction.programSessionVersion.create({
     data: {
@@ -255,6 +262,8 @@ async function createVersion(
       durationMinutes: version.durationMinutes,
       categoryId: version.categoryId,
       trackId: version.trackId,
+      createdBy: optionalText(metadata.createdBy),
+      restoredFromVersionNumber: metadata.restoredFromVersionNumber,
     },
     select: { id: true },
   });
@@ -420,9 +429,57 @@ export class ProgramSessionRepository {
             data: { parentSessionId, contentApprovalStatus },
           });
         }
-        await createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
+        await createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version, {
+          createdBy: input.createdBy,
+        });
         if (parentSessionId)
           await this.attachParticipantsToParent(transaction, eventId, parentSessionId, version.participants);
+      });
+      return await this.require(eventId, sessionId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async restoreContentVersion(
+    eventId: string,
+    sessionId: string,
+    versionNumber: number,
+    createdBy: string,
+  ): Promise<PersistedProgramSession> {
+    if (!Number.isInteger(versionNumber) || versionNumber <= 0) invalid("versionNumber must be a positive integer.");
+    try {
+      await this.client.$transaction(async (transaction) => {
+        const current = await transaction.programSession.findFirst({
+          where: { eventId, id: sessionId },
+          include: {
+            versions: {
+              orderBy: { versionNumber: "desc" },
+              include: { participants: { orderBy: { sortOrder: "asc" } } },
+            },
+          },
+        });
+        const previous = current?.versions[0];
+        if (!current || !previous) throw new RepositoryError("not-found", "The event-owned session was not found.");
+        if (current.archivedAt !== null) invalid("An archived session cannot be edited.");
+        const restored = current.versions.find((version) => version.versionNumber === versionNumber);
+        if (!restored) throw new RepositoryError("not-found", "The event-owned session version was not found.");
+        if (restored.title === previous.title && restored.description === previous.description) {
+          invalid("That version already matches the current title and abstract.");
+        }
+        const version = validateVersion({
+          title: restored.title,
+          description: restored.description,
+          durationMinutes: previous.durationMinutes,
+          categoryId: previous.categoryId,
+          trackId: previous.trackId,
+          participants: previous.participants.map(({ speakerId, role }) => ({ speakerId, role })),
+        });
+        await requireVersionReferences(transaction, eventId, version);
+        await createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version, {
+          createdBy,
+          restoredFromVersionNumber: restored.versionNumber,
+        });
       });
       return await this.require(eventId, sessionId);
     } catch (error) {
@@ -542,7 +599,7 @@ export class ProgramSessionRepository {
           },
           select: { id: true },
         });
-        await createVersion(transaction, input.eventId, session.id, 1, version);
+        await createVersion(transaction, input.eventId, session.id, 1, version, { createdBy: input.createdBy });
         if (input.parentSessionId) {
           await this.attachParticipantsToParent(
             transaction,

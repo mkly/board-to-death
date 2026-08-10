@@ -91,15 +91,18 @@ function participantValues(formData: FormData) {
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
-  return getDatabaseClient().event.findFirst({
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
+  const event = await getDatabaseClient().event.findFirst({
     where: { slug: eventSlug, archivedAt: null },
     select: { id: true, slug: true },
   });
+  return event ? { ...event, actorLabel: session.user.name?.trim() || session.user.email } : null;
 }
 
 function repositoryMessage(error: RepositoryError): string {
-  if (error.code === "not-found") return "This session, track, or participant is not available for this event.";
+  if (error.code === "not-found") {
+    return "This session, version, track, or participant is not available for this event.";
+  }
   return error.message;
 }
 
@@ -174,6 +177,7 @@ export async function saveProgramSession(
         ? null
         : parsed.data.parentSessionId,
     participants: parsed.data.participants,
+    createdBy: event.actorLabel,
   };
 
   try {
@@ -215,6 +219,36 @@ export async function saveProgramSession(
       status: "success",
       message: parsed.data.sessionId === "" ? "Manual session created." : "Session changes saved.",
       sessionId: saved.id,
+    };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
+    throw error;
+  }
+}
+
+export async function restoreProgramSessionContent(
+  eventSlug: string,
+  sessionId: string,
+  versionNumber: number,
+): Promise<SessionMutationState> {
+  if (!z.uuid().safeParse(sessionId).success || !z.number().int().positive().safeParse(versionNumber).success) {
+    return { status: "error", message: "The selected session version is invalid." };
+  }
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  try {
+    const restored = await new ProgramSessionRepository(getDatabaseClient()).restoreContentVersion(
+      event.id,
+      sessionId,
+      versionNumber,
+      event.actorLabel,
+    );
+    revalidatePath(`/dashboard/events/${event.slug}/sessions`);
+    return {
+      status: "success",
+      message: `Version ${versionNumber} restored as version ${restored.version.versionNumber}.`,
+      sessionId,
     };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
