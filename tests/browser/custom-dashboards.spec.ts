@@ -55,7 +55,9 @@ test("creates, configures, reloads, isolates, reorders, and deletes a custom das
   await expect(page.getByRole("link", { name: "Unscheduled keynote" })).toBeVisible();
   await expect(page.getByText("Other event secret talk")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Settings" }).click();
+  // Scoped and exact: the sidebar carries its own "Event settings" trigger, which an unscoped
+  // substring match also resolves, and strict mode then refuses the click.
+  await main.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByLabel("Dashboard name").fill("Program control");
   await page.getByRole("button", { name: "Save name" }).click();
   await page.getByLabel("Track filter").click();

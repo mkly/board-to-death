@@ -1,5 +1,6 @@
 import { type BrowserContext, expect, test } from "@playwright/test";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -53,13 +54,17 @@ test("previews mixed speaker actions, validates mapping changes, resumes them, p
   await page.reload();
   await expect(page.getByLabel("Remote last name")).toHaveValue("profile.organization");
 
-  await page.getByLabel("Remote email").evaluate((select) => {
+  // The invalid option is injected into the DOM, so React has to have finished hydrating first:
+  // hydrating after the injection regenerates the tree, drops the option, and resets the value.
+  const remoteEmail = page.getByLabel("Remote email");
+  await waitForHydration(remoteEmail);
+  await remoteEmail.evaluate((select) => {
     const option = document.createElement("option");
     option.value = "profile.secret";
     option.textContent = "Invalid source";
     select.append(option);
   });
-  await page.getByLabel("Remote email").selectOption("profile.secret");
+  await remoteEmail.selectOption("profile.secret");
   await page.getByRole("button", { name: "Save mapping and refresh preview" }).click();
   await expect(page.getByText("Choose a valid local source for every field.")).toBeVisible();
 

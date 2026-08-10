@@ -9,6 +9,7 @@ import { CfpAdministratorRepository, CfpPolicyRepository } from "../../../src/se
 import { CfpFormRepository } from "../../../src/server/cfp/repositories.ts";
 import { CfpCategoryRepository } from "../../../src/server/cfp/submissions.ts";
 import { EventRepository } from "../../../src/server/events/repositories.ts";
+import { grantSeededOrganizationAccess } from "../fixtures/organization-access.ts";
 import { randomUUID } from "node:crypto";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -125,6 +126,9 @@ async function signIn(): Promise<string> {
   const verified = await auth.handler(new Request(magicLinkUrl, { redirect: "manual" }));
   const sessionToken = verified.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
   if (!sessionToken) throw new Error("Expected Better Auth to create a browser-test session.");
+  // A magic-link sign-in deliberately creates no organization, and organizer access is derived from
+  // `organization_members`, so without this grant every /dashboard route answers 404.
+  await grantSeededOrganizationAccess(adminEmail);
   return sessionToken;
 }
 
@@ -170,8 +174,9 @@ async function categoryRouting() {
 
 async function cleanup(eventSlug: string | undefined) {
   if (eventSlug) await client.event.deleteMany({ where: { slug: eventSlug } });
+  // Only the session is disposable: the shared admin account is reused by every other spec in the
+  // shard, and deleting it cascades their organization memberships away with it.
   await client.session.deleteMany({ where: { user: { email: adminEmail } } });
-  await client.user.deleteMany({ where: { email: adminEmail } });
 }
 
 async function publication(eventSlug: string | undefined) {

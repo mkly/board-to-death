@@ -1,5 +1,6 @@
 import { type BrowserContext, expect, test } from "@playwright/test";
 
+import { waitForHydration } from "./helpers/hydration.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -38,7 +39,9 @@ test.describe("event and session lifecycle", () => {
     const fixture = await prepareLifecycle(context);
     await page.goto(`/dashboard/event-settings?event=${fixture.eventId}`);
 
-    await page.getByRole("button", { name: "Clone event" }).click();
+    const cloneTrigger = page.getByRole("button", { name: "Clone event" });
+    await waitForHydration(cloneTrigger);
+    await cloneTrigger.click();
     const dialog = page.getByRole("dialog", { name: "Clone Overview Summit" });
     await expect(dialog.getByText(/no contacts, submissions, sessions, assignments/i)).toBeVisible();
     await dialog.getByLabel("Event name").fill("Overview Summit clone");

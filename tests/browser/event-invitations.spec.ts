@@ -7,6 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 const fixtureScript = path.join(process.cwd(), "tests/browser/fixtures/event-invitations.ts");
 
 interface BrowserFixture {
@@ -57,6 +58,11 @@ test("invites, accepts, isolates, resends, and revokes event memberships", async
 
   try {
     await signInAsAdmin(page);
+    // The admin owns every seeded organization, and the dashboard shell only shows events from the
+    // active one, so the fixture's organization has to be selected before its event is reachable.
+    await page
+      .context()
+      .addCookies([{ name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL }]);
     await page.goto(`/dashboard/events/${fixture.eventSlug}/settings/team`);
     await expect(page.getByRole("heading", { name: "Team & reviewers" })).toBeVisible();
 

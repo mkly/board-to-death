@@ -13,6 +13,7 @@ const databaseUrl =
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 
 interface SpeakerPortalFixture {
+  readonly organizationId: string;
   readonly eventSlug: string;
   readonly speakerId: string;
   readonly speakerEmail: string;
@@ -275,6 +276,9 @@ test("creates an audience portal, previews its match, and enforces participant v
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
     { name: "board_to_death_active_event", value: eventId, url: baseURL },
+    // This fixture seeds its own organization, and the shell only lists events from the active
+    // one, so the dashboard 404s unless the fixture's organization is selected explicitly.
+    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/portals`);
   await expect(page.getByRole("heading", { name: "Participant portals" })).toBeVisible();
@@ -472,7 +476,10 @@ test("requests a fresh link after session expiry and lets an organizer resend it
   expect((await fetch(organizerRequestUrl, { method: "POST" })).ok).toBe(true);
   const organizerDelivery = fetch(organizerRequestUrl);
   organizerDelivery.catch(() => undefined);
-  await context.addCookies([{ name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL }]);
+  await context.addCookies([
+    { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
+    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+  ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/speakers/${fixture.speakerId}`);
   await page.getByRole("button", { name: "Send sign-in link" }).click();
   await expect(page.getByText("A fresh speaker portal sign-in link was sent.")).toBeVisible();
@@ -491,7 +498,10 @@ test("submits text and file tasks, preserves revisions, and enforces speaker own
   await page.getByRole("button", { name: "Submit task" }).click();
   await expect(page.getByText("Awaiting event-team review")).toBeVisible();
 
-  await context.addCookies([{ name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL }]);
+  await context.addCookies([
+    { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
+    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+  ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/onboarding`);
   const textRow = page.getByRole("row", { name: /Ada Lovelace Share your arrival details/ });
   await expect(textRow).toContainText("I will arrive on Thursday afternoon.");

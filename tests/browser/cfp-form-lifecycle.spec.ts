@@ -116,6 +116,17 @@ test("duplicates, closes, reopens, and archives an event-scoped CFP form with co
 
   try {
     await signInAsAdmin(page);
+    // CFP status transitions match `cfp_administrators.externalId` against the signed-in Better Auth
+    // user id, not the account's email address, so the seeded administrator is rebound to that id.
+    const adminUser = await database.query<{ id: string }>(`SELECT "id" FROM "user" WHERE "email" = $1`, [
+      "admin@example.test",
+    ]);
+    const adminUserId = adminUser.rows[0]?.id;
+    if (!adminUserId) throw new Error("Expected the browser admin account to exist after signing in.");
+    await database.query(`UPDATE "cfp_administrators" SET "externalId" = $1 WHERE "id" = $2`, [
+      adminUserId,
+      administratorId,
+    ]);
     await context.addCookies([
       {
         name: "board_to_death_active_event",

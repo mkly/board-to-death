@@ -389,6 +389,7 @@ await database.organizationMember.upsert({
 
 process.stdout.write(
   JSON.stringify({
+    organizationId: fixture.organizationId,
     eventSlug: fixture.eventSlug,
     speakerId: fixture.speakerId,
     speakerEmail: "ada@example.test",
