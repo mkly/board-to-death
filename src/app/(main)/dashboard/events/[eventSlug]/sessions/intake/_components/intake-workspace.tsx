@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 
 import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Save } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -147,30 +148,39 @@ function QuestionField({
         value={typeof answer === "string" ? answer : ""}
       />
     );
-  } else if (question.type === "select" || question.type === "multi_select") {
+  } else if (question.type === "multi_select") {
     control = (
       <NativeSelect
         aria-invalid={Boolean(error) || undefined}
         id={id}
-        multiple={question.type === "multi_select"}
+        multiple
         name={id}
-        onChange={(event) =>
-          onChange(
-            question.type === "multi_select"
-              ? Array.from(event.target.selectedOptions, ({ value }) => value)
-              : event.target.value,
-          )
-        }
+        onChange={(event) => onChange(Array.from(event.target.selectedOptions, ({ value }) => value))}
         required={question.required}
         value={selectValue(question, answer)}
       >
-        {question.type === "select" ? <NativeSelectOption value="">Select an option</NativeSelectOption> : null}
         {(question.constraints?.options ?? []).map((option) => (
           <NativeSelectOption key={option.value} value={option.value}>
             {option.label}
           </NativeSelectOption>
         ))}
       </NativeSelect>
+    );
+  } else if (question.type === "select") {
+    control = (
+      <FormSelect
+        aria-invalid={Boolean(error) || undefined}
+        id={id}
+        name={id}
+        onValueChange={onChange}
+        required={question.required}
+        value={typeof answer === "string" ? answer : ""}
+        placeholder="Select an option"
+        options={(question.constraints?.options ?? []).map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
+      />
     );
   }
   return (

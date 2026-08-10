@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { ArrowRight, ClipboardList, ExternalLink, MessageSquareText, UserPlus, UsersRound } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { DirectoryPersonSummary } from "@/server/contacts/repositories";
@@ -84,13 +84,12 @@ function ProspectCard({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`prospect-stage-${prospect.id}`}>Move card</FieldLabel>
-              <NativeSelect defaultValue={prospect.stageId} id={`prospect-stage-${prospect.id}`} name="stageId">
-                {stages.map((stage) => (
-                  <NativeSelectOption key={stage.id} value={stage.id}>
-                    {stage.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+              <FormSelect
+                defaultValue={prospect.stageId}
+                id={`prospect-stage-${prospect.id}`}
+                name="stageId"
+                options={stages.map((stage) => ({ value: stage.id, label: stage.name }))}
+              />
               <Button size="sm" type="submit" variant="outline">
                 <ArrowRight data-icon="inline-start" />
                 Move
@@ -249,14 +248,16 @@ export function SpeakerSourcingWorkspace({
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="manual-prospect-person">Directory person</FieldLabel>
-                    <NativeSelect id="manual-prospect-person" name="personId" required>
-                      <NativeSelectOption value="">Select a person</NativeSelectOption>
-                      {availablePeople.map((person) => (
-                        <NativeSelectOption key={person.id} value={person.id}>
-                          {person.givenName} {person.familyName} · {person.email}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                    <FormSelect
+                      id="manual-prospect-person"
+                      name="personId"
+                      placeholder="Select a person"
+                      required
+                      options={availablePeople.map((person) => ({
+                        value: person.id,
+                        label: `${person.givenName} ${person.familyName} · ${person.email}`,
+                      }))}
+                    />
                     <Button className="self-start" type="submit">
                       <UserPlus data-icon="inline-start" />
                       Enroll prospect
@@ -284,13 +285,15 @@ export function SpeakerSourcingWorkspace({
                   <input name="stageId" type="hidden" value={stage.id} />
                   <FieldLabel htmlFor={`stage-name-${stage.id}`}>{behaviorLabel(stage.behavior)}</FieldLabel>
                   <Input defaultValue={stage.name} id={`stage-name-${stage.id}`} name="stageName" required />
-                  <NativeSelect aria-label={`${stage.name} position`} defaultValue={String(index)} name="stagePosition">
-                    {stages.map((positionStage, position) => (
-                      <NativeSelectOption key={positionStage.id} value={String(position)}>
-                        Position {position + 1}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                  <FormSelect
+                    aria-label={`${stage.name} position`}
+                    defaultValue={String(index)}
+                    name="stagePosition"
+                    options={stages.map((_positionStage, position) => ({
+                      value: String(position),
+                      label: `Position ${position + 1}`,
+                    }))}
+                  />
                 </Field>
               ))}
               <FieldDescription>Choose a unique position for each stage.</FieldDescription>

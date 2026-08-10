@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 
 import { CircleCheckIcon } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,34 +103,43 @@ export function ApplicantSubmissionEditor({
         />
       );
     }
-    if (question.type === "select" || question.type === "multi_select") {
-      const multiple = question.type === "multi_select";
-      let value: string | readonly string[] = "";
-      if (multiple && Array.isArray(answer)) value = answer;
-      else if (!multiple && typeof answer === "string") value = answer;
+    if (question.type === "multi_select") {
       return (
         <NativeSelect
           {...common}
           className="w-full"
-          multiple={multiple}
+          multiple
           onChange={(event) =>
             setAnswer(
               question.id,
-              multiple
-                ? Array.from(event.target.selectedOptions, ({ value: selected }) => selected)
-                : event.target.value,
+              Array.from(event.target.selectedOptions, ({ value: selected }) => selected),
             )
           }
           required={question.required}
-          value={value}
+          value={Array.isArray(answer) ? answer : []}
         >
-          {!multiple ? <NativeSelectOption value="">Select an option</NativeSelectOption> : null}
           {(question.constraints?.options ?? []).map((option) => (
             <NativeSelectOption key={option.value} value={option.value}>
               {option.label}
             </NativeSelectOption>
           ))}
         </NativeSelect>
+      );
+    }
+    if (question.type === "select") {
+      return (
+        <FormSelect
+          {...common}
+          className="w-full"
+          onValueChange={(value) => setAnswer(question.id, value)}
+          required={question.required}
+          value={typeof answer === "string" ? answer : ""}
+          placeholder="Select an option"
+          options={(question.constraints?.options ?? []).map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+        />
       );
     }
     if (question.type === "checkbox") {

@@ -278,7 +278,7 @@ function NavCollapsibleItem({ item, isActive, defaultOpen, isSubItemActive }: Na
                     asChild
                     aria-disabled={subItem.disabled}
                     isActive={!subItem.disabled && isSubItemActive(subItem.url)}
-                    className="relative overflow-visible data-active:bg-transparent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:inset-y-0 data-active:before:-left-[11px] data-active:before:w-0.5 data-active:before:bg-sidebar-primary"
+                    className="relative overflow-visible data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:inset-y-0 data-active:before:-left-[11px] data-active:before:w-0.5 data-active:before:bg-sidebar-primary"
                   >
                     <Link
                       prefetch={false}

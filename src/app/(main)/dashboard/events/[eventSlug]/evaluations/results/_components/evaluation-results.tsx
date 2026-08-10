@@ -1,12 +1,12 @@
 import { ChartNoAxesCombinedIcon, CircleAlertIcon, CircleCheckIcon, MoveRightIcon, SendIcon } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CfpSubmissionStatus, EvaluationDecisionOutcome } from "@/generated/prisma/client";
 import type { EvaluationResultsWorkspace, EvaluationSubmissionResult } from "@/server/evaluations/results";
@@ -191,13 +191,15 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
           <form className="flex w-full items-end gap-2 lg:w-auto" method="get">
             <Field className="min-w-0 flex-1 lg:w-80">
               <FieldLabel htmlFor="results-round">Activated round</FieldLabel>
-              <NativeSelect id="results-round" name="round" defaultValue={workspace.selectedRoundId ?? ""}>
-                {workspace.rounds.map((round) => (
-                  <NativeSelectOption key={round.id} value={round.id}>
-                    {round.planTitle} v{round.planVersionNumber} · {round.title}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+              <FormSelect
+                id="results-round"
+                name="round"
+                defaultValue={workspace.selectedRoundId ?? ""}
+                options={workspace.rounds.map((round) => ({
+                  value: round.id,
+                  label: `${round.planTitle} v${round.planVersionNumber} · ${round.title}`,
+                }))}
+              />
             </Field>
             <Button type="submit" variant="outline">
               View

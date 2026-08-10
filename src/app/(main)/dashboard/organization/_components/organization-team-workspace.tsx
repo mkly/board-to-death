@@ -1,5 +1,6 @@
 import { MailPlus, ShieldCheck, UsersRound } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -18,7 +19,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MembershipStatus, OrganizationInvitationStatus, OrganizationMemberRole } from "@/generated/prisma/client";
 import type { OrganizationTeamSnapshot } from "@/server/organization-memberships/organization-invitations";
@@ -165,10 +165,15 @@ export function OrganizationTeamWorkspace({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="organization-invite-role">Role</FieldLabel>
-                  <NativeSelect id="organization-invite-role" name="role" defaultValue={OrganizationMemberRole.MEMBER}>
-                    <NativeSelectOption value={OrganizationMemberRole.MEMBER}>Member</NativeSelectOption>
-                    <NativeSelectOption value={OrganizationMemberRole.OWNER}>Owner</NativeSelectOption>
-                  </NativeSelect>
+                  <FormSelect
+                    defaultValue={OrganizationMemberRole.MEMBER}
+                    id="organization-invite-role"
+                    name="role"
+                    options={[
+                      { value: OrganizationMemberRole.MEMBER, label: "Member" },
+                      { value: OrganizationMemberRole.OWNER, label: "Owner" },
+                    ]}
+                  />
                 </Field>
                 <Button type="submit">
                   <MailPlus data-icon="inline-start" />

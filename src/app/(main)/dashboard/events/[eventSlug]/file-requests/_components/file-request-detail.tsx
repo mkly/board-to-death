@@ -2,13 +2,13 @@ import Link from "next/link";
 
 import { Archive, ArchiveRestore, ArrowLeft, Download, FileUp, Send } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { FileRequestVersion } from "@/generated/prisma/client";
 import type { AssignmentWithContext, FileRequestWithVersion } from "@/server/files/repositories";
@@ -215,23 +215,18 @@ export function FileRequestDetail({
               <input name="targetKind" type="hidden" value={request.targetKind} />
               <Field className="sm:max-w-sm">
                 <FieldLabel htmlFor="assign-target">Target</FieldLabel>
-                <NativeSelect
+                <FormSelect
                   className="w-full"
-                  defaultValue=""
                   disabled={archived}
                   id="assign-target"
                   name="targetId"
                   required
-                >
-                  <NativeSelectOption disabled value="">
-                    Choose a target…
-                  </NativeSelectOption>
-                  {targets.map((target) => (
-                    <NativeSelectOption key={target.id} value={target.id}>
-                      {target.label} — {target.description}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  placeholder="Choose a target…"
+                  options={targets.map((target) => ({
+                    value: target.id,
+                    label: `${target.label} — ${target.description}`,
+                  }))}
+                />
                 <FieldDescription>The assignment captures today's upload rules.</FieldDescription>
               </Field>
               <Button disabled={archived} type="submit">

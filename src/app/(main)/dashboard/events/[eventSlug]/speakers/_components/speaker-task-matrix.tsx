@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CalendarClock, Download, Search, UsersRound } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +10,6 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ProgramSessionParticipantRole, SpeakerWorkflowStatus } from "@/generated/prisma/client";
 import type {
@@ -185,7 +185,7 @@ export function SpeakerTaskMatrix({ event, filters, result, roster }: SpeakerTas
       </section>
 
       <form action={eventHref(event.slug)} aria-label="Speaker filters" className="rounded-xl border bg-card p-4">
-        <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(14rem,1fr)_repeat(7,minmax(9rem,0.55fr))_auto]">
+        <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Field>
             <FieldLabel htmlFor="matrix-search" className="sr-only">
               Search speakers and tasks
@@ -206,84 +206,81 @@ export function SpeakerTaskMatrix({ event, filters, result, roster }: SpeakerTas
             <FieldLabel htmlFor="matrix-state" className="sr-only">
               State
             </FieldLabel>
-            <NativeSelect id="matrix-state" name="state" defaultValue={filters.state ?? ""}>
-              <NativeSelectOption value="">All states</NativeSelectOption>
-              {Object.entries(stateLabels).map(([value, label]) => (
-                <NativeSelectOption key={value} value={value}>
-                  {label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              defaultValue={filters.state ?? ""}
+              id="matrix-state"
+              name="state"
+              options={[
+                { value: "", label: "All states" },
+                ...Object.entries(stateLabels).map(([value, label]) => ({ value, label })),
+              ]}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="matrix-workflow-status" className="sr-only">
               Workflow status
             </FieldLabel>
-            <NativeSelect id="matrix-workflow-status" name="workflowStatus" defaultValue={filters.workflowStatus ?? ""}>
-              <NativeSelectOption value="">All workflow statuses</NativeSelectOption>
-              {Object.entries(workflowStatusLabels).map(([status, label]) => (
-                <NativeSelectOption key={status} value={status}>
-                  {label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              defaultValue={filters.workflowStatus ?? ""}
+              id="matrix-workflow-status"
+              name="workflowStatus"
+              options={[
+                { value: "", label: "All workflow statuses" },
+                ...Object.entries(workflowStatusLabels).map(([status, label]) => ({ value: status, label })),
+              ]}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="matrix-task" className="sr-only">
               Task
             </FieldLabel>
-            <NativeSelect id="matrix-task" name="task" defaultValue={filters.taskId ?? ""}>
-              <NativeSelectOption value="">All tasks</NativeSelectOption>
-              {result.tasks.map((task) => (
-                <NativeSelectOption key={task.id} value={task.id}>
-                  {task.title}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              defaultValue={filters.taskId ?? ""}
+              id="matrix-task"
+              name="task"
+              options={[
+                { value: "", label: "All tasks" },
+                ...result.tasks.map((task) => ({ value: task.id, label: task.title })),
+              ]}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="matrix-speaker" className="sr-only">
               Speaker
             </FieldLabel>
-            <NativeSelect id="matrix-speaker" name="speaker" defaultValue={filters.speakerId ?? ""}>
-              <NativeSelectOption value="">All speakers</NativeSelectOption>
-              {result.speakers.map((speaker) => (
-                <NativeSelectOption key={speaker.id} value={speaker.id}>
-                  {speaker.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              defaultValue={filters.speakerId ?? ""}
+              id="matrix-speaker"
+              name="speaker"
+              options={[
+                { value: "", label: "All speakers" },
+                ...result.speakers.map((speaker) => ({ value: speaker.id, label: speaker.name })),
+              ]}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="matrix-participant-role" className="sr-only">
               Program role
             </FieldLabel>
-            <NativeSelect
+            <FormSelect
+              defaultValue={filters.participantRole ?? ""}
               id="matrix-participant-role"
               name="participantRole"
-              defaultValue={filters.participantRole ?? ""}
-            >
-              <NativeSelectOption value="">All program roles</NativeSelectOption>
-              {Object.entries(participantRoleLabels).map(([role, label]) => (
-                <NativeSelectOption key={role} value={role}>
-                  {label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              options={[
+                { value: "", label: "All program roles" },
+                ...Object.entries(participantRoleLabels).map(([role, label]) => ({ value: role, label })),
+              ]}
+            />
           </Field>
           <Field>
-            <FieldLabel htmlFor="matrix-due-from" className="sr-only">
-              Due on or after
-            </FieldLabel>
+            <FieldLabel htmlFor="matrix-due-from">Due on or after</FieldLabel>
             <Input id="matrix-due-from" name="dueFrom" type="date" defaultValue={filters.dueFrom} />
           </Field>
           <Field>
-            <FieldLabel htmlFor="matrix-due-to" className="sr-only">
-              Due on or before
-            </FieldLabel>
+            <FieldLabel htmlFor="matrix-due-to">Due on or before</FieldLabel>
             <Input id="matrix-due-to" name="dueTo" type="date" defaultValue={filters.dueTo} />
           </Field>
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2">
             <Button type="submit">Apply filters</Button>
             <Button asChild type="button" variant="ghost">
               <Link href={eventHref(event.slug)}>Reset</Link>

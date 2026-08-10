@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { CircleAlertIcon, ClipboardCheckIcon, LockOpenIcon, ShieldAlertIcon, UsersRoundIcon } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { EvaluationAssignmentWorkspace } from "@/server/evaluations/assignments";
@@ -168,18 +168,16 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
         {workspace.rounds.length > 0 ? (
           <Field className="w-full lg:w-72">
             <FieldLabel htmlFor="evaluation-round">Open round</FieldLabel>
-            <NativeSelect
+            <FormSelect
               id="evaluation-round"
               className="w-full"
               value={workspace.selectedRoundId ?? ""}
-              onChange={(event) => changeRound(event.currentTarget.value)}
-            >
-              {workspace.rounds.map((round) => (
-                <NativeSelectOption key={round.id} value={round.id}>
-                  {round.planTitle} · {round.title}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={changeRound}
+              options={workspace.rounds.map((round) => ({
+                value: round.id,
+                label: `${round.planTitle} · ${round.title}`,
+              }))}
+            />
           </Field>
         ) : null}
       </header>
@@ -260,35 +258,33 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
               <FieldGroup className="grid gap-4 md:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="assignment-operation">Action</FieldLabel>
-                  <NativeSelect
+                  <FormSelect
                     id="assignment-operation"
                     name="operation"
                     className="w-full"
                     value={operation}
-                    onChange={(event) => setOperation(event.currentTarget.value as Operation)}
-                  >
-                    <NativeSelectOption value="assign">Assign reviewer</NativeSelectOption>
-                    <NativeSelectOption value="assign-committee">Assign committee</NativeSelectOption>
-                    <NativeSelectOption value="auto-distribute">Auto-distribute</NativeSelectOption>
-                    <NativeSelectOption value="reassign">Reassign reviewer</NativeSelectOption>
-                    <NativeSelectOption value="withdraw">Withdraw reviewer</NativeSelectOption>
-                  </NativeSelect>
+                    onValueChange={(value) => setOperation(value as Operation)}
+                    options={[
+                      { value: "assign", label: "Assign reviewer" },
+                      { value: "assign-committee", label: "Assign committee" },
+                      { value: "auto-distribute", label: "Auto-distribute" },
+                      { value: "reassign", label: "Reassign reviewer" },
+                      { value: "withdraw", label: "Withdraw reviewer" },
+                    ]}
+                  />
                 </Field>
                 {operation === "reassign" || operation === "withdraw" ? (
                   <Field>
                     <FieldLabel htmlFor="source-reviewer">Current reviewer</FieldLabel>
-                    <NativeSelect id="source-reviewer" name="fromReviewerId" className="w-full" defaultValue="">
-                      <NativeSelectOption value="" disabled>
-                        Select current reviewer
-                      </NativeSelectOption>
-                      {workspace.reviewers
+                    <FormSelect
+                      id="source-reviewer"
+                      name="fromReviewerId"
+                      className="w-full"
+                      placeholder="Select current reviewer"
+                      options={workspace.reviewers
                         .filter(({ id }) => sourceReviewerIds.has(id))
-                        .map((reviewer) => (
-                          <NativeSelectOption key={reviewer.id} value={reviewer.id}>
-                            {reviewer.displayName}
-                          </NativeSelectOption>
-                        ))}
-                    </NativeSelect>
+                        .map((reviewer) => ({ value: reviewer.id, label: reviewer.displayName }))}
+                    />
                     {selectedIds.length > 0 && sourceReviewerIds.size === 0 ? (
                       <FieldDescription>
                         {operation === "reassign"
@@ -301,16 +297,16 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                 {operation === "assign-committee" ? (
                   <Field>
                     <FieldLabel htmlFor="target-committee">Reviewer committee</FieldLabel>
-                    <NativeSelect id="target-committee" name="committeeId" className="w-full" defaultValue="">
-                      <NativeSelectOption value="" disabled>
-                        Select committee
-                      </NativeSelectOption>
-                      {workspace.committees.map((committee) => (
-                        <NativeSelectOption key={committee.id} value={committee.id}>
-                          {committee.name} · {committee.activeMemberCount} active
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                    <FormSelect
+                      id="target-committee"
+                      name="committeeId"
+                      className="w-full"
+                      placeholder="Select committee"
+                      options={workspace.committees.map((committee) => ({
+                        value: committee.id,
+                        label: `${committee.name} · ${committee.activeMemberCount} active`,
+                      }))}
+                    />
                     {workspace.committees.length === 0 ? (
                       <FieldDescription>No committee has active reviewers.</FieldDescription>
                     ) : null}
@@ -342,14 +338,16 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     </FieldSet>
                     <Field>
                       <FieldLabel htmlFor="distribution-track">Track</FieldLabel>
-                      <NativeSelect id="distribution-track" name="trackId" className="w-full" defaultValue="">
-                        <NativeSelectOption value="">All tracks</NativeSelectOption>
-                        {workspace.tracks.map((track) => (
-                          <NativeSelectOption key={track.id} value={track.id}>
-                            {track.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                      <FormSelect
+                        id="distribution-track"
+                        name="trackId"
+                        className="w-full"
+                        defaultValue=""
+                        options={[
+                          { value: "", label: "All tracks" },
+                          ...workspace.tracks.map((track) => ({ value: track.id, label: track.label })),
+                        ]}
+                      />
                       <FieldDescription>Tracks use the CFP categories attached to submissions.</FieldDescription>
                     </Field>
                     <Field>
@@ -364,16 +362,16 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     <FieldLabel htmlFor="target-reviewer">
                       {operation === "reassign" ? "Replacement reviewer" : "Reviewer"}
                     </FieldLabel>
-                    <NativeSelect id="target-reviewer" name="reviewerId" className="w-full" defaultValue="">
-                      <NativeSelectOption value="" disabled>
-                        Select reviewer
-                      </NativeSelectOption>
-                      {workspace.reviewers.map((reviewer) => (
-                        <NativeSelectOption key={reviewer.id} value={reviewer.id}>
-                          {reviewer.displayName} · {reviewer.email}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                    <FormSelect
+                      id="target-reviewer"
+                      name="reviewerId"
+                      className="w-full"
+                      placeholder="Select reviewer"
+                      options={workspace.reviewers.map((reviewer) => ({
+                        value: reviewer.id,
+                        label: `${reviewer.displayName} · ${reviewer.email}`,
+                      }))}
+                    />
                   </Field>
                 ) : null}
               </FieldGroup>

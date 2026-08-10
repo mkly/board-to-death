@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { Copy, Download, FileChartColumn, Pencil, Plus, Trash2 } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,6 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -244,30 +244,21 @@ function ReportEditor({
               <FieldGroup>
                 {filters.map((filter, index) => (
                   <Field key={filter.key} orientation="responsive">
-                    <NativeSelect
+                    <FormSelect
                       aria-label={`Filter ${index + 1} field`}
                       value={filter.column}
-                      onChange={(event) => updateFilter(index, { column: event.target.value })}
-                    >
-                      {availableColumns.map((column) => (
-                        <NativeSelectOption key={column.id} value={column.id}>
-                          {column.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <NativeSelect
+                      onValueChange={(value) => updateFilter(index, { column: value })}
+                      options={availableColumns.map((column) => ({ value: column.id, label: column.label }))}
+                    />
+                    <FormSelect
                       aria-label={`Filter ${index + 1} operator`}
                       value={filter.operator}
-                      onChange={(event) =>
-                        updateFilter(index, { operator: event.target.value as ReportFilter["operator"] })
-                      }
-                    >
-                      {Object.entries(operatorLabels).map(([operator, label]) => (
-                        <NativeSelectOption key={operator} value={operator}>
-                          {label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      onValueChange={(value) => updateFilter(index, { operator: value as ReportFilter["operator"] })}
+                      options={Object.entries(operatorLabels).map(([operator, label]) => ({
+                        value: operator,
+                        label,
+                      }))}
+                    />
                     <Input
                       aria-label={`Filter ${index + 1} value`}
                       value={filter.value}

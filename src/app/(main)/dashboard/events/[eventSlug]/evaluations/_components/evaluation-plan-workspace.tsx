@@ -1,5 +1,6 @@
 import { Archive, ArrowDown, ArrowUp, CircleCheck, ClipboardCheck, LockKeyhole, Play, Plus, Save } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +15,6 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { EvaluationPlanVersionStatus, EvaluationRoundStatus, ReviewerVisibility } from "@/generated/prisma/client";
@@ -101,19 +101,17 @@ function RoundFields({
       </Field>
       <Field data-disabled={disabled}>
         <FieldLabel htmlFor={`${idPrefix}-visibility`}>Reviewer visibility</FieldLabel>
-        <NativeSelect
+        <FormSelect
           id={`${idPrefix}-visibility`}
           name="reviewerVisibility"
           defaultValue={round?.reviewerVisibility ?? ReviewerVisibility.BLIND}
           disabled={disabled}
           className="w-full"
-        >
-          {Object.values(ReviewerVisibility).map((visibility) => (
-            <NativeSelectOption key={visibility} value={visibility}>
-              {visibilityLabels[visibility]}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          options={Object.values(ReviewerVisibility).map((visibility) => ({
+            value: visibility,
+            label: visibilityLabels[visibility],
+          }))}
+        />
         <FieldDescription>This value is snapshotted and locked when the round opens.</FieldDescription>
       </Field>
     </FieldGroup>

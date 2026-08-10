@@ -100,87 +100,100 @@ export function dashboardEventHref(eventSlug: string, workspace: DashboardWorksp
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/${workspacePath}`;
 }
 
+const workspaceGroups: { label: string; workspaceIds: DashboardWorkspace[] }[] = [
+  { label: "Insights", workspaceIds: ["overview", "dashboards", "reports"] },
+  { label: "Program", workspaceIds: ["cfp", "submissions", "evaluations", "sessions", "agenda"] },
+  {
+    label: "People",
+    workspaceIds: ["speakers", "speaker-sourcing", "contacts", "onboarding", "file-requests", "communications"],
+  },
+  { label: "Partners", workspaceIds: ["groups", "records"] },
+  { label: "Publish", workspaceIds: ["publishing", "portals"] },
+  { label: "Setup", workspaceIds: ["imports", "integrations", "settings"] },
+];
+
 export function getSidebarItems(eventSlug?: string, hasOrganization = false): NavGroup[] {
-  const groups: NavGroup[] = [
-    {
-      id: 1,
-      label: "Program workspace",
-      items: workspaces.map(({ id, title, icon }): NavMainItem => {
-        const url = eventSlug ? dashboardEventHref(eventSlug, id) : "/dashboard";
-        const disabled = !eventSlug;
-        if (id === "evaluations") {
-          return {
-            id,
-            title,
-            icon,
+  const toNavItem = (workspaceId: DashboardWorkspace): NavMainItem => {
+    const { id, title, icon } = workspaces.find((workspace) => workspace.id === workspaceId) ?? workspaces[0];
+    const url = eventSlug ? dashboardEventHref(eventSlug, id) : "/dashboard";
+    const disabled = !eventSlug;
+    if (id === "evaluations") {
+      return {
+        id,
+        title,
+        icon,
+        disabled,
+        subItems: [
+          { id: "evaluation-rubrics", title: "Rubrics", url, disabled },
+          {
+            id: "evaluation-assignments",
+            title: "Reviewer assignments",
+            url: eventSlug ? `${url}/assignments` : "/dashboard",
             disabled,
-            subItems: [
-              { id: "evaluation-rubrics", title: "Rubrics", url, disabled },
-              {
-                id: "evaluation-assignments",
-                title: "Reviewer assignments",
-                url: eventSlug ? `${url}/assignments` : "/dashboard",
-                disabled,
-              },
-              {
-                id: "evaluation-results",
-                title: "Results",
-                url: eventSlug ? `${url}/results` : "/dashboard",
-                disabled,
-              },
-            ],
-          };
-        }
-
-        if (id === "publishing") {
-          return {
-            id,
-            title,
-            icon,
+          },
+          {
+            id: "evaluation-results",
+            title: "Results",
+            url: eventSlug ? `${url}/results` : "/dashboard",
             disabled,
-            subItems: [
-              { id: "publishing-overview", title: "Publishing", url, disabled },
-              {
-                id: "embed-builder",
-                title: "Embed builder",
-                url: eventSlug ? `${url}/embeds` : "/dashboard",
-                disabled,
-              },
-            ],
-          };
-        }
+          },
+        ],
+      };
+    }
 
-        if (id === "settings") {
-          return {
-            id,
-            title,
-            icon,
+    if (id === "publishing") {
+      return {
+        id,
+        title,
+        icon,
+        disabled,
+        subItems: [
+          { id: "publishing-overview", title: "Publishing", url, disabled },
+          {
+            id: "embed-builder",
+            title: "Embed builder",
+            url: eventSlug ? `${url}/embeds` : "/dashboard",
             disabled,
-            subItems: [
-              { id: "event-settings", title: "Event settings", url, disabled },
-              {
-                id: "custom-fields",
-                title: "Custom fields",
-                url: eventSlug ? `${url}/custom-fields` : "/dashboard",
-                disabled,
-              },
-              {
-                id: "event-team",
-                title: "Team & reviewers",
-                url: eventSlug ? `${url}/team` : "/dashboard",
-                disabled,
-              },
-            ],
-          };
-        }
+          },
+        ],
+      };
+    }
 
-        return { id, title, icon, url, disabled };
-      }),
-    },
-  ];
+    if (id === "settings") {
+      return {
+        id,
+        title,
+        icon,
+        disabled,
+        subItems: [
+          { id: "event-settings", title: "Event settings", url, disabled },
+          {
+            id: "custom-fields",
+            title: "Custom fields",
+            url: eventSlug ? `${url}/custom-fields` : "/dashboard",
+            disabled,
+          },
+          {
+            id: "event-team",
+            title: "Team & reviewers",
+            url: eventSlug ? `${url}/team` : "/dashboard",
+            disabled,
+          },
+        ],
+      };
+    }
+
+    return { id, title, icon, url, disabled };
+  };
+
+  const groups: NavGroup[] = workspaceGroups.map(({ label, workspaceIds }, index) => ({
+    id: index + 1,
+    label,
+    items: workspaceIds.map(toNavItem),
+  }));
   if (hasOrganization) {
     groups.push({
-      id: 2,
+      id: workspaceGroups.length + 1,
       label: "Organization",
       items: [
         {

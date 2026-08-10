@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { Filter, History, PencilLine } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -25,7 +26,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -287,29 +287,28 @@ export function BulkEditWorkspace({
                 <FieldGroup className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
                   <Field>
                     <FieldLabel htmlFor="record-custom-field-filter">Custom field</FieldLabel>
-                    <NativeSelect
+                    <FormSelect
                       className="w-full"
                       defaultValue={customFieldFilter?.definitionId ?? ""}
                       id="record-custom-field-filter"
                       name="customField"
+                      placeholder="Choose a custom field"
                       required
-                    >
-                      <NativeSelectOption disabled value="">
-                        Choose a custom field
-                      </NativeSelectOption>
-                      {(Object.keys(ENTITY_LABELS) as EntityType[]).map((type) => {
+                      groups={(Object.keys(ENTITY_LABELS) as EntityType[]).flatMap((type) => {
                         const definitions = customFieldDefinitions.filter(({ entityType }) => entityType === type);
-                        return definitions.length > 0 ? (
-                          <NativeSelectOptGroup key={type} label={ENTITY_LABELS[type]}>
-                            {definitions.map((definition) => (
-                              <NativeSelectOption key={definition.id} value={definition.id}>
-                                {definition.label}
-                              </NativeSelectOption>
-                            ))}
-                          </NativeSelectOptGroup>
-                        ) : null;
+                        return definitions.length > 0
+                          ? [
+                              {
+                                label: ENTITY_LABELS[type],
+                                options: definitions.map((definition) => ({
+                                  value: definition.id,
+                                  label: definition.label,
+                                })),
+                              },
+                            ]
+                          : [];
                       })}
-                    </NativeSelect>
+                    />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="record-custom-field-value">Value contains</FieldLabel>

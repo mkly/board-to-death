@@ -1,10 +1,10 @@
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EventInvitationStatus, EventMembershipRole, MembershipStatus } from "@/generated/prisma/client";
 import type { EventTeamSnapshot } from "@/server/event-memberships";
@@ -80,10 +80,15 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
               </Field>
               <Field>
                 <FieldLabel htmlFor="invite-role">Role</FieldLabel>
-                <NativeSelect id="invite-role" name="role" defaultValue={EventMembershipRole.REVIEWER}>
-                  <NativeSelectOption value={EventMembershipRole.REVIEWER}>Reviewer</NativeSelectOption>
-                  <NativeSelectOption value={EventMembershipRole.ORGANIZER_ADMIN}>Organizer staff</NativeSelectOption>
-                </NativeSelect>
+                <FormSelect
+                  defaultValue={EventMembershipRole.REVIEWER}
+                  id="invite-role"
+                  name="role"
+                  options={[
+                    { value: EventMembershipRole.REVIEWER, label: "Reviewer" },
+                    { value: EventMembershipRole.ORGANIZER_ADMIN, label: "Organizer staff" },
+                  ]}
+                />
               </Field>
               <Button type="submit">Send invitation</Button>
             </FieldGroup>

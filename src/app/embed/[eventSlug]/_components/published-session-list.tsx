@@ -4,12 +4,12 @@ import { useMemo, useState } from "react";
 
 import { Clock3, LayoutList, MapPin, Search } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 
 interface PublishedSessionSpeaker {
@@ -125,55 +125,43 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
           {showTrack ? (
             <Field className="sm:max-w-64">
               <FieldLabel htmlFor="session-track">Track</FieldLabel>
-              <NativeSelect
+              <FormSelect
                 className="w-full"
                 id="session-track"
-                onChange={(event) => setTrackId(event.currentTarget.value)}
+                onValueChange={setTrackId}
                 value={trackId}
-              >
-                <NativeSelectOption value="">All tracks</NativeSelectOption>
-                {tracks.map((track) => (
-                  <NativeSelectOption key={track.id} value={track.id}>
-                    {track.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                options={[
+                  { value: "", label: "All tracks" },
+                  ...tracks.map((track) => ({ value: track.id, label: track.name })),
+                ]}
+              />
             </Field>
           ) : null}
           {showFormat ? (
             <Field>
               <FieldLabel htmlFor="session-format">Format</FieldLabel>
-              <NativeSelect
+              <FormSelect
                 className="w-full"
                 id="session-format"
-                onChange={(event) => setFormat(event.currentTarget.value)}
+                onValueChange={setFormat}
                 value={format}
-              >
-                <NativeSelectOption value="">All formats</NativeSelectOption>
-                {formats.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {value}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                options={[{ value: "", label: "All formats" }, ...formats.map((value) => ({ value, label: value }))]}
+              />
             </Field>
           ) : null}
           {showLocation ? (
             <Field>
               <FieldLabel htmlFor="session-location">Location</FieldLabel>
-              <NativeSelect
+              <FormSelect
                 className="w-full"
                 id="session-location"
-                onChange={(event) => setLocationId(event.currentTarget.value)}
+                onValueChange={setLocationId}
                 value={locationId}
-              >
-                <NativeSelectOption value="">All locations</NativeSelectOption>
-                {locations.map((location) => (
-                  <NativeSelectOption key={location.id} value={location.id}>
-                    {location.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                options={[
+                  { value: "", label: "All locations" },
+                  ...locations.map((location) => ({ value: location.id, label: location.name })),
+                ]}
+              />
             </Field>
           ) : null}
         </FieldGroup>

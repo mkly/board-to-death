@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { CalendarDays, Download, MapPin, Search, TriangleAlert, X } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 import { cn } from "@/lib/utils";
@@ -413,37 +413,31 @@ export function ItineraryWorkspace({
                   {showDay && days.length > 1 ? (
                     <Field className="sm:max-w-48">
                       <FieldLabel htmlFor="itinerary-day">Day</FieldLabel>
-                      <NativeSelect
+                      <FormSelect
                         className="w-full"
                         id="itinerary-day"
-                        onChange={(event) => setDay(event.currentTarget.value)}
+                        onValueChange={setDay}
                         value={day}
-                      >
-                        <NativeSelectOption value="">All days</NativeSelectOption>
-                        {days.map(([key, startsAt]) => (
-                          <NativeSelectOption key={key} value={key}>
-                            {formatDay(startsAt, timezone)}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        options={[
+                          { value: "", label: "All days" },
+                          ...days.map(([key, startsAt]) => ({ value: key, label: formatDay(startsAt, timezone) })),
+                        ]}
+                      />
                     </Field>
                   ) : null}
                   {showTrack && tracks.length > 0 ? (
                     <Field className="sm:max-w-48">
                       <FieldLabel htmlFor="itinerary-track">Track</FieldLabel>
-                      <NativeSelect
+                      <FormSelect
                         className="w-full"
                         id="itinerary-track"
-                        onChange={(event) => setTrackId(event.currentTarget.value)}
+                        onValueChange={setTrackId}
                         value={trackId}
-                      >
-                        <NativeSelectOption value="">All tracks</NativeSelectOption>
-                        {tracks.map((track) => (
-                          <NativeSelectOption key={track.id} value={track.id}>
-                            {track.name}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        options={[
+                          { value: "", label: "All tracks" },
+                          ...tracks.map((track) => ({ value: track.id, label: track.name })),
+                        ]}
+                      />
                     </Field>
                   ) : null}
                 </FieldGroup>

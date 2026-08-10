@@ -42,26 +42,28 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <form action={previewAction} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <form action={previewAction} className="flex flex-col gap-2">
           <input name="eventSlug" type="hidden" value={eventSlug} />
-          <Field className="flex-1">
-            <FieldLabel htmlFor="speaker-csv-file">Speaker CSV</FieldLabel>
-            <Input
-              accept=".csv,text/csv"
-              id="speaker-csv-file"
-              name="csvFile"
-              required
-              type="file"
-              className="text-muted-foreground file:me-3 file:rounded-sm file:bg-muted file:px-2.5 file:text-foreground"
-            />
-            <FieldDescription>
-              Use name, email, title, company, and bio columns. Maximum 500 rows and 1 MB.
-            </FieldDescription>
-          </Field>
-          <Button disabled={previewPending} type="submit">
-            {previewPending ? <Spinner data-icon="inline-start" /> : <FileSpreadsheet data-icon="inline-start" />}
-            {previewPending ? "Reading…" : "Preview CSV"}
-          </Button>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <Field className="flex-1">
+              <FieldLabel htmlFor="speaker-csv-file">Speaker CSV</FieldLabel>
+              <Input
+                accept=".csv,text/csv"
+                id="speaker-csv-file"
+                name="csvFile"
+                required
+                type="file"
+                className="text-muted-foreground file:me-3 file:rounded-sm file:bg-muted file:px-2.5 file:text-foreground"
+              />
+            </Field>
+            <Button disabled={previewPending} type="submit">
+              {previewPending ? <Spinner data-icon="inline-start" /> : <FileSpreadsheet data-icon="inline-start" />}
+              {previewPending ? "Reading…" : "Preview CSV"}
+            </Button>
+          </div>
+          <FieldDescription>
+            Use name, email, title, company, and bio columns. Maximum 500 rows and 1 MB.
+          </FieldDescription>
         </form>
 
         {visibleState.status === "error" ? (

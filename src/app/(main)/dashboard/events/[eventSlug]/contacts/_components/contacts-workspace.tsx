@@ -22,6 +22,7 @@ import {
   CustomFieldInputs,
   type CustomFieldInputValue,
 } from "@/components/custom-fields/custom-field-inputs";
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -67,7 +68,6 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -476,19 +476,16 @@ function DirectoryFilters({
             </Field>
             <Field>
               <FieldLabel htmlFor="directory-event">Participated in event</FieldLabel>
-              <NativeSelect
+              <FormSelect
                 className="w-full"
                 defaultValue={filters.eventId ?? ""}
                 id="directory-event"
                 name="participatedEventId"
-              >
-                <NativeSelectOption value="">Any event</NativeSelectOption>
-                {events.map(({ id, name }) => (
-                  <NativeSelectOption key={id} value={id}>
-                    {name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                options={[
+                  { value: "", label: "Any event" },
+                  ...events.map(({ id, name }) => ({ value: id, label: name })),
+                ]}
+              />
             </Field>
           </div>
           <div className="flex flex-wrap gap-2">

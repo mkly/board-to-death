@@ -11,13 +11,13 @@ import {
   Users,
 } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Pagination,
   PaginationContent,
@@ -159,18 +159,13 @@ export function SpeakerMappingWorkspace({ event, preview, notice, error }: Speak
               {(["email", "firstName", "lastName"] as const).map((field) => (
                 <Field key={field}>
                   <FieldLabel htmlFor={`speaker-mapping-${field}`}>{actionLabelsForField(field)}</FieldLabel>
-                  <NativeSelect
+                  <FormSelect
                     id={`speaker-mapping-${field}`}
                     name={field}
                     defaultValue={preview.mapping[field]}
                     required
-                  >
-                    {speakerMappingSources.map((source) => (
-                      <NativeSelectOption key={source} value={source}>
-                        {sourceLabels[source]}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    options={speakerMappingSources.map((source) => ({ value: source, label: sourceLabels[source] }))}
+                  />
                   <FieldDescription>Required by the Accelevents speaker contract.</FieldDescription>
                 </Field>
               ))}

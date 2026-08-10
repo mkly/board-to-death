@@ -18,6 +18,7 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -36,7 +37,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -311,19 +311,19 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
 
                 <Field>
                   <FieldLabel htmlFor="recommendation">Recommendation</FieldLabel>
-                  <NativeSelect
+                  <FormSelect
                     id="recommendation"
                     name="recommendation"
                     defaultValue={assignment.evaluation.recommendation ?? ""}
                     className="w-full"
-                  >
-                    <NativeSelectOption value="">Not yet decided</NativeSelectOption>
-                    {recommendations.map((recommendation) => (
-                      <NativeSelectOption key={recommendation} value={recommendation}>
-                        {recommendationLabels[recommendation]}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    options={[
+                      { value: "", label: "Not yet decided" },
+                      ...recommendations.map((recommendation) => ({
+                        value: recommendation,
+                        label: recommendationLabels[recommendation],
+                      })),
+                    ]}
+                  />
                   <FieldDescription>Required to submit the final evaluation.</FieldDescription>
                 </Field>
               </FieldGroup>

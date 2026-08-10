@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BellOff, BellRing, CalendarClock, Check, ClipboardCheck, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
+import { FormSelect } from "@/components/form-select";
 import { SpeakerTaskFileComments } from "@/components/speaker-task-file-comments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import type { Prisma } from "@/generated/prisma/client";
@@ -186,16 +186,16 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="definitionId">Task</FieldLabel>
-                  <NativeSelect id="definitionId" name="definitionId" required className="w-full">
-                    {definitions.map((definition) => {
+                  <FormSelect
+                    id="definitionId"
+                    name="definitionId"
+                    required
+                    className="w-full"
+                    options={definitions.flatMap((definition) => {
                       const latest = definition.versions.at(-1);
-                      return latest ? (
-                        <NativeSelectOption key={definition.id} value={definition.id}>
-                          {latest.title}
-                        </NativeSelectOption>
-                      ) : null;
+                      return latest ? [{ value: definition.id, label: latest.title }] : [];
                     })}
-                  </NativeSelect>
+                  />
                   <FieldDescription>The latest definition version is assigned.</FieldDescription>
                 </Field>
                 <Field>
@@ -260,13 +260,12 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="new-reminder-template">Email template</FieldLabel>
-                  <NativeSelect id="new-reminder-template" name="templateId" required>
-                    {templates.map((template) => (
-                      <NativeSelectOption key={template.id} value={template.id}>
-                        {template.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                  <FormSelect
+                    id="new-reminder-template"
+                    name="templateId"
+                    required
+                    options={templates.map((template) => ({ value: template.id, label: template.name }))}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="new-reminder-days">Days before</FieldLabel>
@@ -337,19 +336,14 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                               <FieldLabel htmlFor={`reminder-template-${rule.id}`} className="sr-only">
                                 Email template
                               </FieldLabel>
-                              <NativeSelect
+                              <FormSelect
                                 id={`reminder-template-${rule.id}`}
                                 name="templateId"
                                 defaultValue={rule.templateId}
                                 disabled={cancelled}
                                 required
-                              >
-                                {templates.map((template) => (
-                                  <NativeSelectOption key={template.id} value={template.id}>
-                                    {template.name}
-                                  </NativeSelectOption>
-                                ))}
-                              </NativeSelect>
+                                options={templates.map((template) => ({ value: template.id, label: template.name }))}
+                              />
                             </Field>
                             <Field>
                               <FieldLabel htmlFor={`reminder-days-${rule.id}`} className="sr-only">

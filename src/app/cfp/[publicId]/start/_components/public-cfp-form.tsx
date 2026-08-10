@@ -7,6 +7,7 @@ import {
   CustomFieldInputs,
   type CustomFieldInputValue,
 } from "@/components/custom-fields/custom-field-inputs";
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -136,33 +137,45 @@ export function PublicCfpForm({
         />
       );
     }
-    if (question.type === "select" || question.type === "multi_select") {
-      const multiple = question.type === "multi_select";
+    if (question.type === "multi_select") {
       const answer = answers[question.id];
-      let value: string | readonly string[] = "";
-      if (multiple && Array.isArray(answer)) value = answer;
-      else if (!multiple && typeof answer === "string") value = answer;
       return (
         <NativeSelect
           {...common}
           className="w-full"
-          multiple={multiple}
+          multiple
           onChange={(event) =>
             setAnswer(
               question.id,
-              multiple ? Array.from(event.target.selectedOptions, ({ value }) => value) : event.target.value,
+              Array.from(event.target.selectedOptions, ({ value }) => value),
             )
           }
           required={question.required}
-          value={value}
+          value={Array.isArray(answer) ? answer : []}
         >
-          {!multiple ? <NativeSelectOption value="">Select an option</NativeSelectOption> : null}
           {(question.constraints?.options ?? []).map((option) => (
             <NativeSelectOption key={option.value} value={option.value}>
               {option.label}
             </NativeSelectOption>
           ))}
         </NativeSelect>
+      );
+    }
+    if (question.type === "select") {
+      const answer = answers[question.id];
+      return (
+        <FormSelect
+          {...common}
+          className="w-full"
+          onValueChange={(value) => setAnswer(question.id, value)}
+          required={question.required}
+          value={typeof answer === "string" ? answer : ""}
+          placeholder="Select an option"
+          options={(question.constraints?.options ?? []).map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+        />
       );
     }
     if (question.type === "checkbox") {

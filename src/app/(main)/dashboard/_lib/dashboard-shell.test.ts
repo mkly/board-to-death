@@ -47,31 +47,21 @@ describe("dashboard shell event scope", () => {
 
 describe("program workspace navigation", () => {
   test("provides every supported workspace with event-scoped routes", () => {
-    const navigation = getSidebarItems("tabletop-summit")[0]?.items ?? [];
+    const groups = getSidebarItems("tabletop-summit");
 
-    expect(navigation.map(({ id }) => id)).toEqual([
-      "overview",
-      "dashboards",
-      "reports",
-      "cfp",
-      "submissions",
-      "sessions",
-      "imports",
-      "speakers",
-      "speaker-sourcing",
-      "contacts",
-      "groups",
-      "records",
-      "onboarding",
-      "file-requests",
-      "communications",
-      "evaluations",
-      "agenda",
-      "publishing",
-      "portals",
-      "integrations",
-      "settings",
+    expect(groups.map((group) => ({ label: group.label, ids: group.items.map(({ id }) => id) }))).toEqual([
+      { label: "Insights", ids: ["overview", "dashboards", "reports"] },
+      { label: "Program", ids: ["cfp", "submissions", "evaluations", "sessions", "agenda"] },
+      {
+        label: "People",
+        ids: ["speakers", "speaker-sourcing", "contacts", "onboarding", "file-requests", "communications"],
+      },
+      { label: "Partners", ids: ["groups", "records"] },
+      { label: "Publish", ids: ["publishing", "portals"] },
+      { label: "Setup", ids: ["imports", "integrations", "settings"] },
     ]);
+
+    const navigation = groups.flatMap((group) => group.items);
     const directLinks = navigation.filter((item) => "url" in item);
     expect(directLinks.every((item) => item.url.startsWith("/dashboard/events/tabletop-summit/"))).toBe(true);
 
@@ -96,8 +86,8 @@ describe("program workspace navigation", () => {
   });
 
   test("adds organization membership settings only for organization members", () => {
-    expect(getSidebarItems("tabletop-summit")).toHaveLength(1);
-    expect(getSidebarItems("tabletop-summit", true)[1]).toMatchObject({
+    expect(getSidebarItems("tabletop-summit")).toHaveLength(6);
+    expect(getSidebarItems("tabletop-summit", true)[6]).toMatchObject({
       label: "Organization",
       items: [
         {

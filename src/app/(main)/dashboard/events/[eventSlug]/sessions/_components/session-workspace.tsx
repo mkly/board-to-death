@@ -11,6 +11,7 @@ import {
   CustomFieldInputs,
   type CustomFieldInputValue,
 } from "@/components/custom-fields/custom-field-inputs";
+import { FormSelect } from "@/components/form-select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +45,6 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -485,19 +485,16 @@ export function SessionWorkspace({
             <FieldLabel htmlFor="session-role-filter" className="sr-only">
               Participant role
             </FieldLabel>
-            <NativeSelect
+            <FormSelect
               id="session-role-filter"
               aria-label="Filter sessions by participant role"
               value={participantRole}
-              onChange={(event) => setParticipantRole(event.target.value as ParticipantRoleFilter)}
-            >
-              <NativeSelectOption value="ALL">All participant roles</NativeSelectOption>
-              {Object.entries(participantRoleLabels).map(([role, label]) => (
-                <NativeSelectOption key={role} value={role}>
-                  {label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={(value) => setParticipantRole(value as ParticipantRoleFilter)}
+              options={[
+                { value: "ALL", label: "All participant roles" },
+                ...Object.entries(participantRoleLabels).map(([role, label]) => ({ value: role, label })),
+              ]}
+            />
           </Field>
           <p aria-live="polite" className="whitespace-nowrap text-muted-foreground text-sm">
             {filteredSessions.length} {filteredSessions.length === 1 ? "session" : "sessions"}

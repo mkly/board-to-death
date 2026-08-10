@@ -7,6 +7,7 @@ import {
   CustomFieldInputs,
   type CustomFieldInputValue,
 } from "@/components/custom-fields/custom-field-inputs";
+import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ContactGroupKind, ContactGroupTier } from "@/generated/prisma/client";
 import type { ContactGroupWithDetails } from "@/server/contacts/repositories";
@@ -74,16 +74,20 @@ function TierSelect({
       <FieldLabel className={hideLabel ? "sr-only" : undefined} htmlFor={label}>
         Tier
       </FieldLabel>
-      <NativeSelect className="w-full" defaultValue={defaultValue ?? "unassigned"} id={label} name="tierId">
-        <NativeSelectOption value="unassigned">No tier</NativeSelectOption>
-        {tiers
-          .filter((tier) => kind === undefined || tier.kind === kind)
-          .map((tier) => (
-            <NativeSelectOption key={tier.id} value={tier.id}>
-              {kind === undefined ? `${KIND_LABELS[tier.kind]} · ${tier.name}` : tier.name}
-            </NativeSelectOption>
-          ))}
-      </NativeSelect>
+      <FormSelect
+        defaultValue={defaultValue ?? "unassigned"}
+        id={label}
+        name="tierId"
+        options={[
+          { value: "unassigned", label: "No tier" },
+          ...tiers
+            .filter((tier) => kind === undefined || tier.kind === kind)
+            .map((tier) => ({
+              value: tier.id,
+              label: kind === undefined ? `${KIND_LABELS[tier.kind]} · ${tier.name}` : tier.name,
+            })),
+        ]}
+      />
     </Field>
   );
 }
@@ -104,14 +108,15 @@ function ContactSelect({
       <FieldLabel className={hideLabel ? "sr-only" : undefined} htmlFor={label}>
         Primary contact
       </FieldLabel>
-      <NativeSelect className="w-full" defaultValue={defaultValue ?? "unassigned"} id={label} name="primaryContactId">
-        <NativeSelectOption value="unassigned">No primary contact</NativeSelectOption>
-        {contacts.map((contact) => (
-          <NativeSelectOption key={contact.id} value={contact.id}>
-            {contact.name} · {contact.email}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+      <FormSelect
+        defaultValue={defaultValue ?? "unassigned"}
+        id={label}
+        name="primaryContactId"
+        options={[
+          { value: "unassigned", label: "No primary contact" },
+          ...contacts.map((contact) => ({ value: contact.id, label: `${contact.name} · ${contact.email}` })),
+        ]}
+      />
     </Field>
   );
 }
@@ -295,14 +300,15 @@ export function GroupWorkspace({
               </Field>
               <Field>
                 <FieldLabel htmlFor="new-group-kind">Kind</FieldLabel>
-                <NativeSelect className="w-full" defaultValue="SPONSOR" id="new-group-kind" name="kind">
-                  <NativeSelectOption disabled={!event.sponsorsEnabled} value="SPONSOR">
-                    Sponsor
-                  </NativeSelectOption>
-                  <NativeSelectOption disabled={!event.exhibitorsEnabled} value="EXHIBITOR">
-                    Exhibitor
-                  </NativeSelectOption>
-                </NativeSelect>
+                <FormSelect
+                  defaultValue="SPONSOR"
+                  id="new-group-kind"
+                  name="kind"
+                  options={[
+                    { value: "SPONSOR", label: "Sponsor", disabled: !event.sponsorsEnabled },
+                    { value: "EXHIBITOR", label: "Exhibitor", disabled: !event.exhibitorsEnabled },
+                  ]}
+                />
               </Field>
               <TierSelect defaultValue={null} hideLabel={false} label="new-group-tier" tiers={tiers} />
               <ContactSelect contacts={contacts} defaultValue={null} hideLabel={false} label="new-group-contact" />
@@ -332,29 +338,40 @@ export function GroupWorkspace({
             <div className="grid flex-1 gap-3 sm:grid-cols-3">
               <Field>
                 <FieldLabel htmlFor="group-kind-filter">Kind</FieldLabel>
-                <NativeSelect defaultValue={filters.kind ?? "all"} id="group-kind-filter" name="kind">
-                  <NativeSelectOption value="all">All kinds</NativeSelectOption>
-                  <NativeSelectOption value="SPONSOR">Sponsors</NativeSelectOption>
-                  <NativeSelectOption value="EXHIBITOR">Exhibitors</NativeSelectOption>
-                </NativeSelect>
+                <FormSelect
+                  defaultValue={filters.kind ?? "all"}
+                  id="group-kind-filter"
+                  name="kind"
+                  options={[
+                    { value: "all", label: "All kinds" },
+                    { value: "SPONSOR", label: "Sponsors" },
+                    { value: "EXHIBITOR", label: "Exhibitors" },
+                  ]}
+                />
               </Field>
               <Field>
                 <FieldLabel htmlFor="group-tier-filter">Tier</FieldLabel>
-                <NativeSelect defaultValue={filters.tierId ?? "all"} id="group-tier-filter" name="tier">
-                  <NativeSelectOption value="all">All tiers</NativeSelectOption>
-                  {tiers.map((tier) => (
-                    <NativeSelectOption key={tier.id} value={tier.id}>
-                      {KIND_LABELS[tier.kind]} · {tier.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                <FormSelect
+                  defaultValue={filters.tierId ?? "all"}
+                  id="group-tier-filter"
+                  name="tier"
+                  options={[
+                    { value: "all", label: "All tiers" },
+                    ...tiers.map((tier) => ({ value: tier.id, label: `${KIND_LABELS[tier.kind]} · ${tier.name}` })),
+                  ]}
+                />
               </Field>
               <Field>
                 <FieldLabel htmlFor="group-sort">Sort</FieldLabel>
-                <NativeSelect defaultValue={filters.sortBy} id="group-sort" name="sort">
-                  <NativeSelectOption value="name">Name</NativeSelectOption>
-                  <NativeSelectOption value="tier">Tier order</NativeSelectOption>
-                </NativeSelect>
+                <FormSelect
+                  defaultValue={filters.sortBy}
+                  id="group-sort"
+                  name="sort"
+                  options={[
+                    { value: "name", label: "Name" },
+                    { value: "tier", label: "Tier order" },
+                  ]}
+                />
               </Field>
             </div>
             <div className="flex gap-2">

@@ -4,13 +4,13 @@ import { useMemo, useState } from "react";
 
 import { ExternalLink, Search, Users } from "lucide-react";
 
+import { FormSelect } from "@/components/form-select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 
 export interface PublishedSpeakerListItem {
@@ -102,19 +102,16 @@ export function PublishedSpeakerList({ density, enabledFilters, eventName, speak
           {showOrganization ? (
             <Field className="sm:max-w-64">
               <FieldLabel htmlFor="speaker-organization">Organization</FieldLabel>
-              <NativeSelect
+              <FormSelect
                 className="w-full"
                 id="speaker-organization"
-                onChange={(event) => setOrganization(event.currentTarget.value)}
+                onValueChange={setOrganization}
                 value={organization}
-              >
-                <NativeSelectOption value="">All organizations</NativeSelectOption>
-                {organizations.map((option) => (
-                  <NativeSelectOption key={option} value={option}>
-                    {option}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                options={[
+                  { value: "", label: "All organizations" },
+                  ...organizations.map((option) => ({ value: option, label: option })),
+                ]}
+              />
             </Field>
           ) : null}
         </FieldGroup>
