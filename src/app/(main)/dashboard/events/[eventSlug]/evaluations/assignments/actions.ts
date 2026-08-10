@@ -9,12 +9,15 @@ import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { EvaluationAssignmentRepository } from "@/server/evaluations/assignments";
+import { EvaluationReminderRepository } from "@/server/evaluations/reminders";
 import { RepositoryError } from "@/server/events/repositories";
 
 export interface ManageAssignmentsState {
   readonly status: "idle" | "success" | "error";
   readonly message?: string;
 }
+
+export type SendEvaluationRemindersState = ManageAssignmentsState;
 
 const inputSchema = z.object({
   operation: z.enum(["assign", "assign-committee", "reassign", "withdraw"]),
@@ -149,6 +152,56 @@ export async function reopenEvaluationAssignment(
     revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
     revalidatePath(`/dashboard/events/${event.slug}/evaluations/results`);
     return { status: "success", message: "Evaluation returned to the reviewer for correction." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+const reminderSchema = z.object({
+  eventSlug: z.string().min(1),
+  roundId: z.string().uuid(),
+  reviewerIds: z.array(z.string().uuid()).min(1, "Select at least one reviewer."),
+});
+
+export async function sendEvaluationReminders(
+  _previousState: SendEvaluationRemindersState,
+  formData: FormData,
+): Promise<SendEvaluationRemindersState> {
+  const result = reminderSchema.safeParse({
+    eventSlug: formData.get("eventSlug"),
+    roundId: formData.get("roundId"),
+    reviewerIds: formData.getAll("reviewerIds"),
+  });
+  if (!result.success) {
+    return { status: "error", message: result.error.issues[0]?.message ?? "Check the selected reviewers." };
+  }
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: result.data.eventSlug }))) {
+    return { status: "error", message: "Your administrator session expired. Sign in and try again." };
+  }
+
+  const client = getDatabaseClient();
+  const event = await client.event.findUnique({
+    where: { slug: result.data.eventSlug },
+    select: { id: true, slug: true },
+  });
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  try {
+    const queued = await new EvaluationReminderRepository(client).queue({
+      eventId: event.id,
+      roundId: result.data.roundId,
+      reviewerIds: result.data.reviewerIds,
+    });
+    revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
+    revalidatePath(`/dashboard/events/${event.slug}/communications/deliveries/${queued.deliveryId}`);
+    const label = queued.recipientCount === 1 ? "reviewer reminder" : "reviewer reminders";
+    return {
+      status: "success",
+      message: `${queued.recipientCount.toString()} ${label} queued and logged for delivery.`,
+    };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;

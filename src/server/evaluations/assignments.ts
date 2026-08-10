@@ -9,6 +9,7 @@ import {
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { EvaluationReminderRepository, type EvaluationReminderWorkspace } from "./reminders.ts";
 
 const eligibleSubmissionStatuses = [CfpSubmissionStatus.SUBMITTED, CfpSubmissionStatus.UNDER_REVIEW] as const;
 
@@ -67,6 +68,7 @@ export interface EvaluationAssignmentWorkspace {
   readonly committees: readonly EvaluationCommitteeOption[];
   readonly coverage: EvaluationCoverageCounts;
   readonly submissions: readonly EvaluationAssignmentSubmission[];
+  readonly reminders: EvaluationReminderWorkspace;
 }
 
 export interface BulkAssignmentInput {
@@ -281,6 +283,7 @@ export class EvaluationAssignmentRepository {
         committees: committees.map(({ id, name, members }) => ({ id, name, activeMemberCount: members.length })),
         coverage: { underAssigned: 0, assigned: 0, inProgress: 0, complete: 0 },
         submissions: [],
+        reminders: { targets: [], deliveries: [] },
       };
     }
 
@@ -353,6 +356,8 @@ export class EvaluationAssignmentRepository {
       })),
     }));
 
+    const reminders = await new EvaluationReminderRepository(this.client).getWorkspace(eventId, selectedRound.id);
+
     return {
       rounds: rounds.map(({ id, title, planVersion }) => ({ id, title, planTitle: planVersion.title })),
       selectedRoundId: selectedRound.id,
@@ -360,6 +365,7 @@ export class EvaluationAssignmentRepository {
       committees: committees.map(({ id, name, members }) => ({ id, name, activeMemberCount: members.length })),
       coverage: countCoverage(mappedSubmissions),
       submissions: mappedSubmissions,
+      reminders,
     };
   }
 
