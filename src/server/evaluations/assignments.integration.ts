@@ -358,6 +358,11 @@ describe("reviewer and committee assignments", () => {
 
   test("does not let a recused assignment block closing the round", async () => {
     const fixture = await createFixture();
+    // The round closes at the wall clock, so it must have opened before it.
+    await client.evaluationRound.update({
+      where: { id: fixture.openRoundId },
+      data: { opensAt: new Date("2020-01-15T18:00:00.000Z") },
+    });
     await repository.assign({
       eventId: fixture.eventId,
       roundId: fixture.openRoundId,
