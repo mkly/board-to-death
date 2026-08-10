@@ -10,7 +10,12 @@ import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
-import { createContact, linkDirectoryPersonToEvent, updateContact } from "@/server/contacts/repositories";
+import {
+  createContact,
+  linkDirectoryPersonToEvent,
+  mergeDirectoryPeople,
+  updateContact,
+} from "@/server/contacts/repositories";
 import { storeCustomFieldFile } from "@/server/custom-fields/files";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, type CustomFieldTarget } from "@/server/custom-fields/repositories";
@@ -38,6 +43,18 @@ const contactSchema = z.object({
   jobTitle: z.string().trim().max(200),
   phone: z.string().trim().max(50),
 });
+
+const mergeSchema = z
+  .object({
+    firstPersonId: z.uuid(),
+    secondPersonId: z.uuid(),
+    primaryPersonId: z.uuid(),
+  })
+  .refine(({ firstPersonId, secondPersonId }) => firstPersonId !== secondPersonId)
+  .refine(
+    ({ firstPersonId, primaryPersonId, secondPersonId }) =>
+      primaryPersonId === firstPersonId || primaryPersonId === secondPersonId,
+  );
 
 function stringValue(formData: FormData, name: string): string {
   const entry = formData.get(name);
@@ -192,4 +209,32 @@ export async function linkDirectoryPersonAction(eventSlug: string, personId: str
 
   revalidatePath(contactsPath(event.slug));
   redirect(`${contactsPath(event.slug)}?notice=${encodeURIComponent("Contact added from the directory.")}`);
+}
+
+export async function mergeDirectoryPeopleAction(eventSlug: string, formData: FormData): Promise<never> {
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const parsed = mergeSchema.safeParse({
+    firstPersonId: stringValue(formData, "firstPersonId"),
+    secondPersonId: stringValue(formData, "secondPersonId"),
+    primaryPersonId: stringValue(formData, "primaryPersonId"),
+  });
+  let errorMessage: string | null = parsed.success ? null : "Choose a valid primary person for this merge.";
+  if (parsed.success) {
+    const duplicatePersonId =
+      parsed.data.primaryPersonId === parsed.data.firstPersonId
+        ? parsed.data.secondPersonId
+        : parsed.data.firstPersonId;
+    try {
+      await mergeDirectoryPeople(getDatabaseClient(), event.id, parsed.data.primaryPersonId, duplicatePersonId);
+    } catch (error) {
+      errorMessage = error instanceof RepositoryError ? error.message : "The duplicate people could not be merged.";
+    }
+  }
+
+  if (errorMessage) redirect(`${contactsPath(event.slug)}?error=${encodeURIComponent(errorMessage)}`);
+  revalidatePath(contactsPath(event.slug));
+  redirect(`${contactsPath(event.slug)}?notice=${encodeURIComponent("Duplicate people merged into one record.")}`);
 }

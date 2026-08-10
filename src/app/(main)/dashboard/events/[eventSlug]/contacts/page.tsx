@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import type { CustomFieldInputDefinition } from "@/components/custom-fields/custom-field-inputs";
 import { CustomFieldEntityType } from "@/generated/prisma/client";
-import { listContacts, searchDirectoryPeople } from "@/server/contacts/repositories";
+import { listContacts, listDirectoryDuplicateMatches, searchDirectoryPeople } from "@/server/contacts/repositories";
 import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -44,9 +44,10 @@ export default async function ContactsPage({
 
   const client = getDatabaseClient();
   const customFields = new CustomFieldRepository(client);
-  const [contacts, people, definitions] = await Promise.all([
+  const [contacts, people, duplicateMatches, definitions] = await Promise.all([
     listContacts(client, event.id),
     searchDirectoryPeople(client, event.id, query.q ?? ""),
+    listDirectoryDuplicateMatches(client, event.id),
     customFields.listDefinitions(event.id, CustomFieldEntityType.CONTACT),
   ]);
   const values = await client.customFieldValue.findMany({
@@ -70,6 +71,7 @@ export default async function ContactsPage({
           .map(({ id, definitionId, value }) => ({ id, definitionId, value })),
       }))}
       customFieldDefinitions={definitions.map(inputDefinition)}
+      duplicateMatches={duplicateMatches}
       error={query.error}
       event={event}
       notice={query.notice}

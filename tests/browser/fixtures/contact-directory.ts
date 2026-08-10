@@ -48,6 +48,15 @@ const person = await database.person.create({
     jobTitle: "Founder",
   },
 });
+await database.person.create({
+  data: {
+    email: "dana.alt@example.test",
+    givenName: "Dana",
+    familyName: "Reed",
+    organization: "Alternate Robotics",
+    jobTitle: "Advisor",
+  },
+});
 await database.contact.create({
   data: {
     eventId: firstEvent.id,
