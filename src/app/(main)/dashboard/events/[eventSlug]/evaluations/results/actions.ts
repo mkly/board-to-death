@@ -11,6 +11,7 @@ import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/pr
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
+import { CfpDecisionNotificationRepository } from "@/server/cfp/decision-notifications";
 import { DEFAULT_SPEAKER_INVITATION_LIFETIME_MS, SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
 import { getDatabaseClient } from "@/server/database/client";
 import { emitWebhookEvent } from "@/server/developer-api/webhooks";
@@ -106,10 +107,11 @@ export async function recordEvaluationDecision(
 ): Promise<never> {
   const parsed = decisionSchema.safeParse({ eventSlug, roundId, submissionId, outcome, expectedDecisionNumber });
   if (!parsed.success) redirect(destination(eventSlug, roundId, { error: "The decision request was invalid." }));
+  let notificationQueued = true;
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
     const client = getDatabaseClient();
-    await new EvaluationDecisionRepository(client).record({
+    const decision = await new EvaluationDecisionRepository(client).record({
       eventId: event.id,
       roundId: parsed.data.roundId,
       submissionId: parsed.data.submissionId,
@@ -117,6 +119,17 @@ export async function recordEvaluationDecision(
       expectedDecisionNumber: parsed.data.expectedDecisionNumber,
       actorId,
     });
+    if (
+      decision.outcome === EvaluationDecisionOutcome.ACCEPTED ||
+      decision.outcome === EvaluationDecisionOutcome.REJECTED
+    ) {
+      // The decision is already recorded and cannot be rolled back here, so a notification that
+      // cannot be queued must not present the whole action as failed.
+      notificationQueued = await new CfpDecisionNotificationRepository(client)
+        .queue(event.id, decision.id)
+        .then(() => true)
+        .catch(() => false);
+    }
     await emitWebhookEvent(client, {
       eventId: event.id,
       type: "submission.status_changed",
@@ -126,7 +139,13 @@ export async function recordEvaluationDecision(
   } catch (error) {
     redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
   }
-  redirect(destination(eventSlug, roundId, { notice: decisionNotices[outcome] }));
+  redirect(
+    destination(eventSlug, roundId, {
+      notice: notificationQueued
+        ? decisionNotices[outcome]
+        : `${decisionNotices[outcome]} The applicant notification could not be queued.`,
+    }),
+  );
 }
 
 export async function inviteAcceptedSpeakers(eventSlug: string, roundId: string, submissionId: string): Promise<never> {

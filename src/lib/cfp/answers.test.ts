@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateCfpAnswers, visibleCfpQuestionIds } from "./answers";
+import { proposalTitleFromAnswers, validateCfpAnswers, visibleCfpQuestionIds } from "./answers";
 import type { CfpFormDefinition } from "./types";
 
 const definition: CfpFormDefinition = {
@@ -181,5 +181,48 @@ describe("validateCfpAnswers", () => {
         ]),
       );
     }
+  });
+});
+
+describe("proposal title resolution", () => {
+  function withTitleQuestion(id: string, label: string): CfpFormDefinition {
+    return {
+      version: 1,
+      title: "Conference CFP",
+      sections: [
+        {
+          id: "proposal",
+          kind: "questions",
+          title: "Proposal",
+          questions: [{ id, type: "short_text", label, required: true }],
+        },
+      ],
+    };
+  }
+
+  it("reads the answer to a question matched by id", () => {
+    expect(
+      proposalTitleFromAnswers(withTitleQuestion("talk-title", "Anything"), [
+        { questionId: "talk-title", value: "  Designing board games  " },
+      ]),
+    ).toBe("Designing board games");
+  });
+
+  it("reads the answer to a question matched by a punctuated label", () => {
+    expect(
+      proposalTitleFromAnswers(withTitleQuestion("q-1", "Session title:"), [{ questionId: "q-1", value: "Dice math" }]),
+    ).toBe("Dice math");
+  });
+
+  it("returns null when the form carries no recognizable title question", () => {
+    expect(
+      proposalTitleFromAnswers(withTitleQuestion("q-1", "Pitch"), [{ questionId: "q-1", value: "Dice math" }]),
+    ).toBeNull();
+  });
+
+  it("returns null when the matched question is unanswered", () => {
+    expect(
+      proposalTitleFromAnswers(withTitleQuestion("title", "Title"), [{ questionId: "title", value: "   " }]),
+    ).toBeNull();
   });
 });

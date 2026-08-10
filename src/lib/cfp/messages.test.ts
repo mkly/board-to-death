@@ -73,7 +73,7 @@ describe("CFP message settings", () => {
       reminderDaysBeforeClose: "0",
       reminderSendAt: "25:00",
       submissionConfirmation: "<script>alert('no')</script>",
-      thankYou: "Your session is {{session.title}}.",
+      thankYou: "Your deadline is {{onboarding.deadline}}.",
     });
 
     expect(result.fields).toBeNull();
@@ -81,6 +81,6 @@ describe("CFP message settings", () => {
     expect(result.errors.portalRedirectDelaySeconds?.[0]).toContain("5 to 60");
     expect(result.errors.reminderSendAt?.[0]).toContain("valid reminder time");
     expect(result.errors.submissionConfirmation?.join(" ")).toContain("Raw HTML is not allowed");
-    expect(result.errors.thankYou?.join(" ")).toContain("Unknown variables: session.title");
+    expect(result.errors.thankYou?.join(" ")).toContain("Unknown variables: onboarding.deadline");
   });
 });
