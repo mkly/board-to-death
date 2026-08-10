@@ -65,6 +65,20 @@ test("configures, previews, persists, copies, validates, and adapts the embed bu
   await page.getByRole("tab", { name: "Web component" }).click();
   await expect(page.getByLabel("Web component snippet")).toContainText("/embed/board-to-death.js");
 
+  for (const [tab, format] of [
+    ["Basic HTML", "html"],
+    ["JSON", "json"],
+    ["XML", "xml"],
+    ["iCal", "ical"],
+  ] as const) {
+    await page.getByRole("tab", { name: tab }).click();
+    await expect(page.getByLabel(`${tab} feed link`)).toHaveValue(`${baseURL}/embed/${eventSlug}/feeds/${format}`);
+    await expect(page.getByRole("link", { name: "Open feed" })).toHaveAttribute(
+      "href",
+      `${baseURL}/embed/${eventSlug}/feeds/${format}`,
+    );
+  }
+
   await page.reload();
   await waitForHydration(page.getByRole("radio", { name: "Speaker gallery" }));
   await expect(page.getByRole("radio", { name: "Speaker gallery" })).toBeChecked();
@@ -73,7 +87,7 @@ test("configures, previews, persists, copies, validates, and adapts the embed bu
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByText("Live preview", { exact: true })).toBeVisible();
-  await expect(page.getByText("Install", { exact: true })).toBeVisible();
+  await expect(page.getByText("Install and share", { exact: true })).toBeVisible();
 
   await page.goto(
     `/embed/${eventSlug}?kind=javascript%3Aalert(1)&theme=%3Cscript%3E&density=position%3Afixed&filter=room`,

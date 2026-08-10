@@ -4,9 +4,32 @@ import { useActionState } from "react";
 
 import Link from "next/link";
 
-import { ArrowLeft, Check, CheckCircle2, Eye, EyeOff, Fingerprint, Lock, Save, Send, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  Lock,
+  Save,
+  Send,
+  ShieldAlert,
+  UserRound,
+} from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { EvaluationRecommendation } from "@/generated/prisma/client";
 import type { ReviewerAssignmentDetail } from "@/server/evaluations/reviewer-workspace";
 
-import { type EvaluationFormState, saveEvaluationDraft, submitEvaluation } from "../actions";
+import { declareEvaluationConflict, type EvaluationFormState, saveEvaluationDraft, submitEvaluation } from "../actions";
 
 interface ReviewerAssignmentDetailProps {
   readonly assignment: ReviewerAssignmentDetail;
@@ -78,6 +101,8 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
 
   const [draftState, draftAction, draftPending] = useActionState(saveEvaluationDraft, INITIAL_STATE);
   const [submitState, submitAction, submitPending] = useActionState(submitEvaluation, INITIAL_STATE);
+  const [recusalState, recusalAction, recusalPending] = useActionState(declareEvaluationConflict, INITIAL_STATE);
+  const recusalFormId = `declare-conflict-${assignment.id}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -177,6 +202,13 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
           </div>
 
           <FormAlert state={latestState(draftState, submitState)} />
+          {recusalState.status === "error" ? (
+            <Alert variant="destructive">
+              <ShieldAlert />
+              <AlertTitle>Conflict not declared</AlertTitle>
+              <AlertDescription>{recusalState.message}</AlertDescription>
+            </Alert>
+          ) : null}
 
           {isFinal ? (
             <>
@@ -313,6 +345,44 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
               </div>
             </form>
           )}
+
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Conflict of interest</CardTitle>
+              <CardDescription>
+                Declare a conflict if you cannot evaluate this proposal impartially. It will leave your active queue and
+                the organizer can reassign it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form id={recusalFormId} action={recusalAction}>
+                <input type="hidden" name="assignmentId" value={assignment.id} />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="outline" disabled={recusalPending}>
+                      {recusalPending ? <Spinner data-icon="inline-start" /> : <ShieldAlert data-icon="inline-start" />}
+                      {recusalPending ? "Declaring" : "Declare conflict"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Declare a conflict of interest?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This review will be removed from your active queue. Any draft or submitted scores will no longer
+                        count toward the proposal&apos;s aggregate results.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction type="submit" form={recusalFormId} variant="destructive">
+                        Declare conflict
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </form>
+            </CardContent>
+          </Card>
         </aside>
       </div>
     </div>

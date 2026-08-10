@@ -1,4 +1,10 @@
-import { type Prisma, type PrismaClient, PublishedProgramState } from "../../generated/prisma/client.ts";
+import {
+  type Prisma,
+  type PrismaClient,
+  ProgramSessionContentApprovalStatus,
+  PublishedProgramState,
+} from "../../generated/prisma/client.ts";
+import { parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export interface PublishedProgramEventSnapshot {
@@ -41,6 +47,8 @@ export interface PublishedProgramSessionSnapshot {
   readonly title: string;
   readonly description: string | null;
   readonly durationMinutes: number;
+  /** Optional for compatibility with snapshots published before session formats were captured. */
+  readonly format?: string | null;
   readonly trackId: string | null;
   readonly speakerIds: readonly string[];
   readonly parentSessionId?: string | null;
@@ -112,11 +120,26 @@ const snapshotEventSelect = {
     include: { profileVersions: { orderBy: { versionNumber: "desc" }, take: 1 } },
   },
   agendaPlacements: {
-    where: { session: { archivedAt: null } },
+    where: {
+      session: {
+        archivedAt: null,
+        contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
+      },
+    },
     orderBy: [{ startsAt: "asc" }, { roomId: "asc" }, { id: "asc" }],
     include: {
       session: {
         include: {
+          customFieldValues: { include: { definition: true }, orderBy: { definition: { position: "asc" } } },
+          sourceSubmission: {
+            include: {
+              revisions: {
+                orderBy: { versionNumber: "desc" },
+                take: 1,
+                include: { answers: { orderBy: { sortOrder: "asc" } } },
+              },
+            },
+          },
           versions: {
             orderBy: { versionNumber: "desc" },
             take: 1,
@@ -131,6 +154,44 @@ const snapshotEventSelect = {
 } as const satisfies Prisma.EventSelect;
 
 type StoredSnapshotEvent = Prisma.EventGetPayload<{ select: typeof snapshotEventSelect }>;
+
+function formatFieldName(value: string): boolean {
+  const normalized = value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized === "format" || normalized === "session_format" || normalized.endsWith("_format");
+}
+
+function displayJsonValues(value: Prisma.JsonValue): readonly string[] {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  if (typeof value === "number" || typeof value === "boolean") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap(displayJsonValues);
+  return [];
+}
+
+function publishedSessionFormat(session: StoredSnapshotEvent["agendaPlacements"][number]["session"]): string | null {
+  const customField = session.customFieldValues.find(({ definition }) =>
+    [definition.key, definition.label].some(formatFieldName),
+  );
+  const customValue = customField ? displayJsonValues(customField.value).join(", ") : "";
+  if (customValue) return customValue;
+
+  const revision = session.sourceSubmission?.revisions[0];
+  if (!revision) return null;
+  const parsed = parseCfpDefinition(revision.definitionSnapshot);
+  if (!parsed.ok) return null;
+  const question = parsed.definition.sections
+    .flatMap(({ questions }) => questions)
+    .find(({ id, label }) => [id, label].some(formatFieldName));
+  if (!question) return null;
+  const answer = revision.answers.find(({ questionId }) => questionId === question.id);
+  if (!answer) return null;
+  const optionLabels = new Map(question.constraints?.options?.map(({ value, label }) => [value, label]) ?? []);
+  const values = displayJsonValues(answer.value).map((value) => optionLabels.get(value) ?? value);
+  return values.length > 0 ? values.join(", ") : null;
+}
 
 function conflict(message: string): never {
   throw new RepositoryError("conflict", message);
@@ -199,6 +260,7 @@ function buildSnapshot(event: StoredSnapshotEvent): PublishedProgramSnapshot {
       title: version.title,
       description: version.description,
       durationMinutes: version.durationMinutes,
+      format: publishedSessionFormat(session),
       trackId: version.trackId,
       speakerIds: version.participants
         .map(({ speakerId }) => speakerId)

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ProgramSessionParticipantRole } from "@/generated/prisma/client";
+import { ProgramSessionContentApprovalStatus, ProgramSessionParticipantRole } from "@/generated/prisma/client";
 
 const actionMocks = vi.hoisted(() => ({
   archiveProgramSession: vi.fn(),
@@ -31,6 +31,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
   {
     id: "11111111-1111-4111-8111-111111111111",
     kind: "MANUAL",
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     archived: false,
     title: "Designing cooperative tension",
     description: "A practical workshop.",
@@ -52,6 +53,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
   {
     id: "22222222-2222-4222-8222-222222222222",
     kind: "GUARANTEED",
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.IN_REVIEW,
     archived: false,
     title: "Opening keynote",
     description: null,
@@ -67,6 +69,7 @@ const sessions: readonly SessionWorkspaceSession[] = [
   {
     id: "33333333-3333-4333-8333-333333333333",
     kind: "MANUAL",
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.DRAFT,
     archived: true,
     title: "Retired workshop",
     description: null,
@@ -132,6 +135,7 @@ describe("SessionWorkspace", () => {
     expect(screen.getAllByText("Designing cooperative tension")).toHaveLength(2);
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Designing cooperative tension");
     expect((screen.getByLabelText("Duration (minutes)") as HTMLInputElement).value).toBe("60");
+    expect(screen.getByRole("combobox", { name: "Content approval" }).textContent).toContain("Approved");
     expect(screen.getByRole("combobox", { name: /Alex Rivera/ }).textContent).toContain("Moderator");
 
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Cooperative tension lab" } });
@@ -143,6 +147,7 @@ describe("SessionWorkspace", () => {
     expect(formData.get("eventSlug")).toBe("board-to-death-2027");
     expect(formData.get("sessionId")).toBe("11111111-1111-4111-8111-111111111111");
     expect(formData.get("title")).toBe("Cooperative tension lab");
+    expect(formData.get("contentApprovalStatus")).toBe(ProgramSessionContentApprovalStatus.APPROVED);
     expect(formData.get("participantRole:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")).toBe("MODERATOR");
   });
 

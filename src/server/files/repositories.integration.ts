@@ -257,7 +257,7 @@ describe("file request storage through the Prisma store", () => {
     await client.$disconnect();
   });
 
-  test("records an upload, fulfils the assignment, and replaces the previous file and its object", async () => {
+  test("records an upload, fulfils the assignment, and retains the previous file as a version", async () => {
     const eventId = await createEvent("file-request-uploads");
     const contactId = await createContact(eventId, "dana@example.test");
     const request = await createFileRequest(client, { eventId, targetKind: "CONTACT", title: "Contract", ...PDF_ONLY });
@@ -294,7 +294,13 @@ describe("file request storage through the Prisma store", () => {
       );
     }
     assert.equal(await client.fileRequestFile.count({ where: { assignmentId: assignment.id } }), 2);
-    assert.equal((await storage.get(first.value.key)).ok, false);
+    assert.equal((await storage.get(first.value.key)).ok, true);
+
+    const library = await createPrismaFileRequestStore(client).listEventFileLibrary(eventId);
+    assert.equal(library.length, 1);
+    assert.equal(library[0]?.file.fileName, "contract-final.pdf");
+    assert.equal(library[0]?.uploaderLabel, "Dana Reed");
+    assert.equal(library[0]?.versionCount, 2);
   });
 
   test("admits a member of an assigned group and refuses a contact outside it", async () => {

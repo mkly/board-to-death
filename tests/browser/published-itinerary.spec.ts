@@ -1,9 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import ICAL from "ical.js";
 import { Pool } from "pg";
 
 import type { PublishedProgramSnapshot } from "../../src/server/published-program/repositories.ts";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 const databaseUrl =
   process.env.TEST_DATABASE_URL ??
@@ -193,6 +195,20 @@ test("builds, persists, and reconciles a browser-local published itinerary", asy
 
     await page.getByLabel("Add Closing circle to itinerary").click();
     await expect(itinerary).toContainText("3 sessions");
+
+    const downloadPromise = page.waitForEvent("download");
+    await itinerary.getByRole("button", { name: "Export iCal" }).click();
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(download.suggestedFilename()).toBe(`${fixture.eventSlug}-itinerary.ics`);
+    expect(downloadPath).not.toBeNull();
+    const calendar = new ICAL.Component(ICAL.parse(await readFile(downloadPath as string, "utf8")));
+    expect(
+      calendar
+        .getAllSubcomponents("vevent")
+        .map((component) => new ICAL.Event(component).summary)
+        .sort(),
+    ).toEqual(["Closing circle", "Collision lab", "Opening keynote"]);
 
     // Times carry an explicit zone abbreviation for the event time zone, not the browser's.
     await expect(itinerary).toContainText("PST");

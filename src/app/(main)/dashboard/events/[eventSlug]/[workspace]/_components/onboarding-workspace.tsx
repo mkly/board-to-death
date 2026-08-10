@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BellOff, BellRing, CalendarClock, Check, ClipboardCheck, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
+import { SpeakerTaskFileComments } from "@/components/speaker-task-file-comments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import type { Prisma } from "@/generated/prisma/client";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
 import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
@@ -22,6 +24,7 @@ import {
   approveSpeakerTask,
   assignSpeakerTasks,
   cancelSpeakerTaskReminderRule,
+  commentOnSpeakerTaskFile,
   requestSpeakerTaskRevision,
   saveSpeakerTaskReminderRule,
   setSpeakerTaskReminderOptOut,
@@ -44,6 +47,10 @@ function speakerName(
   const profile = profileVersions.at(-1);
   if (!profile) return "Unknown speaker";
   return `${profile.preferredName ?? profile.givenName} ${profile.familyName}`;
+}
+
+function objectValue(value: Prisma.JsonValue | null | undefined): Prisma.JsonObject | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 
 function dueDateValue(dueAt: Date | null, timezone: string): string {
@@ -99,7 +106,10 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
       include: {
         definitionVersion: true,
         speaker: { include: { profileVersions: { orderBy: { versionNumber: "asc" } } } },
-        submissions: { orderBy: { attemptNumber: "asc" } },
+        submissions: {
+          orderBy: { attemptNumber: "asc" },
+          include: { fileComments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
+        },
         transitions: { orderBy: [{ occurredAt: "asc" }, { id: "asc" }] },
       },
       orderBy: [{ assignedAt: "desc" }, { id: "asc" }],
@@ -433,7 +443,7 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                   <TableHead>Speaker</TableHead>
                   <TableHead>Task</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Latest response</TableHead>
+                  <TableHead>Response</TableHead>
                   <TableHead>Due date</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
@@ -459,22 +469,49 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                   const revisionAction = requestSpeakerTaskRevision.bind(null, event.slug, assignment.id);
                   const latestSubmission = assignment.submissions.at(-1);
                   const response = latestSubmission?.response;
-                  const responseObject =
-                    typeof response === "object" && response !== null && !Array.isArray(response) ? response : null;
+                  const responseObject = objectValue(response);
                   let responseContent: ReactNode = <span className="text-muted-foreground">No response</span>;
                   if (typeof response === "string") {
                     responseContent = <p className="max-w-64 whitespace-pre-wrap text-sm">{response}</p>;
                   } else if (responseObject?.approved === true) {
                     responseContent = "Completion confirmed";
                   } else if (typeof responseObject?.objectKey === "string" && latestSubmission) {
+                    // Every re-upload is its own attempt and its object is retained, so the
+                    // organizer gets the whole version history rather than only the newest file.
+                    const fileAttempts = assignment.submissions
+                      .map((submission) => ({
+                        id: submission.id,
+                        attemptNumber: submission.attemptNumber,
+                        file: objectValue(submission.response),
+                        comments: submission.fileComments,
+                      }))
+                      .filter((attempt) => typeof attempt.file?.objectKey === "string")
+                      .reverse();
                     responseContent = (
-                      <Button asChild variant="outline" size="sm">
-                        <a
-                          href={`/dashboard/events/${encodeURIComponent(event.slug)}/onboarding/task-files/${assignment.id}/${latestSubmission.attemptNumber}`}
-                        >
-                          Download {typeof responseObject.fileName === "string" ? responseObject.fileName : "file"}
-                        </a>
-                      </Button>
+                      <ul className="flex flex-col gap-1">
+                        {fileAttempts.map((attempt, index) => (
+                          <li className="flex flex-wrap items-center gap-2" key={attempt.attemptNumber}>
+                            <Button asChild variant="outline" size="sm">
+                              <a
+                                href={`/dashboard/events/${encodeURIComponent(event.slug)}/onboarding/task-files/${assignment.id}/${attempt.attemptNumber}`}
+                              >
+                                Download {typeof attempt.file?.fileName === "string" ? attempt.file.fileName : "file"}
+                              </a>
+                            </Button>
+                            <div className="flex flex-col gap-2">
+                              <Badge variant={index === 0 ? "secondary" : "outline"}>
+                                {index === 0 ? "Latest" : `Version ${fileAttempts.length - index}`}
+                              </Badge>
+                              <SpeakerTaskFileComments
+                                comments={attempt.comments}
+                                formAction={commentOnSpeakerTaskFile.bind(null, event.slug, attempt.id)}
+                                inputId={`organizer-file-comment-${assignment.id}-${attempt.attemptNumber}`}
+                                timezone={event.timezone}
+                              />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     );
                   }
                   return (

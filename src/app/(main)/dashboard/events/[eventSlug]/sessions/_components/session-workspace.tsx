@@ -50,13 +50,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { ProgramSessionParticipantRole } from "@/generated/prisma/client";
+import type { ProgramSessionContentApprovalStatus, ProgramSessionParticipantRole } from "@/generated/prisma/client";
 
 import { archiveProgramSession, cloneProgramSession, type SessionMutationState, saveProgramSession } from "../actions";
 
 export interface SessionWorkspaceSession {
   readonly id: string;
   readonly kind: "MANUAL" | "GUARANTEED" | "PROMOTED";
+  readonly contentApprovalStatus: ProgramSessionContentApprovalStatus;
   readonly archived: boolean;
   readonly title: string;
   readonly description: string | null;
@@ -93,6 +94,18 @@ export const participantRoleLabels: Readonly<Record<ProgramSessionParticipantRol
   MODERATOR: "Moderator",
   CHAIRPERSON: "Chairperson",
 };
+
+const contentApprovalLabels: Readonly<Record<ProgramSessionContentApprovalStatus, string>> = {
+  DRAFT: "Draft",
+  IN_REVIEW: "In review",
+  APPROVED: "Approved",
+};
+
+const contentApprovalStatuses = [
+  "DRAFT",
+  "IN_REVIEW",
+  "APPROVED",
+] as const satisfies readonly ProgramSessionContentApprovalStatus[];
 
 function kindLabel(kind: SessionWorkspaceSession["kind"]): string {
   if (kind === "GUARANTEED") return "Guaranteed";
@@ -166,7 +179,7 @@ function SessionForm({
           {!isNew ? (
             <CardAction>
               <Badge variant={session.archived ? "secondary" : "outline"}>
-                {session.archived ? "Archived" : kindLabel(session.kind)}
+                {session.archived ? "Archived" : contentApprovalLabels[session.contentApprovalStatus]}
               </Badge>
             </CardAction>
           ) : null}
@@ -196,6 +209,35 @@ function SessionForm({
                 className="min-h-28"
               />
               <FieldError>{fieldError(state, "description")}</FieldError>
+            </Field>
+            <Field data-invalid={Boolean(fieldError(state, "contentApprovalStatus")) || undefined}>
+              <FieldLabel htmlFor="session-content-approval">Content approval</FieldLabel>
+              <Select
+                name="contentApprovalStatus"
+                defaultValue={session?.contentApprovalStatus ?? "DRAFT"}
+                disabled={session?.archived}
+              >
+                <SelectTrigger
+                  id="session-content-approval"
+                  className="w-full"
+                  aria-invalid={Boolean(fieldError(state, "contentApprovalStatus")) || undefined}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {contentApprovalStatuses.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {contentApprovalLabels[status]}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Only approved sessions are included the next time the program is published.
+              </FieldDescription>
+              <FieldError>{fieldError(state, "contentApprovalStatus")}</FieldError>
             </Field>
             <div className="grid gap-5 sm:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(state, "durationMinutes")) || undefined}>
@@ -484,6 +526,7 @@ export function SessionWorkspace({
                   <TableRow>
                     <TableHead>Session</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Approval</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Track</TableHead>
                     <TableHead className="text-right">Action</TableHead>
@@ -512,6 +555,11 @@ export function SessionWorkspace({
                       <TableCell>
                         <Badge variant={session.archived ? "secondary" : "outline"}>
                           {session.archived ? "Archived" : kindLabel(session.kind)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={session.contentApprovalStatus === "APPROVED" ? "default" : "outline"}>
+                          {contentApprovalLabels[session.contentApprovalStatus]}
                         </Badge>
                       </TableCell>
                       <TableCell>{session.durationMinutes} min</TableCell>

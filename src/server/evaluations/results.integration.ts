@@ -218,8 +218,8 @@ async function createFixture(): Promise<Fixture> {
         roundId: round.id,
         submissionId: firstSubmission.id,
         reviewerId: casey.id,
-        status: EvaluationAssignmentStatus.REVOKED,
-        revokedAt: completedAt,
+        status: EvaluationAssignmentStatus.RECUSED,
+        recusedAt: completedAt,
         evaluation: {
           create: {
             status: EvaluationStatus.FINAL,
@@ -294,7 +294,7 @@ describe("evaluation result aggregation", () => {
     await client.$disconnect();
   });
 
-  test("reports weighted scores, missing values, ties, completion, withdrawals, reopen, and event isolation", async () => {
+  test("reports weighted scores without recused reviews, missing values, completion, reopen, and event isolation", async () => {
     const fixture = await createFixture();
     const workspace = await repository.getWorkspace(fixture.eventId, fixture.roundId);
     assert.equal(workspace.submissions.length, 3);

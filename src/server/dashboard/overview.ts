@@ -126,12 +126,14 @@ export class EventOverviewRepository {
       }),
       new SpeakerTaskMatrixRepository(this.client, this.now).list(eventId, timezone),
       this.client.evaluationAssignment.count({
-        where: { round: { planVersion: { plan: { eventId } } }, revokedAt: null },
+        where: {
+          round: { planVersion: { plan: { eventId } } },
+          status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
+        },
       }),
       this.client.evaluationAssignment.count({
         where: {
           round: { planVersion: { plan: { eventId } } },
-          revokedAt: null,
           status: EvaluationAssignmentStatus.COMPLETED,
         },
       }),

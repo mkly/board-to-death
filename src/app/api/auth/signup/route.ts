@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { auth } from "@/server/auth/auth";
+import { provisionMagicLinkUser } from "@/server/auth/magic-link-user";
 import { createOrganizationSignupIntent, organizationSignupCallback } from "@/server/auth/signup-intent";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -16,8 +17,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const token = await createOrganizationSignupIntent(getDatabaseClient(), parsed.data);
+    const database = getDatabaseClient();
+    const token = await createOrganizationSignupIntent(database, parsed.data);
     const callbackURL = organizationSignupCallback(token);
+    await provisionMagicLinkUser(database, { email: parsed.data.email });
     await auth.api.signInMagicLink({
       headers: request.headers,
       body: {

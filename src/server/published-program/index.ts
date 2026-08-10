@@ -7,6 +7,7 @@ export {
   type PublicProgramReader,
   type PublicProgramResource,
 } from "./public-api.ts";
+export { handlePublishedScheduleFeedOptions } from "./public-feed.ts";
 export {
   type PersistedPublishedProgramVersion,
   type PublicPublishedProgramLookup,

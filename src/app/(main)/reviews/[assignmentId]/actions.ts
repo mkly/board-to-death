@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
@@ -42,6 +43,8 @@ const draftSchema = z.object({
 const submissionSchema = draftSchema.extend({
   recommendation: z.nativeEnum(EvaluationRecommendation),
 });
+
+const recusalSchema = z.object({ assignmentId: z.string().uuid() });
 
 function parseCriteria(formData: FormData): z.infer<typeof criterionSchema>[] {
   const criterionIds = formData.getAll("criterionId");
@@ -122,4 +125,29 @@ export async function submitEvaluation(
     if (error instanceof RepositoryError) return errorState(error.message);
     throw error;
   }
+}
+
+export async function declareEvaluationConflict(
+  _previousState: EvaluationFormState,
+  formData: FormData,
+): Promise<EvaluationFormState> {
+  const { user } = await getReviewerSession();
+  const result = recusalSchema.safeParse({ assignmentId: formData.get("assignmentId") });
+  if (!result.success) return errorState("This reviewer assignment is not available.");
+
+  let eventSlug: string;
+  try {
+    ({ eventSlug } = await new ReviewerWorkspaceRepository(getDatabaseClient()).recuse(
+      user.id,
+      result.data.assignmentId,
+    ));
+  } catch (error) {
+    if (error instanceof RepositoryError) return errorState(error.message);
+    throw error;
+  }
+
+  revalidatePath("/reviews");
+  revalidatePath(`/dashboard/events/${eventSlug}/evaluations/assignments`);
+  revalidatePath(`/dashboard/events/${eventSlug}/evaluations/results`);
+  redirect("/reviews");
 }

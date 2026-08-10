@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
+import {
+  type CustomFieldDefinition,
+  CustomFieldEntityType,
+  CustomFieldType,
+  ProgramSessionContentApprovalStatus,
+} from "@/generated/prisma/client";
 import { customFieldFormPrefix } from "@/lib/custom-fields";
 
 const mocks = vi.hoisted(() => ({
@@ -76,6 +81,7 @@ function sessionForm(): FormData {
   formData.set("sessionId", "");
   formData.set("title", "Atomic custom fields");
   formData.set("description", "");
+  formData.set("contentApprovalStatus", ProgramSessionContentApprovalStatus.DRAFT);
   formData.set("durationMinutes", "45");
   formData.set("trackId", "unassigned");
   formData.set("parentSessionId", "standalone");

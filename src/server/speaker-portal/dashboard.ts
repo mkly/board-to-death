@@ -57,6 +57,11 @@ function questionLabelsFromSnapshot(snapshot: Prisma.JsonValue): Map<string, str
   );
 }
 
+function definitionFromSnapshot(snapshot: Prisma.JsonValue) {
+  const parsed = parseCfpDefinition(snapshot);
+  return parsed.ok ? parsed.definition : null;
+}
+
 /**
  * `allowedEmbedUrls` is nullable, and `SpeakerResourceRepository` keeps the
  * distinction: SQL NULL means the version never configured an allowlist, an
@@ -265,7 +270,7 @@ export class SpeakerPortalRepository {
         status: true,
         submittedAt: true,
         updatedAt: true,
-        formVersion: { select: { title: true } },
+        formVersion: { select: { title: true, form: { select: { key: true } } } },
         categories: {
           orderBy: { sortOrder: "asc" },
           select: { category: { select: { id: true, label: true } } },
@@ -297,6 +302,28 @@ export class SpeakerPortalRepository {
     if (!submission) return null;
 
     const revision = submission.revisions[0];
+    const definition = definitionFromSnapshot(revision?.definitionSnapshot ?? null);
+    const policy = await this.#database.cfpPolicy.findUnique({
+      where: { eventId_key: { eventId: identity.eventId, key: submission.formVersion.form.key } },
+      select: {
+        status: true,
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          take: 1,
+          select: { submissionOpensAt: true, submissionClosesAt: true },
+        },
+      },
+    });
+    const submissionWindow = policy?.versions[0];
+    const now = new Date();
+    const canEdit =
+      definition !== null &&
+      submission.submittedAt !== null &&
+      submission.status !== "DRAFT" &&
+      policy?.status === "PUBLISHED" &&
+      submissionWindow !== undefined &&
+      now >= submissionWindow.submissionOpensAt &&
+      now <= submissionWindow.submissionClosesAt;
     const questionLabels = questionLabelsFromSnapshot(revision?.definitionSnapshot ?? null);
 
     return {
@@ -306,6 +333,8 @@ export class SpeakerPortalRepository {
       submittedAt: submission.submittedAt,
       updatedAt: submission.updatedAt,
       title: submission.formVersion.title,
+      canEdit,
+      definition,
       categories: submission.categories.map(({ category }) => category),
       participants: submission.participants.flatMap(
         ({ speaker, confirmedAt, slidesObjectKey, supportingDocumentObjectKey }) => {
@@ -391,7 +420,13 @@ export class SpeakerPortalRepository {
         },
         submissions: {
           orderBy: { attemptNumber: "asc" },
-          select: { attemptNumber: true, response: true, submittedAt: true },
+          select: {
+            id: true,
+            attemptNumber: true,
+            response: true,
+            submittedAt: true,
+            fileComments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+          },
         },
         transitions: {
           orderBy: [{ occurredAt: "asc" }, { id: "asc" }],

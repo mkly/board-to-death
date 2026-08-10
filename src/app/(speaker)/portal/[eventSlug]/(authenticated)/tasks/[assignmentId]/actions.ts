@@ -10,11 +10,31 @@ import { RepositoryError } from "@/server/events/repositories";
 import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { SpeakerOnboardingRepository, speakerTaskResponseKind } from "@/server/speakers";
+import { addSpeakerTaskFileComment } from "@/server/speakers/file-comments";
 
 import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 
 const MAX_RESPONSE_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_RESPONSE_FILE_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain"]);
+
+export async function commentOnSpeakerTaskFile(
+  eventSlug: string,
+  assignmentId: string,
+  submissionId: string,
+  formData: FormData,
+): Promise<void> {
+  const { viewer } = await requirePortalContent(eventSlug, "tasks");
+  const value = formData.get("comment");
+  await addSpeakerTaskFileComment(
+    getDatabaseClient(),
+    viewer.eventId,
+    submissionId,
+    { role: "SPEAKER", speakerId: viewer.speakerId },
+    typeof value === "string" ? value : "",
+  );
+  revalidatePath(portalHref(eventSlug, `/tasks/${assignmentId}`));
+  revalidatePath(`/dashboard/events/${eventSlug}/onboarding`);
+}
 
 export interface TaskSubmissionState {
   readonly message: string;

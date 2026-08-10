@@ -5,6 +5,47 @@ export interface CfpNormalizedAnswer {
   readonly value: boolean | number | string | readonly string[];
 }
 
+export const PROPOSAL_TITLE_QUESTION_IDS: ReadonlySet<string> = new Set([
+  "title",
+  "proposal-title",
+  "session-title",
+  "talk-title",
+]);
+export const PROPOSAL_TITLE_QUESTION_LABELS: ReadonlySet<string> = new Set([
+  "title",
+  "proposal title",
+  "session title",
+  "talk title",
+]);
+
+function normalizedQuestionLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function answerByQuestionMatch(
+  definition: CfpFormDefinition,
+  answers: readonly { readonly questionId: string; readonly value: unknown }[],
+  questionIds: ReadonlySet<string>,
+  questionLabels: ReadonlySet<string>,
+): string | null {
+  const matchingQuestion = definition.sections
+    .flatMap(({ questions }) => questions)
+    .find(({ id, label }) => questionIds.has(id) || questionLabels.has(normalizedQuestionLabel(label)));
+  const answer = answers.find(({ questionId }) => questionId === matchingQuestion?.id)?.value;
+  return typeof answer === "string" && answer.trim() !== "" ? answer.trim() : null;
+}
+
+export function proposalTitleFromAnswers(
+  definition: CfpFormDefinition,
+  answers: readonly { readonly questionId: string; readonly value: unknown }[],
+): string | null {
+  return answerByQuestionMatch(definition, answers, PROPOSAL_TITLE_QUESTION_IDS, PROPOSAL_TITLE_QUESTION_LABELS);
+}
+
 export type CfpAnswerValidationResult =
   | { readonly ok: true; readonly answers: readonly CfpNormalizedAnswer[]; readonly categoryKeys: readonly string[] }
   | { readonly ok: false; readonly errors: Readonly<Record<string, readonly string[]>> };

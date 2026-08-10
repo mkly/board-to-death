@@ -12,7 +12,10 @@ import {
   PrismaClient,
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
+import { RepositoryError } from "../events/repositories.ts";
 import { EvaluationAssignmentRepository } from "./assignments.ts";
+import { EvaluationReminderRepository } from "./reminders.ts";
+import { EvaluationPlanRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -21,6 +24,8 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for reviewer assignm
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const repository = new EvaluationAssignmentRepository(client);
+const plans = new EvaluationPlanRepository(client);
+const reminderRepository = new EvaluationReminderRepository(client);
 
 interface Fixture {
   readonly eventId: string;
@@ -33,6 +38,9 @@ interface Fixture {
   readonly otherReviewerId: string;
   readonly committeeId: string;
   readonly otherCommitteeId: string;
+  readonly formVersionId: string;
+  readonly designCategoryId: string;
+  readonly strategyCategoryId: string;
   readonly firstSubmissionId: string;
   readonly secondSubmissionId: string;
   readonly draftSubmissionId: string;
@@ -73,6 +81,11 @@ async function createFixture(): Promise<Fixture> {
   assert.ok(formVersion);
   assert.ok(otherFormVersion);
 
+  const [designCategory, strategyCategory] = await Promise.all([
+    client.cfpCategory.create({ data: { eventId: event.id, key: "design", label: "Game design" } }),
+    client.cfpCategory.create({ data: { eventId: event.id, key: "strategy", label: "Strategy" } }),
+  ]);
+
   const [firstSubmission, secondSubmission, draftSubmission, otherSubmission] = await Promise.all([
     client.cfpSubmission.create({
       data: {
@@ -81,6 +94,7 @@ async function createFixture(): Promise<Fixture> {
         kind: CfpSubmissionKind.ABSTRACT,
         status: CfpSubmissionStatus.SUBMITTED,
         submittedAt: new Date("2027-01-10T18:00:00.000Z"),
+        categories: { create: { categoryId: designCategory.id, sortOrder: 0 } },
       },
     }),
     client.cfpSubmission.create({
@@ -91,6 +105,7 @@ async function createFixture(): Promise<Fixture> {
         status: CfpSubmissionStatus.UNDER_REVIEW,
         submittedAt: new Date("2027-01-11T18:00:00.000Z"),
         reviewStartedAt: new Date("2027-01-12T18:00:00.000Z"),
+        categories: { create: { categoryId: strategyCategory.id, sortOrder: 0 } },
       },
     }),
     client.cfpSubmission.create({
@@ -218,6 +233,9 @@ async function createFixture(): Promise<Fixture> {
     otherReviewerId: otherReviewer.id,
     committeeId: committee.id,
     otherCommitteeId: otherCommittee.id,
+    formVersionId: formVersion.id,
+    designCategoryId: designCategory.id,
+    strategyCategoryId: strategyCategory.id,
     firstSubmissionId: firstSubmission.id,
     secondSubmissionId: secondSubmission.id,
     draftSubmissionId: draftSubmission.id,
@@ -268,6 +286,55 @@ describe("reviewer and committee assignments", () => {
     );
   });
 
+  test("auto-distributes uncovered submissions evenly with a per-reviewer cap and track filter", async () => {
+    const fixture = await createFixture();
+    const thirdSubmission = await client.cfpSubmission.create({
+      data: {
+        eventId: fixture.eventId,
+        formVersionId: fixture.formVersionId,
+        kind: CfpSubmissionKind.ABSTRACT,
+        status: CfpSubmissionStatus.SUBMITTED,
+        submittedAt: new Date("2027-01-12T18:00:00.000Z"),
+        categories: { create: { categoryId: fixture.strategyCategoryId, sortOrder: 0 } },
+      },
+    });
+    const reviewerIds = [fixture.sourceReviewerId, fixture.targetReviewerId];
+
+    assert.deepEqual(
+      await repository.autoDistribute({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        reviewerIds,
+        perReviewerCap: 1,
+        trackId: fixture.designCategoryId,
+      }),
+      { assignmentsCreated: 1, submissionsSkipped: 0 },
+    );
+    assert.deepEqual(
+      await repository.autoDistribute({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        reviewerIds,
+        perReviewerCap: 1,
+      }),
+      { assignmentsCreated: 1, submissionsSkipped: 1 },
+    );
+
+    const assignments = await client.evaluationAssignment.findMany({
+      where: { roundId: fixture.openRoundId, status: EvaluationAssignmentStatus.ASSIGNED },
+      orderBy: { reviewerId: "asc" },
+    });
+    assert.equal(assignments.length, 2);
+    assert.deepEqual(
+      reviewerIds.map((reviewerId) => assignments.filter((assignment) => assignment.reviewerId === reviewerId).length),
+      [1, 1],
+    );
+    assert.equal(
+      assignments.some(({ submissionId }) => submissionId === thirdSubmission.id),
+      false,
+    );
+  });
+
   test("bulk reassigns and withdraws active reviewer assignments", async () => {
     const fixture = await createFixture();
     const submissionIds = [fixture.firstSubmissionId, fixture.secondSubmissionId];
@@ -308,6 +375,76 @@ describe("reviewer and committee assignments", () => {
       where: { roundId: fixture.openRoundId, status: EvaluationAssignmentStatus.ASSIGNED },
     });
     assert.equal(active, 0);
+  });
+
+  test("flags a recusal in the organizer workspace and preserves it when assigning a replacement", async () => {
+    const fixture = await createFixture();
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+    const source = await client.evaluationAssignment.findFirstOrThrow({
+      where: {
+        roundId: fixture.openRoundId,
+        submissionId: fixture.firstSubmissionId,
+        reviewerId: fixture.sourceReviewerId,
+      },
+    });
+    await client.evaluationAssignment.update({
+      where: { id: source.id },
+      data: { status: EvaluationAssignmentStatus.RECUSED, recusedAt: new Date("2027-01-18T18:00:00.000Z") },
+    });
+
+    const workspace = await repository.getWorkspace(fixture.eventId, fixture.openRoundId);
+    const submission = workspace.submissions.find(({ id }) => id === fixture.firstSubmissionId);
+    assert.equal(submission?.coverageStatus, "UNDER_ASSIGNED");
+    assert.equal(submission?.assignments[0]?.status, EvaluationAssignmentStatus.RECUSED);
+
+    assert.equal(
+      await repository.reassign({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        fromReviewerId: fixture.sourceReviewerId,
+        reviewerId: fixture.targetReviewerId,
+        submissionIds: [fixture.firstSubmissionId],
+      }),
+      1,
+    );
+    const assignments = await client.evaluationAssignment.findMany({
+      where: { roundId: fixture.openRoundId, submissionId: fixture.firstSubmissionId },
+      orderBy: { assignedAt: "asc" },
+    });
+    assert.equal(assignments.find(({ reviewerId }) => reviewerId === fixture.sourceReviewerId)?.status, "RECUSED");
+    assert.equal(assignments.find(({ reviewerId }) => reviewerId === fixture.targetReviewerId)?.status, "ASSIGNED");
+  });
+
+  test("does not let a recused assignment block closing the round", async () => {
+    const fixture = await createFixture();
+    // The round closes at the wall clock, so it must have opened before it.
+    await client.evaluationRound.update({
+      where: { id: fixture.openRoundId },
+      data: { opensAt: new Date("2020-01-15T18:00:00.000Z") },
+    });
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+    await assert.rejects(
+      plans.transition(fixture.eventId, fixture.openRoundId, EvaluationRoundStatus.CLOSED),
+      (error: unknown) => error instanceof RepositoryError && error.code === "invalid-input",
+    );
+
+    await client.evaluationAssignment.updateMany({
+      where: { roundId: fixture.openRoundId, reviewerId: fixture.sourceReviewerId },
+      data: { status: EvaluationAssignmentStatus.RECUSED, recusedAt: new Date("2027-01-18T18:00:00.000Z") },
+    });
+
+    const closed = await plans.transition(fixture.eventId, fixture.openRoundId, EvaluationRoundStatus.CLOSED);
+    assert.equal(closed.status, EvaluationRoundStatus.CLOSED);
   });
 
   test("bulk assigns current committee members and deduplicates overlapping individual and committee coverage", async () => {
@@ -472,6 +609,78 @@ describe("reviewer and committee assignments", () => {
     await assert.rejects(
       repository.getWorkspace(fixture.otherEventId, fixture.openRoundId),
       /selected open evaluation round/,
+    );
+  });
+
+  test("queues one auditable reminder delivery for selected reviewers with outstanding work", async () => {
+    const fixture = await createFixture();
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId, fixture.secondSubmissionId],
+    });
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.targetReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+
+    const queued = await reminderRepository.queue({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerIds: [fixture.sourceReviewerId, fixture.targetReviewerId],
+    });
+    assert.equal(queued.recipientCount, 2);
+
+    const delivery = await client.messageDelivery.findUniqueOrThrow({
+      where: { id: queued.deliveryId },
+      include: { recipients: { orderBy: { email: "asc" } } },
+    });
+    assert.match(delivery.occurrenceKey ?? "", new RegExp(`^evaluation-review-reminder:${fixture.openRoundId}:`));
+    assert.deepEqual(
+      delivery.recipients.map(({ recipientKey }) => recipientKey).sort(),
+      [`evaluation-reviewer:${fixture.sourceReviewerId}`, `evaluation-reviewer:${fixture.targetReviewerId}`].sort(),
+    );
+
+    const workspace = await reminderRepository.getWorkspace(fixture.eventId, fixture.openRoundId);
+    assert.deepEqual(
+      workspace.targets.map(({ reviewerId, assignedCount, completedCount, outstandingCount, lastReminderAt }) => ({
+        reviewerId,
+        assignedCount,
+        completedCount,
+        outstandingCount,
+        lastReminderAt,
+      })),
+      [
+        {
+          reviewerId: fixture.sourceReviewerId,
+          assignedCount: 2,
+          completedCount: 0,
+          outstandingCount: 2,
+          lastReminderAt: delivery.createdAt,
+        },
+        {
+          reviewerId: fixture.targetReviewerId,
+          assignedCount: 1,
+          completedCount: 0,
+          outstandingCount: 1,
+          lastReminderAt: delivery.createdAt,
+        },
+      ],
+    );
+    assert.deepEqual(workspace.deliveries, [
+      { deliveryId: delivery.id, createdAt: delivery.createdAt, recipientCount: 2 },
+    ]);
+
+    await assert.rejects(
+      reminderRepository.queue({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        reviewerIds: [fixture.otherReviewerId],
+      }),
+      /outstanding assignment/,
     );
   });
 });

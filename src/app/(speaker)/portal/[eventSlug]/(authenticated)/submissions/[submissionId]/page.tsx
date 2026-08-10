@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ArrowLeftIcon, CircleCheckIcon, FileTextIcon, UsersRoundIcon } from "lucide-react";
+import { ArrowLeftIcon, CircleCheckIcon, FileTextIcon, LockKeyholeIcon, UsersRoundIcon } from "lucide-react";
 
 import type { CustomFieldInputDefinition } from "@/components/custom-fields/custom-field-inputs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,6 +16,7 @@ import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
 import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 import { PortalSectionHeading, SubmissionStatus } from "../../_components/portal-content";
+import { ApplicantSubmissionEditor } from "./_components/applicant-submission-editor";
 import { SubmissionCustomFields } from "./_components/submission-custom-fields";
 import { SubmissionParticipantFiles } from "./_components/submission-participant-files";
 
@@ -84,6 +85,15 @@ export default async function SpeakerSubmissionPage({ params, searchParams }: Sp
         title={submission.title}
         description="Your event submission details and participants."
       />
+      {!submission.canEdit ? (
+        <Alert>
+          <LockKeyholeIcon />
+          <AlertTitle>Proposal editing is closed</AlertTitle>
+          <AlertDescription>
+            The call for proposals is no longer accepting changes. Your saved submission remains available below.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
         <Card>
           <CardHeader>
@@ -150,6 +160,14 @@ export default async function SpeakerSubmissionPage({ params, searchParams }: Sp
           </CardContent>
         </Card>
       </div>
+      {submission.canEdit && submission.definition ? (
+        <ApplicantSubmissionEditor
+          definition={submission.definition}
+          eventSlug={eventSlug}
+          initialAnswers={Object.fromEntries(submission.answers.map(({ questionId, value }) => [questionId, value]))}
+          submissionId={submissionId}
+        />
+      ) : null}
       <SubmissionCustomFields
         definitions={editableDefinitions.map(inputDefinition)}
         eventSlug={eventSlug}

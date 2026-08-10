@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import {
   CfpAdminRole,
   CfpDraftPolicy,
+  CfpPolicyStatus,
   CfpSubmissionKind,
   CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
@@ -41,7 +42,7 @@ const eventInput = {
   endsAt: new Date("2027-03-15T00:00:00.000Z"),
 } as const;
 
-function definition(title = "Board Game Design CFP"): CfpFormDefinition {
+function definition(title = "Board Game Design CFP", acceptsSpeakers = false): CfpFormDefinition {
   return {
     version: 1,
     title,
@@ -49,6 +50,7 @@ function definition(title = "Board Game Design CFP"): CfpFormDefinition {
       { id: "design", label: "Game design" },
       { id: "strategy", label: "Strategy" },
     ],
+    ...(acceptsSpeakers ? { minimumSpeakerCount: 1, maximumSpeakerCount: 4, requiredSpeakerFields: [] } : {}),
     sections: [
       {
         id: "proposal",
@@ -63,13 +65,20 @@ function definition(title = "Board Game Design CFP"): CfpFormDefinition {
   };
 }
 
-async function createEventAndForm(slug: string = eventInput.slug): Promise<{ eventId: string; formVersionId: string }> {
+async function createEventAndForm(
+  slug: string = eventInput.slug,
+  acceptsSpeakers = false,
+): Promise<{ eventId: string; formId: string; formVersionId: string }> {
   const event = await events.create({ ...eventInput, slug, name: slug });
-  const form = await forms.create({ eventId: event.id, key: "main-cfp", definition: definition() });
+  const form = await forms.create({
+    eventId: event.id,
+    key: "main-cfp",
+    definition: definition(undefined, acceptsSpeakers),
+  });
   const version = await client.cfpFormVersion.findUniqueOrThrow({
     where: { formId_versionNumber: { formId: form.formId, versionNumber: form.versionNumber } },
   });
-  return { eventId: event.id, formVersionId: version.id };
+  return { eventId: event.id, formId: form.formId, formVersionId: version.id };
 }
 
 async function expectRepositoryError(promise: Promise<unknown>, code: RepositoryError["code"]): Promise<void> {
@@ -219,6 +228,109 @@ describe("CFP submission persistence", () => {
         where: { submissionId: idempotencyKey, kind: CfpSubmissionRevisionKind.FINAL },
       }),
       1,
+    );
+  });
+
+  test("lets a participant update a submitted proposal while its CFP is open and exposes the latest revision", async () => {
+    const { eventId, formId, formVersionId } = await createEventAndForm("applicant-editing", true);
+    const owner = await administrators.create({
+      eventId,
+      externalId: "applicant-editing-owner@example.test",
+      displayName: "Applicant Editing Owner",
+    });
+    await policies.create({
+      eventId,
+      key: "main-cfp",
+      definition: policyDefinition(owner.id, 3),
+    });
+    const policy = await policies.publishByForm(eventId, formId, 1, owner.externalId);
+    const submission = await submissions.createFinalized({
+      eventId,
+      formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      idempotencyKey: randomUUID(),
+      answers: [
+        { questionId: "abstract", value: "Original abstract" },
+        { questionId: "duration", value: 30 },
+      ],
+      participants: [{ email: "applicant@example.test", givenName: "Ada", familyName: "Applicant" }],
+    });
+    const participant = await client.cfpSubmissionParticipant.findFirstOrThrow({
+      where: { eventId, submissionId: submission.id },
+      select: { speakerId: true },
+    });
+
+    const updated = await submissions.updateByApplicant(eventId, submission.id, {
+      speakerId: participant.speakerId,
+      answers: [
+        { questionId: "abstract", value: "Updated abstract" },
+        { questionId: "duration", value: 45 },
+      ],
+    });
+
+    assert.deepEqual(
+      updated.revisions.map(({ kind, versionNumber }) => [versionNumber, kind]),
+      [
+        [1, CfpSubmissionRevisionKind.FINAL],
+        [2, CfpSubmissionRevisionKind.FINAL],
+      ],
+    );
+    assert.deepEqual(updated.revisions[1]?.answers, [
+      { questionId: "abstract", value: "Updated abstract" },
+      { questionId: "duration", value: 45 },
+    ]);
+    assert.deepEqual((await submissions.getDetailByEventSlug("applicant-editing", submission.id))?.revision?.answers, [
+      { questionId: "abstract", value: "Updated abstract" },
+      { questionId: "duration", value: 45 },
+    ]);
+
+    await policies.transition(eventId, policy.id, CfpPolicyStatus.CLOSED, owner.id);
+    await expectRepositoryError(
+      submissions.updateByApplicant(eventId, submission.id, {
+        speakerId: participant.speakerId,
+        answers: [
+          { questionId: "abstract", value: "Too late" },
+          { questionId: "duration", value: 60 },
+        ],
+      }),
+      "invalid-input",
+    );
+  });
+
+  test("does not let a different speaker edit an applicant submission", async () => {
+    const { eventId, formId, formVersionId } = await createEventAndForm("applicant-editing-ownership", true);
+    const owner = await administrators.create({
+      eventId,
+      externalId: "applicant-editing-ownership-owner@example.test",
+      displayName: "Applicant Editing Owner",
+    });
+    await policies.create({
+      eventId,
+      key: "main-cfp",
+      definition: policyDefinition(owner.id, 3),
+    });
+    await policies.publishByForm(eventId, formId, 1, owner.externalId);
+    const submission = await submissions.createFinalized({
+      eventId,
+      formVersionId,
+      kind: CfpSubmissionKind.ABSTRACT,
+      idempotencyKey: randomUUID(),
+      answers: [
+        { questionId: "abstract", value: "Private proposal" },
+        { questionId: "duration", value: 30 },
+      ],
+      participants: [{ email: "owner@example.test", givenName: "Proposal", familyName: "Owner" }],
+    });
+
+    await expectRepositoryError(
+      submissions.updateByApplicant(eventId, submission.id, {
+        speakerId: randomUUID(),
+        answers: [
+          { questionId: "abstract", value: "Unauthorized edit" },
+          { questionId: "duration", value: 45 },
+        ],
+      }),
+      "not-found",
     );
   });
 

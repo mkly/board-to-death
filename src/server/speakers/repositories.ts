@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "../../generated/prisma/client.ts";
+import type { Prisma, PrismaClient, SpeakerWorkflowStatus } from "../../generated/prisma/client.ts";
 import { resolvePersonIdentity } from "../contacts/person-identity.ts";
 import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
@@ -43,6 +43,7 @@ export interface PersistedSpeakerProfile extends Required<Omit<SpeakerProfileInp
 export interface PersistedSpeaker {
   readonly id: string;
   readonly eventId: string;
+  readonly workflowStatus: SpeakerWorkflowStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly profile: PersistedSpeakerProfile;
@@ -199,6 +200,7 @@ function fromStored(stored: StoredSpeaker): PersistedSpeaker {
   return {
     id: stored.id,
     eventId: stored.eventId,
+    workflowStatus: stored.workflowStatus,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
     profile,
@@ -309,6 +311,23 @@ export class SpeakerRepository {
           },
         });
       });
+      return await this.require(eventId, speakerId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async updateWorkflowStatus(
+    eventId: string,
+    speakerId: string,
+    workflowStatus: SpeakerWorkflowStatus,
+  ): Promise<PersistedSpeaker> {
+    try {
+      const updated = await this.client.speaker.updateMany({
+        where: { eventId, id: speakerId },
+        data: { workflowStatus },
+      });
+      if (updated.count === 0) throw new RepositoryError("not-found", "The event-owned speaker was not found.");
       return await this.require(eventId, speakerId);
     } catch (error) {
       return mapDatabaseError(error);

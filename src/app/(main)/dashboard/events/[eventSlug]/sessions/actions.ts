@@ -6,7 +6,12 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
-import { CustomFieldEntityType, CustomFieldType, ProgramSessionParticipantRole } from "@/generated/prisma/client";
+import {
+  CustomFieldEntityType,
+  CustomFieldType,
+  ProgramSessionContentApprovalStatus,
+  ProgramSessionParticipantRole,
+} from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { type PreparedCustomFieldFile, prepareCustomFieldFile, putCustomFieldFile } from "@/server/custom-fields/files";
@@ -30,6 +35,7 @@ const sessionFormSchema = z
     sessionId: z.string().trim(),
     title: z.string().trim().min(1, "Enter a session title.").max(200, "Keep the title under 200 characters."),
     description: z.string().trim().max(5_000, "Keep the description under 5,000 characters."),
+    contentApprovalStatus: z.enum(ProgramSessionContentApprovalStatus),
     durationMinutes: z.coerce
       .number({ error: "Enter a duration in minutes." })
       .int("Duration must be a whole number of minutes.")
@@ -106,6 +112,7 @@ export async function saveProgramSession(
     sessionId: stringValue(formData, "sessionId"),
     title: stringValue(formData, "title"),
     description: stringValue(formData, "description"),
+    contentApprovalStatus: stringValue(formData, "contentApprovalStatus"),
     durationMinutes: stringValue(formData, "durationMinutes"),
     trackId: stringValue(formData, "trackId"),
     parentSessionId: stringValue(formData, "parentSessionId"),
@@ -159,6 +166,7 @@ export async function saveProgramSession(
   const input = {
     title: parsed.data.title,
     description: parsed.data.description === "" ? null : parsed.data.description,
+    contentApprovalStatus: parsed.data.contentApprovalStatus,
     durationMinutes: parsed.data.durationMinutes,
     trackId: parsed.data.trackId === "unassigned" || parsed.data.trackId === "" ? null : parsed.data.trackId,
     parentSessionId:

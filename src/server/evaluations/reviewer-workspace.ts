@@ -284,7 +284,7 @@ async function loadMutableAssignment(
   const assignment = await transaction.evaluationAssignment.findFirst({
     where: {
       id: assignmentId,
-      status: { not: EvaluationAssignmentStatus.REVOKED },
+      status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
       reviewer: {
         identityId,
         status: EvaluationReviewerStatus.ACTIVE,
@@ -477,7 +477,7 @@ export class ReviewerWorkspaceRepository {
       resolveMembershipPrincipal(this.client, identityId),
       this.client.evaluationAssignment.findMany({
         where: {
-          status: { not: EvaluationAssignmentStatus.REVOKED },
+          status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
           reviewer: {
             identityId,
             status: EvaluationReviewerStatus.ACTIVE,
@@ -515,7 +515,7 @@ export class ReviewerWorkspaceRepository {
     const assignment = await this.client.evaluationAssignment.findFirst({
       where: {
         id: assignmentId,
-        status: { not: EvaluationAssignmentStatus.REVOKED },
+        status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
         reviewer: {
           identityId,
           status: EvaluationReviewerStatus.ACTIVE,
@@ -578,6 +578,82 @@ export class ReviewerWorkspaceRepository {
         };
       }),
     };
+  }
+
+  async recuse(identityId: string, assignmentId: string): Promise<{ readonly eventSlug: string }> {
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        const assignment = await transaction.evaluationAssignment.findFirst({
+          where: {
+            id: assignmentId,
+            reviewer: {
+              identityId,
+              status: EvaluationReviewerStatus.ACTIVE,
+              event: {
+                memberships: {
+                  some: {
+                    userId: identityId,
+                    status: MembershipStatus.ACTIVE,
+                    roles: { has: EventMembershipRole.REVIEWER },
+                  },
+                },
+              },
+            },
+            round: {
+              status: EvaluationRoundStatus.OPEN,
+              planVersion: { status: EvaluationPlanVersionStatus.ACTIVE },
+            },
+          },
+          select: {
+            id: true,
+            status: true,
+            reviewer: { select: { identityId: true } },
+            round: {
+              select: {
+                planVersion: {
+                  select: { plan: { select: { event: { select: { id: true, slug: true } } } } },
+                },
+              },
+            },
+          },
+        });
+        if (!assignment) throw new RepositoryError("not-found", "The reviewer assignment was not found.");
+        const event = assignment.round.planVersion.plan.event;
+        const { principal } = await resolveMembershipPrincipal(transaction, identityId);
+        authorizeEventResource(principal, {
+          eventId: event.id,
+          kind: "review",
+          action: "write",
+          assignedReviewerIds: [assignment.reviewer.identityId],
+        });
+        if (assignment.status === EvaluationAssignmentStatus.RECUSED) return { eventSlug: event.slug };
+        if (
+          assignment.status !== EvaluationAssignmentStatus.ASSIGNED &&
+          assignment.status !== EvaluationAssignmentStatus.COMPLETED
+        ) {
+          throw new RepositoryError("invalid-input", "This reviewer assignment is no longer active.");
+        }
+        const updated = await transaction.evaluationAssignment.updateMany({
+          where: {
+            id: assignment.id,
+            status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
+          },
+          data: { status: EvaluationAssignmentStatus.RECUSED, recusedAt: new Date() },
+        });
+        if (updated.count === 0) {
+          const current = await transaction.evaluationAssignment.findUnique({
+            where: { id: assignment.id },
+            select: { status: true },
+          });
+          if (current?.status !== EvaluationAssignmentStatus.RECUSED) {
+            throw new RepositoryError("conflict", "This reviewer assignment changed. Reload and try again.");
+          }
+        }
+        return { eventSlug: event.slug };
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
   }
 
   async saveDraft(identityId: string, assignmentId: string, input: EvaluationDraftInput): Promise<void> {
