@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { parseCfpDefinition } from "../../lib/cfp/index.ts";
 import { parsePortalFormAnswers, parsePortalFormDefinition } from "../../lib/portal-forms.ts";
 import { LIST_BOUNDS } from "../database/list-bounds.ts";
-import { resolveParticipantPortal } from "../participant-portals.ts";
+import { resolveParticipantPortalForSpeaker } from "../participant-portals.ts";
 
 export interface SpeakerPortalIdentity {
   readonly eventId: string;
@@ -101,6 +101,10 @@ export class SpeakerPortalRepository {
           },
         },
         profileVersions: currentProfile,
+        // Portal audience matching reads these off the speaker we already have,
+        // rather than loading the same row a second time.
+        programSessionParticipants: { select: { role: true } },
+        submissions: { select: { submission: { select: { status: true } } } },
       },
     });
     const profile = speaker?.profileVersions[0];
@@ -176,7 +180,11 @@ export class SpeakerPortalRepository {
         orderBy: [{ dueAt: "asc" }, { assignedAt: "asc" }, { id: "asc" }],
       }),
       this.listResources(identity.eventId),
-      resolveParticipantPortal(this.#database, identity),
+      resolveParticipantPortalForSpeaker(this.#database, identity.eventId, {
+        profileVersions: [{ email: profile.email }],
+        programSessionParticipants: speaker.programSessionParticipants,
+        submissions: speaker.submissions,
+      }),
     ]);
 
     const visibleSessions = storedSessions.flatMap((session) => {

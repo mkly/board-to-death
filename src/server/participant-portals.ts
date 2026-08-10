@@ -160,30 +160,42 @@ export function portalMatchesParticipant(portal: ParticipantPortalConfig, traits
   );
 }
 
-export async function resolveParticipantPortal(
+/**
+ * The speaker fields portal audience rules are matched against. Callers that
+ * already load the speaker can select this fragment and hand the row to
+ * {@link resolveParticipantPortalForSpeaker} instead of paying for a second read.
+ */
+export const PARTICIPANT_PORTAL_TRAITS_SELECT = {
+  profileVersions: { orderBy: { versionNumber: "desc" as const }, take: 1, select: { email: true } },
+  programSessionParticipants: { select: { role: true } },
+  submissions: { select: { submission: { select: { status: true } } } },
+};
+
+export interface ParticipantPortalTraitsSource {
+  readonly profileVersions: readonly { readonly email: string }[];
+  readonly programSessionParticipants: readonly { readonly role: string }[];
+  readonly submissions: readonly { readonly submission: { readonly status: string } }[];
+}
+
+export async function resolveParticipantPortalForSpeaker(
   database: PrismaClient,
-  identity: { readonly eventId: string; readonly speakerId: string },
+  eventId: string,
+  speaker: ParticipantPortalTraitsSource | null,
 ): Promise<ParticipantPortalConfig> {
-  const [portals, speaker] = await Promise.all([
-    listParticipantPortals(database, identity.eventId),
-    database.speaker.findFirst({
-      where: { eventId: identity.eventId, id: identity.speakerId },
-      select: {
-        profileVersions: { orderBy: { versionNumber: "desc" }, take: 1, select: { email: true } },
-        programSessionParticipants: { select: { role: true } },
-        submissions: { select: { submission: { select: { status: true } } } },
-      },
-    }),
-  ]);
+  const portals = await listParticipantPortals(database, eventId);
   if (!speaker || portals.length === 0) return DEFAULT_PARTICIPANT_PORTAL;
 
+  // Group membership is a separate read keyed by email, so only pay for it when
+  // some portal actually narrows its audience by group kind.
   const email = speaker.profileVersions[0]?.email;
-  const groupMemberships = email
-    ? await database.contactGroupMember.findMany({
-        where: { eventId: identity.eventId, contact: { email: { equals: email, mode: "insensitive" } } },
-        select: { group: { select: { kind: true } } },
-      })
-    : [];
+  const usesGroupKinds = portals.some((portal) => portal.audienceRules.groupKinds.length > 0);
+  const groupMemberships =
+    email && usesGroupKinds
+      ? await database.contactGroupMember.findMany({
+          where: { eventId, contact: { email: { equals: email, mode: "insensitive" } } },
+          select: { group: { select: { kind: true } } },
+        })
+      : [];
   const traits: ParticipantTraits = {
     roles: new Set(speaker.programSessionParticipants.map(({ role }) => role)),
     submissionStatuses: new Set(speaker.submissions.map(({ submission }) => submission.status)),
@@ -194,4 +206,15 @@ export async function resolveParticipantPortal(
     portals.find((portal) => portal.isDefault) ??
     DEFAULT_PARTICIPANT_PORTAL
   );
+}
+
+export async function resolveParticipantPortal(
+  database: PrismaClient,
+  identity: { readonly eventId: string; readonly speakerId: string },
+): Promise<ParticipantPortalConfig> {
+  const speaker = await database.speaker.findFirst({
+    where: { eventId: identity.eventId, id: identity.speakerId },
+    select: PARTICIPANT_PORTAL_TRAITS_SELECT,
+  });
+  return resolveParticipantPortalForSpeaker(database, identity.eventId, speaker);
 }
