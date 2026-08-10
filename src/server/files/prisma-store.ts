@@ -87,6 +87,7 @@ export function createPrismaFileRequestStore(client: PrismaClient): FileRequestS
         const file = await transaction.fileRequestFile.create({
           data: {
             assignmentId: input.assignmentId,
+            uploadedByContactId: input.uploadedByContactId,
             objectKey: input.objectKey,
             fileName: input.fileName,
             contentType: input.contentType,

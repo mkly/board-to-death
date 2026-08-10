@@ -1,6 +1,8 @@
 import { type BrowserContext, expect, test } from "@playwright/test";
 
+import { magicLinkRequestUrl } from "./fixtures/magic-link-webhook";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
 const runFile = promisify(execFile);
@@ -55,8 +57,18 @@ test("creates, assigns, edits, withdraws, and archives an event-scoped file requ
   await expect(page.getByText("Return the countersigned PDF.")).toBeVisible();
   await expect(page.getByText("Nothing assigned yet")).toBeVisible();
 
+  const fulfillmentRequestUrl = magicLinkRequestUrl(randomUUID());
+  const registration = await fetch(fulfillmentRequestUrl, { method: "POST" });
+  expect(registration.ok).toBe(true);
+  const fulfillmentDelivery = fetch(fulfillmentRequestUrl);
+  fulfillmentDelivery.catch(() => undefined);
+
   await page.getByLabel("Target").selectOption({ label: `${fixture.contactLabel} — Reed Robotics` });
   await page.getByRole("button", { name: "Assign", exact: true }).click();
+  const delivery = await fulfillmentDelivery;
+  expect(delivery.ok).toBe(true);
+  const { url: fulfillmentUrl } = (await delivery.json()) as { url: string };
+  expect(new URL(fulfillmentUrl).pathname).toMatch(/^\/file-requests\/[^/]+$/);
   await expect(page.getByRole("row", { name: new RegExp(`${fixture.contactLabel}.*pending`) })).toBeVisible();
   await expect(page.getByText("version 1 · 5 MB max")).toBeVisible();
 

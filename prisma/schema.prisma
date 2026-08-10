@@ -778,6 +778,8 @@ model Contact {
   primaryForGroups ContactGroup[] @relation("ContactGroupPrimaryContact")
   acceptedIntakeSubmissions ContactGroupIntakeSubmission[]
   assignments  FileRequestAssignment[]
+  fileRequestFulfillmentLinks FileRequestFulfillmentLink[]
+  uploadedRequestFiles FileRequestFile[]
   customFieldValues CustomFieldValue[]
 
   @@unique([eventId, email])
@@ -976,6 +978,7 @@ model FileRequestAssignment {
   group            ContactGroup?               @relation(fields: [eventId, groupId], references: [eventId, id], onDelete: Restrict)
   submission       CfpSubmission?              @relation(fields: [eventId, submissionId], references: [eventId, id], onDelete: Restrict)
   files            FileRequestFile[]
+  fulfillmentLinks FileRequestFulfillmentLink[]
 
   @@unique([eventId, id])
   @@unique([requestId, contactId])
@@ -987,19 +990,38 @@ model FileRequestAssignment {
 }
 
 model FileRequestFile {
-  id           String                @id @default(uuid()) @db.Uuid
-  assignmentId String                @db.Uuid
-  objectKey    String                @unique
-  fileName     String
-  contentType  String
-  size         Int
-  uploadedAt   DateTime              @default(now()) @db.Timestamptz(3)
-  supersededAt DateTime?             @db.Timestamptz(3)
-  assignment   FileRequestAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  id                  String                @id @default(uuid()) @db.Uuid
+  assignmentId        String                @db.Uuid
+  uploadedByContactId String?               @db.Uuid
+  objectKey           String                @unique
+  fileName            String
+  contentType         String
+  size                Int
+  uploadedAt          DateTime              @default(now()) @db.Timestamptz(3)
+  supersededAt        DateTime?             @db.Timestamptz(3)
+  assignment          FileRequestAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  uploadedByContact   Contact?              @relation(fields: [uploadedByContactId], references: [id], onDelete: SetNull)
 
   @@index([assignmentId, supersededAt])
   @@index([assignmentId, uploadedAt])
+  @@index([uploadedByContactId])
   @@map("file_request_files")
+}
+
+model FileRequestFulfillmentLink {
+  id           String                @id @default(uuid()) @db.Uuid
+  assignmentId String                @db.Uuid
+  contactId    String                @db.Uuid
+  tokenHash    String                @unique
+  expiresAt    DateTime              @db.Timestamptz(3)
+  consumedAt   DateTime?             @db.Timestamptz(3)
+  createdAt    DateTime              @default(now()) @db.Timestamptz(3)
+  assignment   FileRequestAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  contact      Contact               @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId, contactId, consumedAt])
+  @@index([expiresAt])
+  @@map("file_request_fulfillment_links")
 }
 
 model CfpForm {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Archive, ArchiveRestore, ArrowLeft, Download, FileUp } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Download, FileUp, Send } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import type { StoredFileRecord } from "@/server/files/request-files";
 import {
   archiveFileRequestAction,
   assignFileRequestAction,
+  resendFulfillmentLinkAction,
   restoreFileRequestAction,
   withdrawAssignmentAction,
 } from "../actions";
@@ -312,11 +313,23 @@ export function FileRequestDetail({
                       </TableCell>
                       <TableCell className="text-right">
                         {assignment.status === "WITHDRAWN" ? null : (
-                          <form action={withdrawAssignmentAction.bind(null, event.slug, request.id, assignment.id)}>
-                            <Button size="sm" type="submit" variant="outline">
-                              Withdraw
-                            </Button>
-                          </form>
+                          <div className="flex justify-end gap-2">
+                            {assignment.target.kind === "CONTACT" || assignment.target.kind === "GROUP" ? (
+                              <form
+                                action={resendFulfillmentLinkAction.bind(null, event.slug, request.id, assignment.id)}
+                              >
+                                <Button size="sm" type="submit" variant="outline">
+                                  <Send data-icon="inline-start" />
+                                  Resend link
+                                </Button>
+                              </form>
+                            ) : null}
+                            <form action={withdrawAssignmentAction.bind(null, event.slug, request.id, assignment.id)}>
+                              <Button size="sm" type="submit" variant="outline">
+                                Withdraw
+                              </Button>
+                            </form>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>

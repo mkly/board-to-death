@@ -42,6 +42,7 @@ export interface StoredFileRecord {
   readonly size: number;
   readonly uploadedAt: Date;
   readonly supersededAt: Date | null;
+  readonly uploadedByContactId?: string | null;
 }
 
 export interface RecordFileInput {
@@ -51,6 +52,7 @@ export interface RecordFileInput {
   readonly contentType: string;
   readonly size: number;
   readonly supersedeExisting: boolean;
+  readonly uploadedByContactId: string | null;
 }
 
 export interface RecordFileResult {
@@ -268,6 +270,7 @@ export class FileRequestFileService {
         contentType: upload.contentType,
         size: upload.bytes.length,
         supersedeExisting: assignment.policy.replacementPolicy === "REPLACE_LATEST",
+        uploadedByContactId: principal.role === "contact" ? principal.contactId : null,
       });
     } catch (error) {
       // The object is already in storage and nothing points at it. Leaving it behind would

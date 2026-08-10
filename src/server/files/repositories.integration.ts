@@ -2,7 +2,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import { ContactGroupKind, EventType, PrismaClient } from "../../generated/prisma/client.ts";
 import { EventRepository, RepositoryError } from "../events/repositories.ts";
-import { InMemoryFileStorage } from "../infrastructure/fakes.ts";
+import { DeterministicClock, DeterministicTokenGenerator, InMemoryFileStorage } from "../infrastructure/fakes.ts";
+import { FileRequestFulfillmentLinkError, FileRequestFulfillmentLinkService } from "./fulfillment-links.ts";
 import { createPrismaFileRequestStore } from "./prisma-store.ts";
 import {
   archiveFileRequest,
@@ -319,6 +320,101 @@ describe("file request storage through the Prisma store", () => {
     assert.equal(member.ok, true);
     assert.equal(outsider.ok, false);
     if (!outsider.ok) assert.equal(outsider.error.code, "unauthorized");
+  });
+
+  test("issues event-scoped single-use links and records the contact who fulfills the request", async () => {
+    const eventId = await createEvent("file-request-fulfillment-links");
+    const otherEventId = await createEvent("file-request-fulfillment-links-other");
+    const contactId = await createContact(eventId, "dana@example.test");
+    const request = await createFileRequest(client, {
+      eventId,
+      targetKind: "CONTACT",
+      title: "Signed contract",
+      instructions: "Upload the signed PDF.",
+      ...PDF_ONLY,
+    });
+    const assignment = await assignFileRequest(client, eventId, request.id, { kind: "CONTACT", contactId });
+    const clock = new DeterministicClock("2027-01-01T00:00:00.000Z");
+    const links = new FileRequestFulfillmentLinkService({
+      clock,
+      database: client,
+      tokenGenerator: new DeterministicTokenGenerator("file-request"),
+    });
+
+    await assert.rejects(
+      links.issue(otherEventId, assignment.id),
+      (error: unknown) => error instanceof FileRequestFulfillmentLinkError && error.code === "not-found",
+    );
+    const [issued] = await links.issue(eventId, assignment.id);
+    assert.ok(issued);
+    assert.notEqual(
+      (await client.fileRequestFulfillmentLink.findFirstOrThrow({ where: { assignmentId: assignment.id } })).tokenHash,
+      issued.token,
+    );
+    assert.equal((await links.resolve(issued.token)).title, "Signed contract");
+
+    const files = new FileRequestFileService({
+      storage: new InMemoryFileStorage(),
+      store: createPrismaFileRequestStore(client),
+    });
+    const rejected = await links.fulfill(
+      issued.token,
+      { fileName: "contract.pdf", contentType: "application/pdf", bytes: Uint8Array.from([1, 2, 3]) },
+      files,
+    );
+    assert.equal(rejected.ok, false);
+    assert.equal((await links.resolve(issued.token)).assignmentId, assignment.id);
+
+    const uploaded = await links.fulfill(
+      issued.token,
+      { fileName: "contract.pdf", contentType: "application/pdf", bytes: PDF },
+      files,
+    );
+    assert.equal(uploaded.ok, true);
+    assert.equal(
+      (await client.fileRequestFile.findFirstOrThrow({ where: { assignmentId: assignment.id } })).uploadedByContactId,
+      contactId,
+    );
+    await assert.rejects(
+      links.resolve(issued.token),
+      (error: unknown) => error instanceof FileRequestFulfillmentLinkError && error.code === "invalid-token",
+    );
+  });
+
+  test("issues a group link to every active member and closes it when membership is removed", async () => {
+    const eventId = await createEvent("file-request-group-fulfillment-links");
+    const groupId = await createGroup(eventId, "sponsors");
+    const firstContactId = await createContact(eventId, "first@example.test");
+    const secondContactId = await createContact(eventId, "second@example.test");
+    await client.contactGroupMember.createMany({
+      data: [
+        { eventId, groupId, contactId: firstContactId },
+        { eventId, groupId, contactId: secondContactId },
+      ],
+    });
+    const request = await createFileRequest(client, {
+      eventId,
+      targetKind: "GROUP",
+      title: "Sponsor logo",
+      ...PDF_ONLY,
+    });
+    const assignment = await assignFileRequest(client, eventId, request.id, { kind: "GROUP", groupId });
+    const links = new FileRequestFulfillmentLinkService({
+      database: client,
+      tokenGenerator: new DeterministicTokenGenerator("group"),
+    });
+
+    const issued = await links.issue(eventId, assignment.id);
+    assert.deepEqual(
+      issued.map((link) => link.email),
+      ["first@example.test", "second@example.test"],
+    );
+    await client.contactGroupMember.delete({ where: { groupId_contactId: { groupId, contactId: firstContactId } } });
+    await assert.rejects(
+      links.resolve(issued[0]?.token ?? ""),
+      (error: unknown) => error instanceof FileRequestFulfillmentLinkError && error.code === "invalid-token",
+    );
+    assert.equal((await links.resolve(issued[1]?.token ?? "")).contactId, secondContactId);
   });
 
   test("collects only this event's current files for the archive export", async () => {
