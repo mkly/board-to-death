@@ -1,4 +1,4 @@
-import type { InfrastructureServices } from "./contracts.ts";
+import type { ClockService, EmailService, InfrastructureServices } from "./contracts.ts";
 import {
   DeterministicAcceleventsService,
   DeterministicClock,
@@ -24,6 +24,11 @@ export interface DeterministicInfrastructureOptions<TRepositories extends object
   readonly tokenSeed?: string;
 }
 
+export interface ProductionInfrastructure {
+  readonly email: EmailService;
+  readonly clock: ClockService;
+}
+
 export function composeInfrastructure<TRepositories extends object>(
   services: InfrastructureServices<TRepositories>,
 ): Readonly<InfrastructureServices<TRepositories>> {
@@ -43,4 +48,13 @@ export function createDeterministicInfrastructure<TRepositories extends object>(
     tokenGenerator: new DeterministicTokenGenerator(options.tokenSeed),
     accelevents: new DeterministicAcceleventsService(),
   };
+}
+
+export async function createProductionInfrastructure(): Promise<ProductionInfrastructure> {
+  const { createConfiguredResendEmailService } = await import("./resend-email.ts");
+
+  return Object.freeze({
+    email: createConfiguredResendEmailService(),
+    clock: { now: () => new Date() },
+  });
 }

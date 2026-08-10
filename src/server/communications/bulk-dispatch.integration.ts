@@ -1,10 +1,16 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { afterAll, beforeAll, beforeEach, describe, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, test, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 
 import { PrismaClient } from "../../generated/prisma/client.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { createDeterministicInfrastructure } from "../infrastructure/index.ts";
-import { BulkCommunicationRepository, BulkDeliveryDispatcher } from "./bulk-dispatch.ts";
+import {
+  BulkCommunicationRepository,
+  BulkDeliveryDispatcher,
+  createConfiguredBulkDeliveryDispatcher,
+} from "./bulk-dispatch.ts";
 import assert from "node:assert/strict";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -74,6 +80,11 @@ describe("bulk communication dispatch", () => {
 
   beforeEach(async () => {
     await client.event.deleteMany({ where: { slug: { startsWith: "bulk-dispatch-test-" } } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   afterAll(async () => {
@@ -182,6 +193,35 @@ describe("bulk communication dispatch", () => {
         ["delivered", 1],
       ],
     );
+  });
+
+  test("uses configured Resend delivery with the shared sender address", async () => {
+    const fixture = await createFixture("bulk-dispatch-test-configured-resend", ["Ada Lovelace"]);
+    const confirmed = await new BulkCommunicationRepository(client).confirm({
+      eventId: fixture.event.id,
+      templateId: fixture.template.id,
+      idempotencyKey: "bulk:configured-resend",
+      audience: fixture.audience,
+    });
+    vi.stubEnv("RESEND_API_KEY", "re_integration_test");
+    vi.stubEnv("RESEND_FROM_EMAIL", "outbound@example.test");
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json({ id: "resend-message-1" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const results = await (await createConfiguredBulkDeliveryDispatcher(client)).process(
+      fixture.event.id,
+      confirmed.delivery.id,
+    );
+
+    assert.deepEqual(
+      results.map(({ status }) => status),
+      ["delivered"],
+    );
+    const [url, request] = fetchMock.mock.calls[0] ?? [];
+    assert.equal(url, "https://api.resend.com/emails");
+    assert.equal(JSON.parse(String(request?.body)).from, "GatherPulse <outbound@example.test>");
   });
 
   test("cancellation stops new claims without rewinding the provider attempt already in flight", async () => {

@@ -17,6 +17,7 @@ export type {
 export {
   BulkCommunicationRepository,
   BulkDeliveryDispatcher,
+  createConfiguredBulkDeliveryDispatcher,
   PrismaBulkDeliveryAuditRepository,
 } from "./bulk-dispatch.ts";
 export type {
