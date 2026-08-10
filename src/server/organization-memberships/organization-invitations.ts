@@ -24,6 +24,15 @@ export interface CreateOrganizationInvitationInput {
   readonly role: OrganizationMemberRole;
 }
 
+export type OrganizationInvitationPreview =
+  | {
+      readonly state: "pending";
+      readonly email: string;
+      readonly organizationName: string;
+      readonly role: OrganizationMemberRole;
+    }
+  | { readonly state: "accepted" | "expired" | "revoked" | "unknown" };
+
 export type OrganizationInvitationDelivery = (input: {
   readonly email: string;
   readonly callbackURL: string;
@@ -63,6 +72,29 @@ export class OrganizationInvitationService {
 
   constructor(client: PrismaClient) {
     this.#client = client;
+  }
+
+  async preview(token: string): Promise<OrganizationInvitationPreview> {
+    const invitation = await this.#client.organizationInvitation.findUnique({
+      where: { tokenHash: tokenHash(token) },
+      select: {
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        organization: { select: { name: true } },
+      },
+    });
+    if (!invitation) return { state: "unknown" };
+    if (invitation.status === OrganizationInvitationStatus.ACCEPTED) return { state: "accepted" };
+    if (invitation.status === OrganizationInvitationStatus.REVOKED) return { state: "revoked" };
+    if (invitation.expiresAt <= new Date()) return { state: "expired" };
+    return {
+      state: "pending",
+      email: invitation.email,
+      organizationName: invitation.organization.name,
+      role: invitation.role,
+    };
   }
 
   async invite(input: CreateOrganizationInvitationInput, deliver: OrganizationInvitationDelivery): Promise<void> {
