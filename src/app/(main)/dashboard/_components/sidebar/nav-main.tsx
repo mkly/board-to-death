@@ -167,7 +167,13 @@ function NavItem({ item, isItemActive, isSubItemActive, isSubmenuOpen }: NavItem
 function NavLinkItem({ item, isActive, showIconFallback }: NavLinkItemProps) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild aria-disabled={item.disabled} tooltip={item.title} isActive={isActive}>
+      <SidebarMenuButton
+        asChild
+        aria-disabled={item.disabled}
+        tooltip={item.title}
+        isActive={isActive}
+        className="relative data-active:before:absolute data-active:before:inset-y-0 data-active:before:left-0 data-active:before:w-0.5 data-active:before:bg-sidebar-primary"
+      >
         <Link
           prefetch={false}
           href={item.url}
@@ -246,7 +252,14 @@ function NavCollapsibleItem({ item, isActive, defaultOpen, isSubItemActive }: Na
     <Collapsible asChild defaultOpen={defaultOpen} className="group/collapsible">
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title} isActive={isActive} disabled={item.disabled}>
+          {/* The active sub-item marks location; the parent stays quiet (accent text, no fill)
+              so the rail never shows two filled highlights at once. */}
+          <SidebarMenuButton
+            tooltip={item.title}
+            isActive={isActive}
+            disabled={item.disabled}
+            className="data-active:bg-transparent data-active:text-sidebar-accent-foreground"
+          >
             {Icon && <Icon />}
             <span>{item.title}</span>
             <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
@@ -265,6 +278,7 @@ function NavCollapsibleItem({ item, isActive, defaultOpen, isSubItemActive }: Na
                     asChild
                     aria-disabled={subItem.disabled}
                     isActive={!subItem.disabled && isSubItemActive(subItem.url)}
+                    className="relative overflow-visible data-active:bg-transparent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:inset-y-0 data-active:before:-left-[11px] data-active:before:w-0.5 data-active:before:bg-sidebar-primary"
                   >
                     <Link
                       prefetch={false}

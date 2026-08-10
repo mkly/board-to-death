@@ -1,22 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 
 import { useShallow } from "zustand/react/shallow";
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
 import { cn } from "@/lib/utils";
-import { dashboardEventHref, getSidebarItems } from "@/navigation/sidebar/sidebar-items";
+import { getSidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 
 import type { DashboardEvent, DashboardOrganization } from "../../_lib/dashboard-shell";
@@ -64,25 +55,14 @@ export function AppSidebar({
       collapsible={collapsible}
     >
       <SidebarHeader className="gap-3 border-sidebar-border/60 border-b px-3 py-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="h-auto py-1.5">
-              <Link prefetch={false} href={activeEvent ? dashboardEventHref(activeEvent.slug) : "/dashboard"}>
-                <span data-brand-mark className="flex size-8 shrink-0">
-                  <Image
-                    src="/brand-mark.png"
-                    alt=""
-                    width={64}
-                    height={64}
-                    priority
-                    className="size-full object-contain"
-                  />
-                </span>
-                <span className="font-heading font-bold text-base tracking-tight">{APP_CONFIG.name}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
+          <span data-brand-mark className="flex size-8 shrink-0">
+            <Image src="/brand-mark.png" alt="" width={64} height={64} priority className="size-full object-contain" />
+          </span>
+          <span className="font-bold font-heading text-base tracking-tight group-data-[collapsible=icon]:hidden">
+            {APP_CONFIG.name}
+          </span>
+        </div>
         <OrganizationSwitcher organizations={organizations} activeOrganization={activeOrganization} />
         <EventSwitcher events={events} activeEvent={activeEvent} />
       </SidebarHeader>
