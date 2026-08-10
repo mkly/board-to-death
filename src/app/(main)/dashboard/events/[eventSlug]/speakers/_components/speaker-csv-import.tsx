@@ -31,6 +31,7 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
     [previewState.rows],
   );
   const visibleState = applyState.status === "idle" ? previewState : applyState;
+  const showPreview = previewState.status === "preview" && applyState.status === "idle";
 
   return (
     <Card>
@@ -70,7 +71,7 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
             <AlertDescription>{visibleState.message}</AlertDescription>
           </Alert>
         ) : null}
-        {previewState.status === "preview" ? (
+        {showPreview ? (
           <Alert>
             <FileSpreadsheet />
             <AlertTitle>Preview ready</AlertTitle>
@@ -119,7 +120,7 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
           </Table>
         ) : null}
       </CardContent>
-      {previewState.status === "preview" ? (
+      {showPreview ? (
         <CardFooter className="justify-end">
           <form action={applyAction}>
             <input name="eventSlug" type="hidden" value={eventSlug} />
