@@ -26,6 +26,8 @@ test("selects records, confirms the count, reports a partial failure, audits cha
   const otherEventId = randomUUID();
   const contactIds = [randomUUID(), randomUUID()];
   const otherContactId = randomUUID();
+  const customFieldDefinitionIds = [randomUUID(), randomUUID()];
+  const customFieldValueIds = [randomUUID(), randomUUID(), randomUUID()];
   const groupIds = [randomUUID(), randomUUID()];
   const sessionIds = [randomUUID(), randomUUID()];
   const versionIds = [randomUUID(), randomUUID()];
@@ -53,6 +55,33 @@ test("selects records, confirms the count, reports a partial failure, audits cha
               ($3, $2, 'grace-${suffix}@example.test', 'Grace', 'Hopper', $6),
               ($4, $5, 'secret-${suffix}@example.test', 'Secret', 'Contact', $6)`,
       [contactIds[0], eventId, contactIds[1], otherContactId, otherEventId, now],
+    );
+    await seed.query(
+      `INSERT INTO "custom_field_definitions"
+         ("id", "eventId", "entityType", "key", "label", "type", "position", "updatedAt")
+       VALUES ($1, $2, 'CONTACT', 'dietary-preference', 'Dietary preference', 'SINGLE_LINE_TEXT', 0, $5),
+              ($3, $4, 'CONTACT', 'dietary-preference', 'Dietary preference', 'SINGLE_LINE_TEXT', 0, $5)`,
+      [customFieldDefinitionIds[0], eventId, customFieldDefinitionIds[1], otherEventId, now],
+    );
+    await seed.query(
+      `INSERT INTO "custom_field_values"
+         ("id", "eventId", "definitionId", "contactId", "value", "normalizedText", "updatedAt")
+       VALUES ($1, $2, $3, $4, '"Vegetarian"'::jsonb, 'vegetarian', $9),
+              ($5, $2, $3, $6, '"Omnivore"'::jsonb, 'omnivore', $9),
+              ($7, $8, $10, $11, '"Vegetarian"'::jsonb, 'vegetarian', $9)`,
+      [
+        customFieldValueIds[0],
+        eventId,
+        customFieldDefinitionIds[0],
+        contactIds[0],
+        customFieldValueIds[1],
+        contactIds[1],
+        customFieldValueIds[2],
+        otherEventId,
+        now,
+        customFieldDefinitionIds[1],
+        otherContactId,
+      ],
     );
     await seed.query(
       `INSERT INTO "contact_groups" ("id", "eventId", "kind", "name", "slug", "updatedAt")
@@ -96,6 +125,16 @@ test("selects records, confirms the count, reports a partial failure, audits cha
     await expect(page.getByRole("heading", { name: "Bulk edit records" })).toBeVisible();
     await expect(page.getByText("Secret Contact")).toHaveCount(0);
 
+    await page.getByLabel("Custom field").selectOption({ label: "Dietary preference" });
+    await page.getByLabel("Value contains").fill("vegetarian");
+    await page.getByRole("button", { name: "Apply filter" }).click();
+    await expect(page.getByText("Ada Lovelace")).toBeVisible();
+    await expect(page.getByText("Grace Hopper")).toHaveCount(0);
+    await expect(page.getByText("Secret Contact")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: /Dietary preference Vegetarian/ })).toBeVisible();
+    await page.getByRole("link", { name: "Clear" }).click();
+    await expect(page.getByText("Grace Hopper")).toBeVisible();
+
     const ada = page.getByRole("checkbox", { name: "Select Ada Lovelace" });
     await waitForHydration(ada);
     await ada.click();
@@ -119,7 +158,7 @@ test("selects records, confirms the count, reports a partial failure, audits cha
 
     await page.getByLabel("Sessions", { exact: true }).click();
     await page.getByRole("checkbox", { name: "Select all sessions" }).click();
-    await page.getByLabel("Field").click();
+    await page.getByLabel("Field", { exact: true }).click();
     await page.getByRole("option", { name: "Duration (minutes)" }).click();
     await page.getByLabel("New value").fill("60");
     await page.getByRole("button", { name: "Review bulk edit" }).click();
