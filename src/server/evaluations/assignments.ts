@@ -601,9 +601,18 @@ export class EvaluationAssignmentRepository {
           },
         });
         if (existingReturn) {
+          // The assignment snapshot above may predate the commit that wrote this return row, so a
+          // concurrent retry would judge idempotency against a stale FINAL evaluation and reject a
+          // return it had itself just applied. Read the evaluation again before deciding.
+          const evaluation = assignment.evaluation
+            ? await transaction.evaluation.findUnique({
+                where: { id: assignment.evaluation.id },
+                select: { status: true, version: true },
+              })
+            : null;
           if (
-            assignment.evaluation?.status === EvaluationStatus.DRAFT &&
-            assignment.evaluation.version === input.expectedEvaluationVersion + 1
+            evaluation?.status === EvaluationStatus.DRAFT &&
+            evaluation.version === input.expectedEvaluationVersion + 1
           ) {
             return;
           }
