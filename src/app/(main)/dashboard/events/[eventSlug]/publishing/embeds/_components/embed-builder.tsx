@@ -2,7 +2,18 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 
-import { Check, Clipboard, Code2, Eye, RotateCcw } from "lucide-react";
+import {
+  Braces,
+  CalendarPlus,
+  Check,
+  Clipboard,
+  Code2,
+  ExternalLink,
+  Eye,
+  FileCode2,
+  FileType2,
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -31,6 +42,12 @@ import {
   normalizeEmbedConfiguration,
   webComponentEmbedSnippet,
 } from "@/lib/published-embeds/configuration";
+import {
+  PUBLISHED_SCHEDULE_FEED_FORMATS,
+  PUBLISHED_SCHEDULE_FEED_LABELS,
+  type PublishedScheduleFeedFormat,
+  publishedScheduleFeedUrl,
+} from "@/lib/published-embeds/feed-formats";
 
 const THEME_LABELS: Readonly<Record<EmbedTheme, string>> = {
   system: "System",
@@ -43,7 +60,20 @@ const DENSITY_LABELS: Readonly<Record<EmbedDensity, string>> = {
   compact: "Compact",
 };
 
-type SnippetType = "iframe" | "web-component";
+type OutputType = "iframe" | "web-component" | PublishedScheduleFeedFormat;
+
+const OUTPUT_LABELS: Readonly<Record<OutputType, string>> = {
+  iframe: "Iframe",
+  "web-component": "Web component",
+  ...PUBLISHED_SCHEDULE_FEED_LABELS,
+};
+
+const FEED_ICONS = {
+  html: FileCode2,
+  json: Braces,
+  xml: FileType2,
+  ical: CalendarPlus,
+} satisfies Record<PublishedScheduleFeedFormat, typeof FileCode2>;
 
 function parseStoredConfiguration(value: string | null): EmbedConfiguration {
   if (!value) return DEFAULT_EMBED_CONFIGURATION;
@@ -54,9 +84,14 @@ function parseStoredConfiguration(value: string | null): EmbedConfiguration {
   }
 }
 
-function snippetFor(url: string, type: SnippetType, instance: string): string {
-  if (!url) return "";
-  return type === "iframe" ? iframeEmbedSnippet(url, instance) : webComponentEmbedSnippet(url, instance);
+function outputFor(embedPreviewUrl: string, feedUrl: string, type: OutputType, instance: string): string {
+  if (type === "iframe") return embedPreviewUrl ? iframeEmbedSnippet(embedPreviewUrl, instance) : "";
+  if (type === "web-component") return embedPreviewUrl ? webComponentEmbedSnippet(embedPreviewUrl, instance) : "";
+  return feedUrl;
+}
+
+function isFeedOutput(type: OutputType): type is PublishedScheduleFeedFormat {
+  return PUBLISHED_SCHEDULE_FEED_FORMATS.includes(type as PublishedScheduleFeedFormat);
 }
 
 export function EmbedBuilder({ event }: { readonly event: { readonly name: string; readonly slug: string } }) {
@@ -64,7 +99,7 @@ export function EmbedBuilder({ event }: { readonly event: { readonly name: strin
   const instance = useMemo(() => `preview-${reactId.replaceAll(":", "")}`, [reactId]);
   const storageKey = `board-to-death:embed-builder:${event.slug}`;
   const [configuration, setConfiguration] = useState<EmbedConfiguration>(DEFAULT_EMBED_CONFIGURATION);
-  const [snippetType, setSnippetType] = useState<SnippetType>("iframe");
+  const [outputType, setOutputType] = useState<OutputType>("iframe");
   const [copyFeedback, setCopyFeedback] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -80,7 +115,10 @@ export function EmbedBuilder({ event }: { readonly event: { readonly name: strin
   }, [configuration, hydrated, storageKey]);
 
   const previewUrl = hydrated ? embedUrl(origin, event.slug, instance, configuration) : "";
-  const snippet = snippetFor(previewUrl, snippetType, instance);
+  const selectedFeedUrl =
+    hydrated && isFeedOutput(outputType) ? publishedScheduleFeedUrl(origin, event.slug, outputType) : "";
+  const output = outputFor(previewUrl, selectedFeedUrl, outputType, instance);
+  const feedSelected = isFeedOutput(outputType);
   const availableFilters = EMBED_FILTERS_BY_KIND[configuration.kind];
 
   const selectKind = (kind: EmbedKind) => {
@@ -91,14 +129,14 @@ export function EmbedBuilder({ event }: { readonly event: { readonly name: strin
     }));
   };
 
-  const copySnippet = async () => {
+  const copyOutput = async () => {
     try {
-      await navigator.clipboard.writeText(snippet);
-      setCopyFeedback(`${snippetType === "iframe" ? "Iframe" : "Web component"} snippet copied.`);
-      toast.success("Embed snippet copied");
+      await navigator.clipboard.writeText(output);
+      setCopyFeedback(`${OUTPUT_LABELS[outputType]} ${feedSelected ? "link" : "snippet"} copied.`);
+      toast.success(feedSelected ? "Feed link copied" : "Embed snippet copied");
     } catch {
-      setCopyFeedback("Copy failed. Select the snippet and copy it manually.");
-      toast.error("Could not copy the embed snippet");
+      setCopyFeedback(`Copy failed. Select the ${feedSelected ? "link" : "snippet"} and copy it manually.`);
+      toast.error(feedSelected ? "Could not copy the feed link" : "Could not copy the embed snippet");
     }
   };
 
@@ -251,12 +289,12 @@ export function EmbedBuilder({ event }: { readonly event: { readonly name: strin
 
           <Card className="min-w-0">
             <CardHeader>
-              <CardTitle>Install</CardTitle>
-              <CardDescription>Both formats isolate host styles and validate resize messages.</CardDescription>
+              <CardTitle>Install and share</CardTitle>
+              <CardDescription>Copy an embed snippet or link directly to the published schedule data.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs value={snippetType} onValueChange={(value) => setSnippetType(value as SnippetType)}>
-                <TabsList>
+              <Tabs value={outputType} onValueChange={(value) => setOutputType(value as OutputType)}>
+                <TabsList className="h-auto w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto">
                   <TabsTrigger value="iframe">
                     <Eye />
                     Iframe
@@ -265,13 +303,22 @@ export function EmbedBuilder({ event }: { readonly event: { readonly name: strin
                     <Code2 />
                     Web component
                   </TabsTrigger>
+                  {PUBLISHED_SCHEDULE_FEED_FORMATS.map((format) => {
+                    const Icon = FEED_ICONS[format];
+                    return (
+                      <TabsTrigger key={format} value={format}>
+                        <Icon />
+                        {PUBLISHED_SCHEDULE_FEED_LABELS[format]}
+                      </TabsTrigger>
+                    );
+                  })}
                 </TabsList>
                 <TabsContent value="iframe">
                   <Field>
                     <FieldTitle>Responsive iframe snippet</FieldTitle>
                     <Textarea
                       aria-label="Iframe snippet"
-                      value={snippet}
+                      value={output}
                       readOnly
                       rows={12}
                       className="font-mono text-xs"
@@ -283,23 +330,50 @@ export function EmbedBuilder({ event }: { readonly event: { readonly name: strin
                     <FieldTitle>Web component snippet</FieldTitle>
                     <Textarea
                       aria-label="Web component snippet"
-                      value={snippet}
+                      value={output}
                       readOnly
                       rows={5}
                       className="font-mono text-xs"
                     />
                   </Field>
                 </TabsContent>
+                {PUBLISHED_SCHEDULE_FEED_FORMATS.map((format) => (
+                  <TabsContent key={format} value={format}>
+                    <Field>
+                      <FieldTitle>{PUBLISHED_SCHEDULE_FEED_LABELS[format]} feed link</FieldTitle>
+                      <FieldDescription>
+                        Anonymous, cacheable output from the currently published program snapshot.
+                      </FieldDescription>
+                      <Textarea
+                        aria-label={`${PUBLISHED_SCHEDULE_FEED_LABELS[format]} feed link`}
+                        value={output}
+                        readOnly
+                        rows={3}
+                        className="font-mono text-xs"
+                      />
+                    </Field>
+                  </TabsContent>
+                ))}
               </Tabs>
             </CardContent>
             <CardFooter className="justify-between gap-3">
               <p className="text-muted-foreground text-sm" aria-live="polite">
                 {copyFeedback}
               </p>
-              <Button type="button" onClick={copySnippet}>
-                <Clipboard data-icon="inline-start" />
-                Copy snippet
-              </Button>
+              <div className="flex items-center gap-2">
+                {feedSelected && selectedFeedUrl ? (
+                  <Button variant="outline" asChild>
+                    <a href={selectedFeedUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink data-icon="inline-start" />
+                      Open feed
+                    </a>
+                  </Button>
+                ) : null}
+                <Button type="button" onClick={copyOutput} disabled={!output}>
+                  <Clipboard data-icon="inline-start" />
+                  Copy {feedSelected ? "link" : "snippet"}
+                </Button>
+              </div>
             </CardFooter>
           </Card>
         </div>
