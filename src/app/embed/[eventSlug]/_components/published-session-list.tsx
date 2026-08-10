@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-import { Clock3, LayoutList, Search } from "lucide-react";
+import { Clock3, LayoutList, MapPin, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 
@@ -22,6 +22,8 @@ export interface PublishedSessionListItem {
   readonly title: string;
   readonly description: string | null;
   readonly durationMinutes: number;
+  readonly format: string | null;
+  readonly location: { readonly id: string; readonly name: string } | null;
   readonly track: { readonly id: string; readonly name: string } | null;
   readonly speakers: readonly PublishedSessionSpeaker[];
 }
@@ -35,7 +37,14 @@ interface PublishedSessionListProps {
 
 function matchesSearch(session: PublishedSessionListItem, search: string): boolean {
   if (search === "") return true;
-  const text = [session.title, session.description, session.track?.name, ...session.speakers.map(({ name }) => name)]
+  const text = [
+    session.title,
+    session.description,
+    session.track?.name,
+    session.format,
+    session.location?.name,
+    ...session.speakers.map(({ name }) => name),
+  ]
     .filter(Boolean)
     .join(" ")
     .toLocaleLowerCase();
@@ -45,8 +54,12 @@ function matchesSearch(session: PublishedSessionListItem, search: string): boole
 export function PublishedSessionList({ density, enabledFilters, eventName, sessions }: PublishedSessionListProps) {
   const [search, setSearch] = useState("");
   const [trackId, setTrackId] = useState("");
+  const [format, setFormat] = useState("");
+  const [locationId, setLocationId] = useState("");
   const showSearch = enabledFilters.includes("search");
   const showTrack = enabledFilters.includes("track");
+  const showFormat = enabledFilters.includes("format");
+  const showLocation = enabledFilters.includes("room");
   const tracks = useMemo(
     () =>
       [
@@ -56,8 +69,28 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
       ].sort((a, b) => a.name.localeCompare(b.name)),
     [sessions],
   );
+  const formats = useMemo(
+    () =>
+      [...new Set(sessions.flatMap((session) => (session.format ? [session.format] : [])))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [sessions],
+  );
+  const locations = useMemo(
+    () =>
+      [
+        ...new Map(
+          sessions.flatMap((session) => (session.location ? [[session.location.id, session.location] as const] : [])),
+        ).values(),
+      ].sort((a, b) => a.name.localeCompare(b.name)),
+    [sessions],
+  );
   const visibleSessions = sessions.filter(
-    (session) => matchesSearch(session, showSearch ? search.trim() : "") && (!trackId || session.track?.id === trackId),
+    (session) =>
+      matchesSearch(session, showSearch ? search.trim() : "") &&
+      (!showTrack || !trackId || session.track?.id === trackId) &&
+      (!showFormat || !format || session.format === format) &&
+      (!showLocation || !locationId || session.location?.id === locationId),
   );
 
   return (
@@ -70,25 +103,23 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
         <p className="text-muted-foreground text-sm">Explore the sessions and speakers in the published program.</p>
       </header>
 
-      {showSearch || showTrack ? (
-        <FieldGroup className="rounded-xl border bg-card p-3 sm:flex-row sm:items-end">
+      {showSearch || showTrack || showFormat || showLocation ? (
+        <FieldGroup className="rounded-xl border bg-card p-3 sm:grid sm:grid-cols-2 sm:items-end lg:grid-cols-4">
           {showSearch ? (
             <Field>
               <FieldLabel htmlFor="session-search">Search sessions</FieldLabel>
-              <div className="relative">
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  className="pl-8"
+              <InputGroup>
+                <InputGroupInput
                   id="session-search"
                   onChange={(event) => setSearch(event.currentTarget.value)}
-                  placeholder="Title, description, speaker, or track"
+                  placeholder="Title, speaker, track, format, or location"
                   type="search"
                   value={search}
                 />
-              </div>
+                <InputGroupAddon align="inline-start">
+                  <Search aria-hidden="true" />
+                </InputGroupAddon>
+              </InputGroup>
             </Field>
           ) : null}
           {showTrack ? (
@@ -104,6 +135,42 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
                 {tracks.map((track) => (
                   <NativeSelectOption key={track.id} value={track.id}>
                     {track.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
+          {showFormat ? (
+            <Field>
+              <FieldLabel htmlFor="session-format">Format</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="session-format"
+                onChange={(event) => setFormat(event.currentTarget.value)}
+                value={format}
+              >
+                <NativeSelectOption value="">All formats</NativeSelectOption>
+                {formats.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
+          {showLocation ? (
+            <Field>
+              <FieldLabel htmlFor="session-location">Location</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="session-location"
+                onChange={(event) => setLocationId(event.currentTarget.value)}
+                value={locationId}
+              >
+                <NativeSelectOption value="">All locations</NativeSelectOption>
+                {locations.map((location) => (
+                  <NativeSelectOption key={location.id} value={location.id}>
+                    {location.name}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -138,6 +205,13 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
                       {session.durationMinutes} minutes
                     </span>
                     {session.track ? <Badge variant="outline">{session.track.name}</Badge> : null}
+                    {session.format ? <Badge variant="secondary">{session.format}</Badge> : null}
+                    {session.location ? (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin aria-hidden="true" className="size-3.5" />
+                        {session.location.name}
+                      </span>
+                    ) : null}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
@@ -173,7 +247,7 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
             <EmptyDescription>
               {sessions.length === 0
                 ? "Sessions will appear here when they are included in a published program."
-                : "Try a different search or track."}
+                : "Try a different search or filter."}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

@@ -42,6 +42,21 @@ describe("published embed configuration", () => {
     expect(normalizeEmbedConfiguration("javascript:alert(1)")).toEqual(DEFAULT_EMBED_CONFIGURATION);
   });
 
+  it("allows all public session facets while rejecting them on incompatible widgets", () => {
+    expect(
+      normalizeEmbedConfiguration({
+        kind: "session-list",
+        filters: ["track", "format", "room"],
+      }),
+    ).toMatchObject({ filters: ["track", "format", "room"] });
+    expect(
+      normalizeEmbedConfiguration({
+        kind: "speaker-list",
+        filters: ["format", "room", "search"],
+      }),
+    ).toMatchObject({ filters: ["search"] });
+  });
+
   it("creates snippets from the same canonical URL with guarded resize messaging", () => {
     const url = embedUrl("https://events.example", "board games", "instance-1", DEFAULT_EMBED_CONFIGURATION);
     const iframe = iframeEmbedSnippet(url, "instance-1");

@@ -14,6 +14,7 @@ const eventSlug = `published-sessions-${randomUUID()}`;
 const eventId = randomUUID();
 const programId = randomUUID();
 const trackIds = { design: randomUUID(), community: randomUUID() };
+const roomIds = { main: randomUUID(), studio: randomUUID() };
 const speakerIds = { morgan: randomUUID(), riley: randomUUID() };
 const sessionIds = { workshop: randomUUID(), roundtable: randomUUID(), clinic: randomUUID() };
 
@@ -31,7 +32,10 @@ function snapshot(eventIdentifier: string, revision = 1): PublishedProgramSnapsh
       endsAt: "2027-06-12T00:00:00.000Z",
       theme: null,
     },
-    rooms: [],
+    rooms: [
+      { id: roomIds.main, name: "Main Hall", sortOrder: 1 },
+      { id: roomIds.studio, name: "Design Studio", sortOrder: 2 },
+    ],
     tracks: [
       { id: trackIds.design, name: "Game design", color: "neutral", sortOrder: 1 },
       { id: trackIds.community, name: "Community", color: "neutral", sortOrder: 2 },
@@ -69,6 +73,7 @@ function snapshot(eventIdentifier: string, revision = 1): PublishedProgramSnapsh
         description:
           "A deliberately long public session description that demonstrates how detailed program copy wraps inside a narrow embedded card without leaking into or inheriting styles from the host page.",
         durationMinutes: 90,
+        format: "Workshop",
         trackId: trackIds.design,
         speakerIds: [speakerIds.morgan],
       },
@@ -77,6 +82,7 @@ function snapshot(eventIdentifier: string, revision = 1): PublishedProgramSnapsh
         title: "Community roundtable",
         description: "A facilitated conversation about sustaining welcoming player communities.",
         durationMinutes: 45,
+        format: "Roundtable",
         trackId: trackIds.community,
         speakerIds: [speakerIds.morgan, speakerIds.riley],
       },
@@ -85,11 +91,40 @@ function snapshot(eventIdentifier: string, revision = 1): PublishedProgramSnapsh
         title: "Open design clinic",
         description: null,
         durationMinutes: 30,
+        format: "Clinic",
         trackId: null,
         speakerIds: [],
       },
     ],
-    placements: [],
+    placements: [
+      {
+        id: randomUUID(),
+        sessionId: sessionIds.workshop,
+        roomId: roomIds.studio,
+        startsAt: "2027-06-10T17:00:00.000Z",
+        endsAt: "2027-06-10T18:30:00.000Z",
+        trackIds: [trackIds.design],
+        speakerIds: [speakerIds.morgan],
+      },
+      {
+        id: randomUUID(),
+        sessionId: sessionIds.roundtable,
+        roomId: roomIds.main,
+        startsAt: "2027-06-10T19:00:00.000Z",
+        endsAt: "2027-06-10T19:45:00.000Z",
+        trackIds: [trackIds.community],
+        speakerIds: [speakerIds.morgan, speakerIds.riley],
+      },
+      {
+        id: randomUUID(),
+        sessionId: sessionIds.clinic,
+        roomId: roomIds.studio,
+        startsAt: "2027-06-10T20:00:00.000Z",
+        endsAt: "2027-06-10T20:30:00.000Z",
+        trackIds: [],
+        speakerIds: [],
+      },
+    ],
   };
 }
 
@@ -128,7 +163,7 @@ test.afterAll(async () => {
 });
 
 test("renders and filters an isolated responsive session list across publication states", async ({ page }) => {
-  const embedUrl = `${baseURL}/embed/${eventSlug}?kind=session-list&theme=dark&density=comfortable&filter=search&filter=track&instance=session-list-test`;
+  const embedUrl = `${baseURL}/embed/${eventSlug}?kind=session-list&theme=dark&density=comfortable&filter=search&filter=track&filter=format&filter=room&instance=session-list-test`;
   await page.route(`${baseURL}/session-list-host`, async (route) => {
     await route.fulfill({
       contentType: "text/html",
@@ -175,6 +210,8 @@ test("renders and filters an isolated responsive session list across publication
   await expect(frame.getByText("Morgan Rivera", { exact: true })).toHaveCount(2);
   await expect(frame.getByText("Rye Chen", { exact: true })).toBeVisible();
   await expect(frame.getByText("Private speaker", { exact: true })).toHaveCount(0);
+  await expect(frame.getByText("Workshop", { exact: true })).toHaveCount(2);
+  await expect(frame.getByText("Design Studio", { exact: true })).toHaveCount(3);
   await expect(frame.getByRole("link", { name: "Designing welcoming campaign tables" })).toHaveAttribute(
     "href",
     `#session-${sessionIds.workshop}`,
@@ -190,6 +227,9 @@ test("renders and filters an isolated responsive session list across publication
   await frame.getByLabel("Track").selectOption(trackIds.community);
   await expect(frame.getByRole("heading", { name: "Community roundtable" })).toBeVisible();
   await expect(frame.getByRole("heading", { name: "Designing welcoming campaign tables" })).toBeHidden();
+  await frame.getByLabel("Format").selectOption("Roundtable");
+  await frame.getByLabel("Location").selectOption(roomIds.main);
+  await expect(frame.getByRole("heading", { name: "Community roundtable" })).toBeVisible();
   await frame.getByLabel("Search sessions").fill("missing session");
   await expect(frame.getByText("No matching sessions")).toBeVisible();
 
