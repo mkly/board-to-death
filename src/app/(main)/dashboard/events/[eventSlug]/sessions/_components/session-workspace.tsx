@@ -226,7 +226,7 @@ function SessionForm({
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     {contentApprovalStatuses.map((status) => (
                       <SelectItem key={status} value={status}>
@@ -264,7 +264,7 @@ function SessionForm({
                   <SelectTrigger id="session-track" aria-invalid={Boolean(fieldError(state, "trackId")) || undefined}>
                     <SelectValue placeholder="No track" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       <SelectItem value="unassigned">No track</SelectItem>
                       {tracks.map((track) => (
@@ -293,7 +293,7 @@ function SessionForm({
                 >
                   <SelectValue placeholder="Standalone session" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     <SelectItem value="standalone">Standalone session</SelectItem>
                     {parentOptions.map((candidate) => (
@@ -340,7 +340,7 @@ function SessionForm({
                           <SelectTrigger id={controlId} className="w-40">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent position="popper">
                             <SelectGroup>
                               <SelectItem value="NONE">Not participating</SelectItem>
                               {Object.entries(participantRoleLabels).map(([role, label]) => (

@@ -247,7 +247,7 @@ export function SessionMappingPreview({
                     >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectGroup>
                         <SelectItem value="session.title">Public session title</SelectItem>
                         <SelectItem value="event.name">Event name</SelectItem>
@@ -266,7 +266,7 @@ export function SessionMappingPreview({
                     >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectGroup>
                         <SelectItem value="session.description">Public session description</SelectItem>
                         <SelectItem value="event.theme">Event theme</SelectItem>
@@ -285,7 +285,7 @@ export function SessionMappingPreview({
                     >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectGroup>
                         <SelectItem value="linked-speakers">Linked public speakers</SelectItem>
                         <SelectItem value="omit">Do not send</SelectItem>

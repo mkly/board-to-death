@@ -25,6 +25,16 @@ export function EventSwitcher({ events, activeEvent }: EventSwitcherProps) {
     );
   }
 
+  if (events.length === 1) {
+    const onlyEvent = activeEvent ?? events[0];
+    return (
+      <div className="flex h-8 min-w-0 items-center gap-2 py-2 pl-2.5 text-sm">
+        <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="truncate font-medium">{onlyEvent.name}</span>
+      </div>
+    );
+  }
+
   return (
     <Select
       value={activeEvent?.id}
@@ -45,7 +55,7 @@ export function EventSwitcher({ events, activeEvent }: EventSwitcherProps) {
           <span className="truncate">{activeEvent?.name}</span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper">
         <SelectGroup>
           {events.map((event) => (
             <SelectItem key={event.id} value={event.id}>

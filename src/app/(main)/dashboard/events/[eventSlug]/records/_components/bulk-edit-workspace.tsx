@@ -383,7 +383,7 @@ export function BulkEditWorkspace({
                   <SelectTrigger id="bulk-edit-field" className="w-full">
                     <SelectValue placeholder="Choose a field" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       {FIELD_OPTIONS[entityType].map((option) => (
                         <SelectItem key={option.value} value={option.value}>
@@ -402,7 +402,7 @@ export function BulkEditWorkspace({
                     <SelectTrigger id="bulk-edit-value" className="w-full">
                       <SelectValue placeholder="Choose a track" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectGroup>
                         <SelectItem value="unassigned">No track</SelectItem>
                         {tracks.map((track) => (

@@ -216,7 +216,7 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
                         <SelectTrigger id="agenda-day" className="w-full">
                           <SelectValue placeholder="All days" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper">
                           <SelectGroup>
                             <SelectItem value="all">All days</SelectItem>
                             {days.map((value) => {
@@ -241,7 +241,7 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
                         <SelectTrigger id="agenda-room" className="w-full">
                           <SelectValue placeholder="All rooms" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper">
                           <SelectGroup>
                             <SelectItem value="all">All rooms</SelectItem>
                             {rooms.map((room) => (
@@ -261,7 +261,7 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
                         <SelectTrigger id="agenda-track" className="w-full">
                           <SelectValue placeholder="All tracks" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper">
                           <SelectGroup>
                             <SelectItem value="all">All tracks</SelectItem>
                             {tracks.map((track) => (

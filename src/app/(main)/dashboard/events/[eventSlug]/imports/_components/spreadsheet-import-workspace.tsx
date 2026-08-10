@@ -178,7 +178,7 @@ export function SpreadsheetImportWorkspace({ event, recentImports }: Spreadsheet
                   <SelectTrigger id="import-entity-type">
                     <SelectValue>{entityType === IMPORT_ENTITY.CONTACT ? "Contacts" : "Sessions"}</SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       <SelectItem value={IMPORT_ENTITY.CONTACT}>Contacts</SelectItem>
                       <SelectItem value={IMPORT_ENTITY.PROGRAM_SESSION}>Sessions</SelectItem>
@@ -241,7 +241,7 @@ export function SpreadsheetImportWorkspace({ event, recentImports }: Spreadsheet
                       <SelectTrigger id={`mapping-${normalized(header)}`}>
                         <SelectValue placeholder="Skip this column" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper">
                         <SelectGroup>
                           <SelectItem value={SKIP_COLUMN}>Skip this column</SelectItem>
                           {state.fields?.map((field) => (

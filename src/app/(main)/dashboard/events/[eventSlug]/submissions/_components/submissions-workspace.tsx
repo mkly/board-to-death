@@ -213,6 +213,24 @@ function FilterSelect({
   const [selected, setSelected] = useState(allLabel && defaultValue === "" ? ALL_FILTER_VALUE : defaultValue);
   const selectedLabel =
     selected === ALL_FILTER_VALUE ? allLabel : options.find((option) => option.value === selected)?.label;
+  const choiceCount = options.length + (allLabel ? 1 : 0);
+
+  if (choiceCount <= 1) {
+    return (
+      <>
+        <input type="hidden" name={name} value={selected === ALL_FILTER_VALUE ? "" : selected} />
+        <div
+          id={id}
+          className={cn(
+            "flex h-8 w-full min-w-0 items-center rounded-lg border border-input border-dashed py-2 pr-2 pl-2.5 text-muted-foreground text-sm",
+            className,
+          )}
+        >
+          <span className="truncate">{selectedLabel}</span>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -225,7 +243,7 @@ function FilterSelect({
             <span className="truncate">{selectedLabel}</span>
           </SelectValue>
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position="popper">
           {allLabel && <SelectItem value={ALL_FILTER_VALUE}>{allLabel}</SelectItem>}
           {options.map((option) => (
             <SelectItem key={option.value} value={option.value}>

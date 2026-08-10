@@ -268,7 +268,7 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
                       <SelectTrigger id="intake-form">
                         <SelectValue placeholder="Choose a form" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper">
                         <SelectGroup>
                           {forms.map((form) => (
                             <SelectItem key={form.id} value={form.id}>
@@ -286,7 +286,7 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
                       <SelectTrigger id="intake-status">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper">
                         <SelectGroup>
                           {SUBMISSION_STATUSES.map((status) => (
                             <SelectItem key={status} value={status}>
@@ -375,7 +375,7 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
                       <SelectTrigger id="intake-session-track">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper">
                         <SelectGroup>
                           <SelectItem value="unassigned">No track</SelectItem>
                           {tracks.map((track) => (

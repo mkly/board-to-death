@@ -109,7 +109,7 @@ function FieldTypeSelect({
       <SelectTrigger className="w-full">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper">
         <SelectGroup>
           {Object.values(CustomFieldType).map((type) => (
             <SelectItem key={type} value={type}>

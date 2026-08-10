@@ -494,7 +494,7 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
                                 <SelectTrigger id={`${idPrefix}-type`} className="w-full">
                                   <SelectValue placeholder="Choose a type" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent position="popper">
                                   <SelectGroup>
                                     {CFP_BUILT_IN_QUESTION_TYPES.map((type) => (
                                       <SelectItem key={type} value={type}>

@@ -263,7 +263,7 @@ function PlacementForm({
                   >
                     <SelectValue placeholder="Choose a room" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       {rooms.map((room) => (
                         <SelectItem key={room.id} value={room.id}>
@@ -285,7 +285,7 @@ function PlacementForm({
                   >
                     <SelectValue placeholder="No track" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       <SelectItem value="unassigned">No track</SelectItem>
                       {tracks.map((track) => (

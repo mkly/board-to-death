@@ -178,7 +178,7 @@ function DefinitionForm({
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   {Object.entries(RESPONSE_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
@@ -348,7 +348,7 @@ export function OnboardingTasksWorkspace({ eventOptions, initialSnapshot }: Onbo
             <SelectTrigger className="w-full sm:w-56" aria-label="Select event">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper">
               <SelectGroup>
                 {eventOptions.map((event) => (
                   <SelectItem key={event.id} value={event.id}>

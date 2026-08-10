@@ -302,7 +302,7 @@ export function AgendaViews({
               <SelectTrigger id="agenda-status-filter" className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   <SelectItem value="all">All sessions</SelectItem>
                   <SelectItem value="scheduled">Scheduled</SelectItem>
@@ -317,7 +317,7 @@ export function AgendaViews({
               <SelectTrigger id="agenda-room-filter" className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   <SelectItem value="all">All rooms</SelectItem>
                   {rooms.map((room) => (
@@ -335,7 +335,7 @@ export function AgendaViews({
               <SelectTrigger id="agenda-track-filter" className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   <SelectItem value="all">All tracks</SelectItem>
                   {tracks.map((track) => (

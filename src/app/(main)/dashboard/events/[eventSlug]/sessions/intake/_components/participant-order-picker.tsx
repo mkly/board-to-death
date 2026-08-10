@@ -50,7 +50,7 @@ export function ParticipantOrderPicker({ speakers }: ParticipantOrderPickerProps
           <SelectTrigger aria-label="Participant to add">
             <SelectValue placeholder={available.length === 0 ? "No more speakers available" : "Choose a speaker"} />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper">
             <SelectGroup>
               {available.map((speaker) => (
                 <SelectItem key={speaker.id} value={speaker.id}>

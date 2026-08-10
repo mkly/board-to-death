@@ -138,7 +138,7 @@ function ConditionValue({
           <SelectTrigger id={`${idPrefix}-value`} className="w-full">
             <SelectValue placeholder="Choose an option" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper">
             <SelectGroup>
               {(source.constraints?.options ?? []).map((option) => (
                 <SelectItem key={option.value} value={option.value}>
@@ -163,7 +163,7 @@ function ConditionValue({
           <SelectTrigger id={`${idPrefix}-value`} className="w-full">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper">
             <SelectGroup>
               <SelectItem value="true">Checked</SelectItem>
               <SelectItem value="false">Not checked</SelectItem>
@@ -242,7 +242,7 @@ export function CfpVisibilityRuleEditor({
               <SelectTrigger id={`${idPrefix}-logic`} className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   <SelectItem value="all">All conditions must match</SelectItem>
                   <SelectItem value="any">Any condition may match</SelectItem>
@@ -290,7 +290,7 @@ export function CfpVisibilityRuleEditor({
                         <SelectTrigger id={`${conditionPrefix}-source`} className="w-full" aria-invalid={!source}>
                           <SelectValue placeholder="Choose a question" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper">
                           <SelectGroup>
                             {sources.map((candidate) => (
                               <SelectItem key={candidate.editorId} value={candidate.id}>
@@ -318,7 +318,7 @@ export function CfpVisibilityRuleEditor({
                         <SelectTrigger id={`${conditionPrefix}-operator`} className="w-full" aria-invalid={!source}>
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper">
                           <SelectGroup>
                             {(source ? conditionOperatorsForQuestion(source.type) : []).map((operator) => (
                               <SelectItem key={operator} value={operator}>

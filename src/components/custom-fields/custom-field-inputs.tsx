@@ -111,7 +111,7 @@ export function CustomFieldInputs({
                   <SelectTrigger id={id} className="w-full" aria-invalid={invalid || undefined}>
                     <SelectValue placeholder="Select an option" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       {definition.required ? null : <SelectItem value="__empty__">No selection</SelectItem>}
                       {definition.options.map((option) => (

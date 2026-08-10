@@ -46,7 +46,7 @@ export function OrganizationSwitcher({ organizations, activeOrganization }: Orga
           <span className="truncate">{activeOrganization?.name}</span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper">
         <SelectGroup>
           {organizations.map((organization) => (
             <SelectItem key={organization.id} value={organization.id}>

@@ -344,7 +344,7 @@ export function CreateEventWizard({
               <SelectTrigger id="wizard-type" className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   {EVENT_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>

@@ -95,7 +95,7 @@ export function BulkSendConfirmation({
                 <SelectTrigger id="bulk-template" className="w-full">
                   <SelectValue placeholder="Choose a saved template" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     {templates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>

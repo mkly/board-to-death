@@ -208,7 +208,7 @@ export function CfpCategoryRouting({
                           <SelectTrigger id={`${idPrefix}-category`} className="w-full">
                             <SelectValue placeholder="Choose a category" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent position="popper">
                             <SelectGroup>
                               {categories.map((category) => (
                                 <SelectItem key={category.id} value={category.id}>

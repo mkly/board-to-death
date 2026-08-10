@@ -182,7 +182,7 @@ function CreateDashboardDialog({
                 <SelectTrigger id="dashboard-template">
                   <SelectValue placeholder="Select a template" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     {templates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
@@ -260,7 +260,7 @@ function DashboardSettingsDialog({
                   <SelectTrigger id="dashboard-track">
                     <SelectValue placeholder="All tracks" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       <SelectItem value="all">All tracks</SelectItem>
                       {tracks.map((track) => (
@@ -331,7 +331,7 @@ function AddWidgetDialog({
                 <SelectTrigger id="widget-source">
                   <SelectValue placeholder="Select a widget" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     {widgetOptions.map((widget) => (
                       <SelectItem key={widget.dataSource} value={widget.dataSource}>
@@ -394,7 +394,7 @@ function WidgetSettingsDialog({
                 <SelectTrigger id={`widget-width-${widget.id}`}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     <SelectItem value="compact">Compact</SelectItem>
                     <SelectItem value="wide">Wide</SelectItem>
@@ -753,7 +753,7 @@ export function CustomDashboardWorkspace({
                   <SelectTrigger id="dashboard-selector">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       {dashboards.map((dashboard) => (
                         <SelectItem key={dashboard.id} value={dashboard.id}>

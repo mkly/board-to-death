@@ -207,7 +207,7 @@ function ReportEditor({
                 <SelectTrigger id={`report-base-${report?.id ?? "new"}`}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectGroup>
                     {reportBaseTypes.map((value) => (
                       <SelectItem key={value} value={value}>

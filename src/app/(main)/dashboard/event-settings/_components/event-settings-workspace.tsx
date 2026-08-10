@@ -220,7 +220,7 @@ function EventForm({
               <SelectTrigger id="event-type" className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectGroup>
                   {EVENT_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>
@@ -521,21 +521,23 @@ export function EventSettingsWorkspace({
           <p className="text-muted-foreground text-sm">Manage event identity, schedule, rooms, and program tracks.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Select value={eventId} onValueChange={(value) => router.push(settingsHref(value))}>
-            <SelectTrigger aria-label="Select event">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {eventOptions.map((event) => (
-                  <SelectItem key={event.id} value={event.id}>
-                    {event.name}
-                    {event.archived ? " (archived)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          {eventOptions.length > 1 && (
+            <Select value={eventId} onValueChange={(value) => router.push(settingsHref(value))}>
+              <SelectTrigger aria-label="Select event">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  {eventOptions.map((event) => (
+                    <SelectItem key={event.id} value={event.id}>
+                      {event.name}
+                      {event.archived ? " (archived)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -706,7 +708,7 @@ export function EventSettingsWorkspace({
                       <SelectTrigger aria-label={`${track.name} color`}>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper">
                         <SelectGroup>
                           {TRACK_COLORS.map((color) => (
                             <SelectItem key={color} value={color}>
@@ -764,7 +766,7 @@ export function EventSettingsWorkspace({
                     <SelectTrigger aria-label="New track color">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       <SelectGroup>
                         {TRACK_COLORS.map((color) => (
                           <SelectItem key={color} value={color}>

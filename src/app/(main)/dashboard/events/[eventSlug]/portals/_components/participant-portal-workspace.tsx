@@ -385,7 +385,7 @@ export function ParticipantPortalWorkspace({
                           <SelectTrigger id="portal-accent">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent position="popper">
                             <SelectGroup>
                               {ACCENTS.map((accent) => (
                                 <SelectItem key={accent} value={accent}>
@@ -523,7 +523,7 @@ export function ParticipantPortalWorkspace({
                             <SelectTrigger id={`field-${field}`} className="w-40">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent position="popper">
                               <SelectGroup>
                                 <SelectItem value="editable">Editable</SelectItem>
                                 <SelectItem value="view">View only</SelectItem>
@@ -544,7 +544,7 @@ export function ParticipantPortalWorkspace({
                         <SelectTrigger id="preview-participant">
                           <SelectValue placeholder="Choose a participant" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper">
                           <SelectGroup>
                             {previewParticipants.map((participant) => (
                               <SelectItem key={participant.id} value={participant.id}>
