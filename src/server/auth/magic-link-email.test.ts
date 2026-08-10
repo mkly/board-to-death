@@ -6,6 +6,7 @@ import { createConfiguredMagicLinkSender } from "./magic-link-email";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("configured magic-link delivery", () => {
@@ -67,6 +68,7 @@ describe("configured magic-link delivery", () => {
   });
 
   test("surfaces rejected Resend deliveries without exposing the response body", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("sensitive provider detail", { status: 403 })),
@@ -79,5 +81,32 @@ describe("configured magic-link delivery", () => {
     await expect(send({ email: "admin@example.com", url: "https://events.example.com/sign-in" })).rejects.toThrow(
       "Resend rejected magic-link delivery with status 403",
     );
+    expect(errorSpy).toHaveBeenCalledWith("[auth] Magic-link delivery failed", {
+      provider: "resend",
+      email: "admin@example.com",
+      error: "Resend rejected magic-link delivery with status 403",
+    });
+  });
+
+  test("logs rejected webhook deliveries without exposing the magic-link URL", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("sensitive webhook detail", { status: 502 })),
+    );
+    const send = createConfiguredMagicLinkSender({
+      webhookToken: "test-token",
+      webhookUrl: "https://mailer.example.com/magic-link",
+    });
+
+    await expect(
+      send({ email: "reviewer@example.com", url: "https://events.example.com/sign-in?token=secret" }),
+    ).rejects.toThrow("Magic-link webhook rejected delivery with status 502");
+    expect(errorSpy).toHaveBeenCalledWith("[auth] Magic-link delivery failed", {
+      provider: "webhook",
+      email: "reviewer@example.com",
+      error: "Magic-link webhook rejected delivery with status 502",
+    });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("token=secret");
   });
 });

@@ -49,7 +49,7 @@ export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL
       <div className="flex flex-col gap-2 text-center" role="status">
         <p className="font-medium">Check your inbox</p>
         <p className="text-muted-foreground text-sm">
-          If that address is authorized, a single-use sign-in link is on its way. It expires in 10 minutes.
+          If that address is linked to an account, a single-use sign-in link is on its way. It expires in 10 minutes.
         </p>
       </div>
     );
@@ -70,7 +70,7 @@ export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL
             disabled={isPending}
             required
           />
-          <FieldDescription>Use an email address authorized for an admin or reviewer workspace.</FieldDescription>
+          <FieldDescription>Use the email address linked to your organization or event membership.</FieldDescription>
           {error && <FieldError>{error}</FieldError>}
         </Field>
       </FieldGroup>
