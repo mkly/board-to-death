@@ -15,7 +15,11 @@ export type {
   SpeakerTaskReminderRuleInput,
   UpdateSpeakerTaskReminderRuleInput,
 } from "./reminders.ts";
-export { runOnboardingReminderWorker, SpeakerTaskReminderRepository } from "./reminders.ts";
+export {
+  runConfiguredOnboardingReminderWorker,
+  runOnboardingReminderWorker,
+  SpeakerTaskReminderRepository,
+} from "./reminders.ts";
 export {
   type CreateSpeakerInput,
   type PersistedSpeaker,

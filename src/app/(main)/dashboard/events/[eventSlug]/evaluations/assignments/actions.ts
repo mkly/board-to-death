@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { createConfiguredBulkDeliveryDispatcher } from "@/server/communications";
 import { getDatabaseClient } from "@/server/database/client";
 import { EvaluationAssignmentRepository } from "@/server/evaluations/assignments";
 import { EvaluationReminderRepository } from "@/server/evaluations/reminders";
@@ -227,6 +228,7 @@ export async function sendEvaluationReminders(
       roundId: result.data.roundId,
       reviewerIds: result.data.reviewerIds,
     });
+    await (await createConfiguredBulkDeliveryDispatcher(client)).process(event.id, queued.deliveryId);
     revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
     revalidatePath(`/dashboard/events/${event.slug}/communications/deliveries/${queued.deliveryId}`);
     const label = queued.recipientCount === 1 ? "reviewer reminder" : "reviewer reminders";

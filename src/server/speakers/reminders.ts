@@ -5,6 +5,7 @@ import { renderEmailTemplate } from "../../lib/communications/email-templates.ts
 import { EmailDeliveryCoordinator } from "../communications/delivery.ts";
 import { PrismaDeliveryAuditRepository } from "../communications/persistence.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { createProductionInfrastructure } from "../infrastructure/composition.ts";
 import type { ClockService, EmailService } from "../infrastructure/index.ts";
 
 export interface SpeakerTaskReminderRuleInput {
@@ -327,4 +328,16 @@ export async function runOnboardingReminderWorker(
     }
   }
   return result;
+}
+
+export async function runConfiguredOnboardingReminderWorker(
+  options: Omit<OnboardingReminderRunOptions, "email" | "clock" | "providerName">,
+): Promise<OnboardingReminderRunResult> {
+  const infrastructure = await createProductionInfrastructure();
+  return runOnboardingReminderWorker({
+    ...options,
+    email: infrastructure.email,
+    clock: infrastructure.clock,
+    providerName: "resend",
+  });
 }

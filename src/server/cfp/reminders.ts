@@ -6,6 +6,7 @@ import { publicCfpStartHref } from "../../lib/cfp/publication.ts";
 import { renderEmailTemplate } from "../../lib/communications/email-templates.ts";
 import { EmailDeliveryCoordinator } from "../communications/delivery.ts";
 import { PrismaDeliveryAuditRepository } from "../communications/persistence.ts";
+import { createProductionInfrastructure } from "../infrastructure/composition.ts";
 import type { ClockService, EmailService } from "../infrastructure/index.ts";
 import type { CfpPolicyMessages } from "./policies.ts";
 
@@ -322,4 +323,16 @@ export async function runCfpDraftReminderWorker(
     }
   }
   return result;
+}
+
+export async function runConfiguredCfpDraftReminderWorker(
+  options: Omit<CfpDraftReminderRunOptions, "email" | "clock" | "providerName">,
+): Promise<CfpDraftReminderRunResult> {
+  const infrastructure = await createProductionInfrastructure();
+  return runCfpDraftReminderWorker({
+    ...options,
+    email: infrastructure.email,
+    clock: infrastructure.clock,
+    providerName: "resend",
+  });
 }

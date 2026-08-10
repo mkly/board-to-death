@@ -1,8 +1,13 @@
 export type {
   DeterministicInfrastructure,
   DeterministicInfrastructureOptions,
+  ProductionInfrastructure,
 } from "./composition.ts";
-export { composeInfrastructure, createDeterministicInfrastructure } from "./composition.ts";
+export {
+  composeInfrastructure,
+  createDeterministicInfrastructure,
+  createProductionInfrastructure,
+} from "./composition.ts";
 export type {
   AcceleventsOperation,
   AcceleventsService,

@@ -7,6 +7,7 @@ import {
 } from "../../generated/prisma/client.ts";
 import { renderEmailTemplate } from "../../lib/communications/email-templates.ts";
 import { RepositoryError } from "../events/repositories.ts";
+import { createProductionInfrastructure } from "../infrastructure/composition.ts";
 import type { ClockService, EmailService, InfrastructureFailure } from "../infrastructure/index.ts";
 import { RecipientAudienceRepository, type RecipientAudienceSelection } from "./audiences.ts";
 import {
@@ -440,4 +441,14 @@ export class BulkDeliveryDispatcher {
     }
     return results;
   }
+}
+
+export async function createConfiguredBulkDeliveryDispatcher(client: PrismaClient): Promise<BulkDeliveryDispatcher> {
+  const infrastructure = await createProductionInfrastructure();
+  return new BulkDeliveryDispatcher({
+    client,
+    provider: infrastructure.email,
+    providerName: "resend",
+    clock: infrastructure.clock,
+  });
 }

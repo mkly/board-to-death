@@ -10,7 +10,11 @@ import {
 } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
-import { BulkCommunicationRepository, type RecipientAudienceSelection } from "@/server/communications";
+import {
+  BulkCommunicationRepository,
+  createConfiguredBulkDeliveryDispatcher,
+  type RecipientAudienceSelection,
+} from "@/server/communications";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 
@@ -83,6 +87,7 @@ export async function confirmBulkCommunication(
       idempotencyKey: `bulk:${confirmationToken}`,
       audience: audienceFrom(formData),
     });
+    await (await createConfiguredBulkDeliveryDispatcher(client)).process(event.id, confirmed.delivery.id);
     const deliveryHref = `/dashboard/events/${encodeURIComponent(event.slug)}/communications/deliveries/${confirmed.delivery.id}`;
     revalidatePath(`/dashboard/events/${event.slug}/communications/audience`);
     revalidatePath(deliveryHref);
