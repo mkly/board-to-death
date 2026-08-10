@@ -13,6 +13,7 @@ import {
   ReviewerVisibility,
 } from "../../../src/generated/prisma/client.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { provisionMagicLinkUser } from "../../../src/server/auth/magic-link-user.ts";
 import { grantSeededOrganizationAccess } from "./organization-access.ts";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
@@ -32,6 +33,7 @@ async function createAdministratorSession(): Promise<string> {
       links.push(url);
     },
   });
+  await provisionMagicLinkUser(database, { email: "admin@example.test" });
   const signIn = await auth.handler(
     new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
       method: "POST",
