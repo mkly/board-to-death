@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   createManual: vi.fn(),
   findEvent: vi.fn(),
   getSession: vi.fn(),
-  isAllowedAdminEmail: vi.fn(),
+  isAuthorizedAdminSession: vi.fn(),
   listDefinitions: vi.fn(),
   listValues: vi.fn(),
   setValue: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 vi.mock("@/config/runtime-env.server", () => ({
   getRuntimeConfig: () => ({ server: { FILE_STORAGE_PATH: "/tmp/board-to-death-tests" } }),
 }));
-vi.mock("@/server/auth/admin-access", () => ({ isAllowedAdminEmail: mocks.isAllowedAdminEmail }));
+vi.mock("@/server/auth/admin-access", () => ({ isAuthorizedAdminSession: mocks.isAuthorizedAdminSession }));
 vi.mock("@/server/auth/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/server/custom-fields/repositories", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/server/custom-fields/repositories")>();
@@ -85,7 +85,7 @@ function sessionForm(): FormData {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSession.mockResolvedValue({ user: { email: "admin@example.test" } });
-  mocks.isAllowedAdminEmail.mockReturnValue(true);
+  mocks.isAuthorizedAdminSession.mockResolvedValue(true);
   mocks.findEvent.mockResolvedValue({ id: eventId, slug: "event-one" });
   mocks.listValues.mockResolvedValue([]);
 });
