@@ -96,7 +96,9 @@ export default async function IntegrationsPage({ params, searchParams }: Integra
       <ProgramPushCard
         eventSlug={event.slug}
         connected={Boolean(sessions.configuration)}
-        publishedVersion={sessions.publishedVersion}
+        // sessions.publishedVersion is the latest version whether or not it is still published, so the
+        // push offer follows sessions.preview instead: it exists only while a published snapshot does.
+        publishedVersion={sessions.preview ? sessions.publishedVersion : null}
       />
       <SyncStatusWorkspace event={{ name: event.name, slug: event.slug }} runs={syncRuns} />
     </div>

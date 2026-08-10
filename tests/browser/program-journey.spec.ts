@@ -70,6 +70,11 @@ test.describe("Program journey", () => {
     await expect(publication.getByText(/Program version 2 unpublished/)).toBeVisible();
     await expect(publication.getByText("Unpublished", { exact: true })).toBeVisible();
 
+    await page.goto(`/dashboard/events/${fixture.eventSlug}/integrations`);
+    await expect(push.getByText("Publish the program from the agenda workspace before pushing")).toBeVisible();
+    await expect(pushButton).toBeDisabled();
+
+    await page.goto(`/dashboard/events/${fixture.eventSlug}/agenda`);
     await publication.getByRole("button", { name: "Publish program" }).click();
     await expect(publication.getByText("Program version 3 published.")).toBeVisible();
     await expect(publication.getByText("Published v3")).toBeVisible();

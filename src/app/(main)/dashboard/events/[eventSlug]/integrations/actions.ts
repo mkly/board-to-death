@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { IntegrationProvider, IntegrationRemoteRecordStatus } from "@/generated/prisma/client";
+import { IntegrationProvider, IntegrationRemoteRecordStatus, PublishedProgramState } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
@@ -33,6 +33,7 @@ import {
   SpeakerMappingRepository,
   speakerMappingSources,
 } from "@/server/integrations";
+import { PublishedProgramRepository } from "@/server/published-program";
 
 import { randomUUID } from "node:crypto";
 
@@ -269,6 +270,14 @@ export async function pushAcceleventsProgram(
   });
   const remoteEventId = configuration?.versions[0]?.remoteEventId;
   if (!remoteEventId) return { status: "error", message: "This event is not connected to Accelevents." };
+
+  // The speaker half of the program push has no publication guard, while the session half refuses an
+  // unpublished program. Without this check an unpublished event pushes speakers and then fails on
+  // sessions, leaving the remote half-written.
+  const published = await new PublishedProgramRepository(client).latest(event.id);
+  if (published?.state !== PublishedProgramState.PUBLISHED) {
+    return { status: "error", message: "Publish the program before pushing it to Accelevents." };
+  }
 
   const connection = { remoteEventId, apiKey: "runtime-preview-key" };
   const adapter = new DeterministicAcceleventsAdapter({
