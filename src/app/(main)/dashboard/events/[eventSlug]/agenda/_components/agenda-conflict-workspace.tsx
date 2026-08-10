@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { AlertTriangle, CalendarCheck, RefreshCw, Save, Trash2 } from "lucide-react";
 
+import { DateTimePicker } from "@/components/date-time-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -228,14 +229,12 @@ function PlacementEditor({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field data-invalid={Boolean(state.errors?.startsAt?.[0]) || undefined}>
                 <FieldLabel htmlFor={`conflict-placement-start-${placement.id}`}>Start time</FieldLabel>
-                <Input
+                <DateTimePicker
                   id={`conflict-placement-start-${placement.id}`}
                   name="startsAt"
-                  type="datetime-local"
                   value={startsAt}
-                  onChange={(event) => setStartsAt(event.target.value)}
+                  onChange={setStartsAt}
                   aria-invalid={Boolean(state.errors?.startsAt?.[0]) || undefined}
-                  required
                 />
               </Field>
               <Field data-invalid={Boolean(state.errors?.durationMinutes?.[0]) || undefined}>

@@ -304,3 +304,13 @@ html {
     -webkit-print-color-adjust: exact;
   }
 }
+
+/* Placeholders should read as hints, not values. Fade the muted color toward
+   the field surface so a placeholder is clearly distinct from entered text.
+   Unlayered on purpose: it must win over the `placeholder:text-muted-foreground`
+   utility that the shared ui inputs carry, without editing those components. */
+input::placeholder,
+textarea::placeholder {
+  color: color-mix(in oklab, var(--muted-foreground) 55%, var(--background));
+  opacity: 1;
+}

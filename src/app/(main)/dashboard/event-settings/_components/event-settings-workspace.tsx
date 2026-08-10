@@ -8,6 +8,8 @@ import { ArrowDown, ArrowUp, CalendarCog, DoorOpen, MapPinned, Plus, Save, Swatc
 import { toast } from "sonner";
 import { Temporal } from "temporal-polyfill";
 
+import { DateTimePicker } from "@/components/date-time-picker";
+import { browserTimezone, TimezoneSelect } from "@/components/timezone-select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +63,7 @@ import {
   updateTrack,
 } from "../actions";
 import type { EventOption, EventSettingsEvent, EventSettingsSnapshot, MutationResult } from "../types";
+import { CreateEventWizard } from "./create-event-wizard";
 import { EventLifecycleActions } from "./event-lifecycle-actions";
 
 const EVENT_TYPES = ["CONFERENCE", "MEETUP", "WORKSHOP", "OTHER"] as const;
@@ -108,7 +111,7 @@ function EventForm({
   readonly onSubmit: (formData: FormData) => Promise<void>;
   readonly submitLabel: string;
 }) {
-  const timezone = event?.timezone ?? "America/Los_Angeles";
+  const timezone = event?.timezone ?? browserTimezone();
   return (
     <form
       className="flex flex-col gap-6"
@@ -181,38 +184,33 @@ function EventForm({
             />
           </Field>
           <Field data-invalid={Boolean(firstError(errors, "timezone"))}>
-            <FieldLabel htmlFor="event-timezone">IANA time zone</FieldLabel>
-            <Input
+            <FieldLabel htmlFor="event-timezone">Time zone</FieldLabel>
+            <TimezoneSelect
               id="event-timezone"
               name="timezone"
               defaultValue={timezone}
               aria-invalid={Boolean(firstError(errors, "timezone"))}
-              required
             />
-            <FieldDescription>For example: America/Los_Angeles.</FieldDescription>
+            <FieldDescription>Dates are entered in this time zone.</FieldDescription>
             <FieldError>{firstError(errors, "timezone")}</FieldError>
           </Field>
           <Field data-invalid={Boolean(firstError(errors, "startsAt"))}>
             <FieldLabel htmlFor="event-start">Starts</FieldLabel>
-            <Input
+            <DateTimePicker
               id="event-start"
               name="startsAt"
-              type="datetime-local"
               defaultValue={event ? localDateTime(event.startsAt, event.timezone) : ""}
               aria-invalid={Boolean(firstError(errors, "startsAt"))}
-              required
             />
             <FieldError>{firstError(errors, "startsAt")}</FieldError>
           </Field>
           <Field data-invalid={Boolean(firstError(errors, "endsAt"))}>
             <FieldLabel htmlFor="event-end">Ends</FieldLabel>
-            <Input
+            <DateTimePicker
               id="event-end"
               name="endsAt"
-              type="datetime-local"
               defaultValue={event ? localDateTime(event.endsAt, event.timezone) : ""}
               aria-invalid={Boolean(firstError(errors, "endsAt"))}
-              required
             />
             <FieldError>{firstError(errors, "endsAt")}</FieldError>
           </Field>
@@ -415,17 +413,12 @@ export function EventSettingsWorkspace({
             Create event
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Create event</DialogTitle>
-            <DialogDescription>Add event identity, local schedule, and program options.</DialogDescription>
+            <DialogDescription>A few quick steps to set up your event.</DialogDescription>
           </DialogHeader>
-          <EventForm
-            errors={fieldErrors}
-            pending={pending === "create-event"}
-            onSubmit={handleCreate}
-            submitLabel="Create event"
-          />
+          <CreateEventWizard errors={fieldErrors} pending={pending === "create-event"} action={handleCreate} />
         </DialogContent>
       </Dialog>
     );
@@ -466,17 +459,12 @@ export function EventSettingsWorkspace({
                 New event
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
               <DialogHeader>
                 <DialogTitle>Create event</DialogTitle>
-                <DialogDescription>Add event identity, local schedule, and program options.</DialogDescription>
+                <DialogDescription>A few quick steps to set up your event.</DialogDescription>
               </DialogHeader>
-              <EventForm
-                errors={fieldErrors}
-                pending={pending === "create-event"}
-                onSubmit={handleCreate}
-                submitLabel="Create event"
-              />
+              <CreateEventWizard errors={fieldErrors} pending={pending === "create-event"} action={handleCreate} />
             </DialogContent>
           </Dialog>
           <EventLifecycleActions

@@ -12,8 +12,12 @@ import { auth } from "@/server/auth/auth";
 import { getRequestAuthorization } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database";
 import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "@/server/events";
+import { isJpeg, isPng, isWebp } from "@/server/files/content-signatures";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
+import { contentDisposition, safeFileName } from "@/server/infrastructure/file-names";
 
 import type { EventSettingsSnapshot, MutationResult } from "./types";
+import { randomUUID } from "node:crypto";
 
 const eventSchema = z
   .object({
@@ -99,9 +103,65 @@ function parseEventForm(formData: FormData) {
     theme: formData.get("theme"),
     exhibitorsEnabled: formData.get("exhibitorsEnabled") === "on",
     sponsorsEnabled: formData.get("sponsorsEnabled") === "on",
-    logoObjectKey: formData.get("logoObjectKey"),
-    backgroundObjectKey: formData.get("backgroundObjectKey"),
+    logoObjectKey: formData.get("logoObjectKey") ?? "",
+    backgroundObjectKey: formData.get("backgroundObjectKey") ?? "",
   });
+}
+
+const BRANDING_IMAGE_SIGNATURES: Readonly<Record<string, (bytes: Uint8Array) => boolean>> = {
+  "image/jpeg": isJpeg,
+  "image/png": isPng,
+  "image/webp": isWebp,
+};
+
+interface BrandingUpload {
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+  readonly fileName?: string;
+}
+
+type BrandingUploadRead = { readonly upload: BrandingUpload | null } | { readonly error: string };
+
+async function readBrandingUpload(
+  formData: FormData,
+  field: string,
+  maxMegabytes: number,
+): Promise<BrandingUploadRead> {
+  const file = formData.get(field);
+  if (!(file instanceof File) || file.size === 0) {
+    return { upload: null };
+  }
+  if (file.size > maxMegabytes * 1024 * 1024) {
+    return { error: `The image exceeds the ${maxMegabytes} MB limit.` };
+  }
+  const matchesSignature = BRANDING_IMAGE_SIGNATURES[file.type];
+  if (!matchesSignature) {
+    return { error: "Upload a PNG, JPEG, or WebP image." };
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!matchesSignature(bytes)) {
+    return { error: "The image's contents do not match its declared type." };
+  }
+  return { upload: { bytes, contentType: file.type, fileName: safeFileName(file.name) } };
+}
+
+async function storeBrandingUpload(
+  eventId: string,
+  purpose: "logo" | "background",
+  upload: BrandingUpload,
+): Promise<string | null> {
+  const key = `events/${eventId}/branding/${purpose}-${randomUUID()}`;
+  const stored = await getConfiguredFileStorage().put({
+    key,
+    bytes: upload.bytes,
+    contentType: upload.contentType,
+    contentDisposition: upload.fileName ? contentDisposition(upload.fileName) : undefined,
+  });
+  return stored.ok ? key : null;
+}
+
+function uploadInvalid(field: string, message: string): MutationResult {
+  return { ok: false, message: "Review the highlighted fields.", fieldErrors: { [field]: [message] } };
 }
 
 function eventInput(value: z.infer<typeof eventSchema>) {
@@ -211,12 +271,39 @@ export async function createEvent(formData: FormData): Promise<MutationResult> {
   if (!authorization?.activeOrganization) return { ok: false, message: "You are not authorized to create events." };
   const parsed = parseEventForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
+
+  const logo = await readBrandingUpload(formData, "logoFile", 5);
+  if ("error" in logo) return uploadInvalid("logoFile", logo.error);
+  const background = await readBrandingUpload(formData, "backgroundFile", 10);
+  if ("error" in background) return uploadInvalid("backgroundFile", background.error);
+
   try {
     const event = await repositories().events.create({
       ...eventInput(parsed.data),
       orgId: authorization.activeOrganization.id,
     });
-    return success(event.id, "Event created.");
+
+    const keys: { logoObjectKey?: string; backgroundObjectKey?: string } = {};
+    const failures: string[] = [];
+    if (logo.upload) {
+      const key = await storeBrandingUpload(event.id, "logo", logo.upload);
+      if (key) keys.logoObjectKey = key;
+      else failures.push("logo");
+    }
+    if (background.upload) {
+      const key = await storeBrandingUpload(event.id, "background", background.upload);
+      if (key) keys.backgroundObjectKey = key;
+      else failures.push("background image");
+    }
+    if (keys.logoObjectKey || keys.backgroundObjectKey) {
+      await repositories().events.update(event.id, keys);
+    }
+
+    const message =
+      failures.length > 0
+        ? `Event created, but the ${failures.join(" and ")} could not be stored. Upload it again from event settings.`
+        : "Event created.";
+    return success(event.id, message);
   } catch (error) {
     return failureResult(error);
   }

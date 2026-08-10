@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 
 import { CalendarPlus, Save, Trash2, TriangleAlert } from "lucide-react";
 
+import { DateTimePicker } from "@/components/date-time-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -225,14 +226,12 @@ function PlacementForm({
             <div className="grid gap-5 sm:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(state, "startsAt")) || undefined}>
                 <FieldLabel htmlFor={`${formId}-starts-at`}>Starts at</FieldLabel>
-                <Input
+                <DateTimePicker
                   id={`${formId}-starts-at`}
                   name="startsAt"
-                  type="datetime-local"
                   value={startsAt}
-                  onChange={(event) => setStartsAt(event.target.value)}
+                  onChange={setStartsAt}
                   aria-invalid={Boolean(fieldError(state, "startsAt")) || undefined}
-                  required
                 />
                 <FieldError>{fieldError(state, "startsAt")}</FieldError>
               </Field>

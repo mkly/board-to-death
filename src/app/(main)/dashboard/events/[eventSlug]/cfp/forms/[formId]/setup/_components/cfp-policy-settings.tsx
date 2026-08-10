@@ -5,6 +5,7 @@ import { useActionState, useMemo, useState } from "react";
 import { Save } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
+import { DateTimePicker } from "@/components/date-time-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,29 +71,25 @@ export function CfpPolicySettings({ eventSlug, formId, timezone, initialSettings
             <div className="grid gap-4 sm:grid-cols-2">
               <Field data-invalid={Boolean(firstError(state, "submissionOpensAt")) || undefined}>
                 <FieldLabel htmlFor="cfp-submission-opens">Opens at</FieldLabel>
-                <Input
+                <DateTimePicker
                   id="cfp-submission-opens"
                   name="submissionOpensAt"
-                  type="datetime-local"
                   value={settings.submissionOpensAt}
-                  onChange={(event) => updateSetting("submissionOpensAt", event.target.value)}
+                  onChange={(next) => updateSetting("submissionOpensAt", next)}
                   aria-invalid={Boolean(firstError(state, "submissionOpensAt")) || undefined}
-                  required
                 />
                 <FieldDescription>{timezone}</FieldDescription>
                 <FieldError>{firstError(state, "submissionOpensAt")}</FieldError>
               </Field>
               <Field data-invalid={Boolean(firstError(state, "submissionClosesAt")) || undefined}>
                 <FieldLabel htmlFor="cfp-submission-closes">Closes at</FieldLabel>
-                <Input
+                <DateTimePicker
                   id="cfp-submission-closes"
                   name="submissionClosesAt"
-                  type="datetime-local"
                   value={settings.submissionClosesAt}
                   min={minimumClose}
-                  onChange={(event) => updateSetting("submissionClosesAt", event.target.value)}
+                  onChange={(next) => updateSetting("submissionClosesAt", next)}
                   aria-invalid={Boolean(firstError(state, "submissionClosesAt")) || undefined}
-                  required
                 />
                 <FieldDescription>Must be after the opening time.</FieldDescription>
                 <FieldError>{firstError(state, "submissionClosesAt")}</FieldError>
