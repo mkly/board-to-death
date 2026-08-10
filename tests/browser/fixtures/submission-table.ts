@@ -10,6 +10,7 @@ import {
 } from "../../../src/generated/prisma/client.ts";
 import type { CfpFormDefinition } from "../../../src/lib/cfp/index.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { provisionMagicLinkUser } from "../../../src/server/auth/magic-link-user.ts";
 import { CfpFormRepository } from "../../../src/server/cfp/repositories.ts";
 import { grantSeededOrganizationAccess } from "./organization-access.ts";
 
@@ -198,6 +199,7 @@ async function signIn() {
       links.push(url);
     },
   });
+  await provisionMagicLinkUser(database, { email: adminEmail });
   const requested = await auth.handler(
     new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
       method: "POST",

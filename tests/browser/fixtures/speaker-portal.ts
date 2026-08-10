@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../../../src/generated/prisma/client.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { provisionMagicLinkUser } from "../../../src/server/auth/magic-link-user.ts";
 import {
   createRepresentativeFixtures,
   representativeFixture,
@@ -367,6 +368,7 @@ const adminAuth = createAuth({
     deliveredAdminLink = url;
   },
 });
+await provisionMagicLinkUser(database, { email: "admin@example.test" });
 await adminAuth.handler(
   new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
     method: "POST",

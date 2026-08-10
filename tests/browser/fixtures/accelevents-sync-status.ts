@@ -8,6 +8,7 @@ import {
   PrismaClient,
 } from "../../../src/generated/prisma/client.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { provisionMagicLinkUser } from "../../../src/server/auth/magic-link-user.ts";
 import { grantSeededOrganizationAccess } from "./organization-access.ts";
 import { randomUUID } from "node:crypto";
 
@@ -28,6 +29,7 @@ async function createAdministratorSession(): Promise<string> {
       links.push(url);
     },
   });
+  await provisionMagicLinkUser(database, { email: "admin@example.test" });
   const signIn = await browserAuth.handler(
     new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
       method: "POST",

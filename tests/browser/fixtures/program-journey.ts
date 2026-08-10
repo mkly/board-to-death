@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { IntegrationProvider, PrismaClient } from "../../../src/generated/prisma/client.ts";
 import { AgendaPlacementRepository } from "../../../src/server/agenda/placements.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { provisionMagicLinkUser } from "../../../src/server/auth/magic-link-user.ts";
 import { EventRepository, RoomRepository, TrackRepository } from "../../../src/server/events/repositories.ts";
 import { ProgramSessionRepository } from "../../../src/server/sessions/repositories.ts";
 import { SpeakerRepository } from "../../../src/server/speakers/repositories.ts";
@@ -30,6 +31,7 @@ async function createAdministratorSession(orgId: string): Promise<string> {
       deliveredLink = url;
     },
   });
+  await provisionMagicLinkUser(database, { email: adminEmail });
   const signIn = await browserAuth.handler(
     new Request(new URL("/api/auth/sign-in/magic-link", baseURL), {
       method: "POST",
