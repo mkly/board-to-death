@@ -16,15 +16,27 @@ export interface ManageAssignmentsState {
   readonly message?: string;
 }
 
-const inputSchema = z.object({
-  operation: z.enum(["assign", "assign-committee", "reassign", "withdraw"]),
-  eventSlug: z.string().min(1),
-  roundId: z.string().uuid(),
-  reviewerId: z.string().uuid().optional(),
-  committeeId: z.string().uuid().optional(),
-  fromReviewerId: z.string().uuid().optional(),
-  submissionIds: z.array(z.string().uuid()).min(1, "Select at least one submission."),
-});
+const inputSchema = z
+  .object({
+    operation: z.enum(["assign", "assign-committee", "auto-distribute", "reassign", "withdraw"]),
+    eventSlug: z.string().min(1),
+    roundId: z.string().uuid(),
+    reviewerId: z.string().uuid().optional(),
+    reviewerIds: z.array(z.string().uuid()),
+    committeeId: z.string().uuid().optional(),
+    fromReviewerId: z.string().uuid().optional(),
+    submissionIds: z.array(z.string().uuid()),
+    perReviewerCap: z.coerce.number().int().positive().optional(),
+    trackId: z.string().uuid().optional(),
+  })
+  .superRefine(({ operation, reviewerIds, submissionIds }, context) => {
+    if (operation !== "auto-distribute" && submissionIds.length === 0) {
+      context.addIssue({ code: "custom", path: ["submissionIds"], message: "Select at least one submission." });
+    }
+    if (operation === "auto-distribute" && reviewerIds.length === 0) {
+      context.addIssue({ code: "custom", path: ["reviewerIds"], message: "Select at least one reviewer." });
+    }
+  });
 
 function optionalField(formData: FormData, name: string): string | undefined {
   const value = formData.get(name);
@@ -40,9 +52,12 @@ export async function manageEvaluationAssignments(
     eventSlug: formData.get("eventSlug"),
     roundId: formData.get("roundId"),
     reviewerId: optionalField(formData, "reviewerId"),
+    reviewerIds: formData.getAll("reviewerIds"),
     committeeId: optionalField(formData, "committeeId"),
     fromReviewerId: optionalField(formData, "fromReviewerId"),
     submissionIds: formData.getAll("submissionIds"),
+    perReviewerCap: optionalField(formData, "perReviewerCap"),
+    trackId: optionalField(formData, "trackId"),
   });
   if (!result.success) {
     return { status: "error", message: result.error.issues[0]?.message ?? "Check the assignment fields." };
@@ -63,6 +78,7 @@ export async function manageEvaluationAssignments(
   const repository = new EvaluationAssignmentRepository(client);
   try {
     let count: number;
+    let message: string | undefined;
     if (result.data.operation === "assign") {
       if (!result.data.reviewerId) return { status: "error", message: "Select a reviewer to assign." };
       count = await repository.assign({
@@ -79,6 +95,21 @@ export async function manageEvaluationAssignments(
         committeeId: result.data.committeeId,
         submissionIds: result.data.submissionIds,
       });
+    } else if (result.data.operation === "auto-distribute") {
+      const distribution = await repository.autoDistribute({
+        eventId: event.id,
+        roundId: result.data.roundId,
+        reviewerIds: result.data.reviewerIds,
+        perReviewerCap: result.data.perReviewerCap,
+        trackId: result.data.trackId,
+      });
+      count = distribution.assignmentsCreated;
+      const assignmentLabel = count === 1 ? "reviewer assignment" : "reviewer assignments";
+      message = `${count} ${assignmentLabel} created.`;
+      if (distribution.submissionsSkipped > 0) {
+        const submissionLabel = distribution.submissionsSkipped === 1 ? "submission" : "submissions";
+        message += ` ${distribution.submissionsSkipped} ${submissionLabel} skipped because every reviewer reached the cap.`;
+      }
     } else if (result.data.operation === "reassign") {
       if (!result.data.fromReviewerId || !result.data.reviewerId) {
         return { status: "error", message: "Select both the current and replacement reviewers." };
@@ -101,6 +132,7 @@ export async function manageEvaluationAssignments(
     }
 
     revalidatePath(`/dashboard/events/${event.slug}/evaluations/assignments`);
+    if (message) return { status: "success", message };
     const label = count === 1 ? "reviewer assignment" : "reviewer assignments";
     return { status: "success", message: `${count} ${label} updated.` };
   } catch (error) {

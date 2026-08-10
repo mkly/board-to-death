@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,7 +66,7 @@ interface EvaluationAssignmentsProps {
   readonly workspace: EvaluationAssignmentWorkspace;
 }
 
-type Operation = "assign" | "assign-committee" | "reassign" | "withdraw";
+type Operation = "assign" | "assign-committee" | "auto-distribute" | "reassign" | "withdraw";
 
 const initialState: ManageAssignmentsState = { status: "idle" };
 
@@ -89,6 +90,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
   const [state, formAction, pending] = useActionState(manageEvaluationAssignments, initialState);
   const [operation, setOperation] = useState<Operation>("assign");
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
+  const [distributionReviewerIds, setDistributionReviewerIds] = useState<readonly string[]>([]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected = workspace.submissions.length > 0 && selectedIds.length === workspace.submissions.length;
   let selectAllChecked: boolean | "indeterminate" = false;
@@ -111,11 +113,20 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
   }, [selectedSubmissions]);
 
   useEffect(() => {
-    if (state.status === "success") setSelectedIds([]);
+    if (state.status === "success") {
+      setSelectedIds([]);
+      setDistributionReviewerIds([]);
+    }
   }, [state]);
 
   function toggleSubmission(submissionId: string, checked: boolean) {
     setSelectedIds((current) => (checked ? [...current, submissionId] : current.filter((id) => id !== submissionId)));
+  }
+
+  function toggleDistributionReviewer(reviewerId: string, checked: boolean) {
+    setDistributionReviewerIds((current) =>
+      checked ? [...current, reviewerId] : current.filter((id) => id !== reviewerId),
+    );
   }
 
   function changeRound(roundId: string) {
@@ -216,10 +227,14 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
           <Card>
             <CardHeader>
               <CardTitle>Bulk action</CardTitle>
-              <CardDescription>{selectedIds.length} submissions selected</CardDescription>
+              <CardDescription>
+                {operation === "auto-distribute"
+                  ? "Distribute uncovered submissions in the selected round"
+                  : `${selectedIds.length} submissions selected`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <FieldGroup className="grid gap-4 md:grid-cols-3">
+              <FieldGroup className="grid gap-4 md:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="assignment-operation">Action</FieldLabel>
                   <NativeSelect
@@ -231,6 +246,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                   >
                     <NativeSelectOption value="assign">Assign reviewer</NativeSelectOption>
                     <NativeSelectOption value="assign-committee">Assign committee</NativeSelectOption>
+                    <NativeSelectOption value="auto-distribute">Auto-distribute</NativeSelectOption>
                     <NativeSelectOption value="reassign">Reassign reviewer</NativeSelectOption>
                     <NativeSelectOption value="withdraw">Withdraw reviewer</NativeSelectOption>
                   </NativeSelect>
@@ -275,7 +291,50 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                     ) : null}
                   </Field>
                 ) : null}
-                {operation !== "withdraw" && operation !== "assign-committee" ? (
+                {operation === "auto-distribute" ? (
+                  <>
+                    <FieldSet className="md:col-span-2">
+                      <FieldLegend variant="label">Reviewers</FieldLegend>
+                      <FieldDescription>
+                        Assignments go to the reviewer with the lightest current load.
+                      </FieldDescription>
+                      <FieldGroup data-slot="checkbox-group" className="grid gap-3 sm:grid-cols-2">
+                        {workspace.reviewers.map((reviewer) => (
+                          <Field key={reviewer.id} orientation="horizontal">
+                            <Checkbox
+                              id={`distribution-reviewer-${reviewer.id}`}
+                              name="reviewerIds"
+                              value={reviewer.id}
+                              checked={distributionReviewerIds.includes(reviewer.id)}
+                              onCheckedChange={(checked) => toggleDistributionReviewer(reviewer.id, checked === true)}
+                            />
+                            <FieldLabel htmlFor={`distribution-reviewer-${reviewer.id}`} className="font-normal">
+                              {reviewer.displayName}
+                            </FieldLabel>
+                          </Field>
+                        ))}
+                      </FieldGroup>
+                    </FieldSet>
+                    <Field>
+                      <FieldLabel htmlFor="distribution-track">Track</FieldLabel>
+                      <NativeSelect id="distribution-track" name="trackId" className="w-full" defaultValue="">
+                        <NativeSelectOption value="">All tracks</NativeSelectOption>
+                        {workspace.tracks.map((track) => (
+                          <NativeSelectOption key={track.id} value={track.id}>
+                            {track.label}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                      <FieldDescription>Tracks use the CFP categories attached to submissions.</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="per-reviewer-cap">Per-reviewer cap</FieldLabel>
+                      <Input id="per-reviewer-cap" name="perReviewerCap" type="number" min={1} step={1} />
+                      <FieldDescription>Optional maximum assignments per reviewer in this round.</FieldDescription>
+                    </Field>
+                  </>
+                ) : null}
+                {operation !== "withdraw" && operation !== "assign-committee" && operation !== "auto-distribute" ? (
                   <Field>
                     <FieldLabel htmlFor="target-reviewer">
                       {operation === "reassign" ? "Replacement reviewer" : "Reviewer"}
@@ -298,7 +357,8 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
                   type="submit"
                   disabled={
                     pending ||
-                    selectedIds.length === 0 ||
+                    (operation !== "auto-distribute" && selectedIds.length === 0) ||
+                    (operation === "auto-distribute" && distributionReviewerIds.length === 0) ||
                     workspace.reviewers.length === 0 ||
                     (operation === "assign-committee" && workspace.committees.length === 0) ||
                     ((operation === "reassign" || operation === "withdraw") && commonAssignedReviewerIds.size === 0)

@@ -32,6 +32,11 @@ export interface EvaluationCommitteeOption {
   readonly activeMemberCount: number;
 }
 
+export interface EvaluationTrackOption {
+  readonly id: string;
+  readonly label: string;
+}
+
 export type EvaluationCoverageStatus = "UNDER_ASSIGNED" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETE";
 
 export interface EvaluationCoverageCounts {
@@ -65,6 +70,7 @@ export interface EvaluationAssignmentWorkspace {
   readonly selectedRoundId: string | null;
   readonly reviewers: readonly EvaluationReviewerOption[];
   readonly committees: readonly EvaluationCommitteeOption[];
+  readonly tracks: readonly EvaluationTrackOption[];
   readonly coverage: EvaluationCoverageCounts;
   readonly submissions: readonly EvaluationAssignmentSubmission[];
 }
@@ -91,6 +97,19 @@ export interface WithdrawReviewersInput extends BulkAssignmentInput {
   readonly reviewerId: string;
 }
 
+export interface AutoDistributeReviewersInput {
+  readonly eventId: string;
+  readonly roundId: string;
+  readonly reviewerIds: readonly string[];
+  readonly perReviewerCap?: number;
+  readonly trackId?: string;
+}
+
+export interface AutoDistributionResult {
+  readonly assignmentsCreated: number;
+  readonly submissionsSkipped: number;
+}
+
 function invalid(message: string): never {
   throw new RepositoryError("invalid-input", message);
 }
@@ -104,6 +123,14 @@ function uniqueSubmissionIds(submissionIds: readonly string[]): string[] {
   const unique = [...new Set(normalized)];
   if (unique.length === 0) invalid("Select at least one submission.");
   if (unique.length !== normalized.length) invalid("Each submission may be selected only once.");
+  return unique;
+}
+
+function uniqueReviewerIds(reviewerIds: readonly string[]): string[] {
+  const normalized = reviewerIds.map((id) => id.trim()).filter(Boolean);
+  const unique = [...new Set(normalized)];
+  if (unique.length === 0) invalid("Select at least one reviewer.");
+  if (unique.length !== normalized.length) invalid("Each reviewer may be selected only once.");
   return unique;
 }
 
@@ -235,7 +262,7 @@ export class EvaluationAssignmentRepository {
   }
 
   async getWorkspace(eventId: string, selectedRoundId?: string): Promise<EvaluationAssignmentWorkspace> {
-    const [rounds, reviewers, committees] = await Promise.all([
+    const [rounds, reviewers, committees, tracks] = await Promise.all([
       this.client.evaluationRound.findMany({
         where: {
           status: EvaluationRoundStatus.OPEN,
@@ -267,6 +294,11 @@ export class EvaluationAssignmentRepository {
           },
         },
       }),
+      this.client.cfpCategory.findMany({
+        where: { eventId },
+        orderBy: { label: "asc" },
+        select: { id: true, label: true },
+      }),
     ]);
 
     const selectedRound = selectedRoundId ? rounds.find(({ id }) => id === selectedRoundId) : rounds[0];
@@ -279,6 +311,7 @@ export class EvaluationAssignmentRepository {
         selectedRoundId: null,
         reviewers,
         committees: committees.map(({ id, name, members }) => ({ id, name, activeMemberCount: members.length })),
+        tracks,
         coverage: { underAssigned: 0, assigned: 0, inProgress: 0, complete: 0 },
         submissions: [],
       };
@@ -358,9 +391,112 @@ export class EvaluationAssignmentRepository {
       selectedRoundId: selectedRound.id,
       reviewers,
       committees: committees.map(({ id, name, members }) => ({ id, name, activeMemberCount: members.length })),
+      tracks,
       coverage: countCoverage(mappedSubmissions),
       submissions: mappedSubmissions,
     };
+  }
+
+  async autoDistribute(input: AutoDistributeReviewersInput): Promise<AutoDistributionResult> {
+    const reviewerIds = uniqueReviewerIds(input.reviewerIds);
+    if (input.perReviewerCap !== undefined && (!Number.isInteger(input.perReviewerCap) || input.perReviewerCap < 1)) {
+      invalid("The per-reviewer cap must be a positive whole number.");
+    }
+
+    try {
+      return await this.client.$transaction(async (transaction) => {
+        await requireOpenRound(transaction, input.eventId, input.roundId);
+        const reviewers = await transaction.evaluationReviewer.findMany({
+          where: { eventId: input.eventId, id: { in: reviewerIds }, status: EvaluationReviewerStatus.ACTIVE },
+          select: { id: true },
+        });
+        if (reviewers.length !== reviewerIds.length) invalid("Select only active reviewers from this event.");
+
+        if (input.trackId) {
+          const track = await transaction.cfpCategory.findFirst({
+            where: { id: input.trackId, eventId: input.eventId },
+            select: { id: true },
+          });
+          if (!track) invalid("Select a track from this event.");
+        }
+
+        const round = await transaction.evaluationRound.findFirst({
+          where: { id: input.roundId, planVersion: { plan: { eventId: input.eventId } } },
+          select: { planVersionId: true, sortOrder: true },
+        });
+        if (!round) invalid("Select an evaluation round from this event.");
+        const earlierRound = await transaction.evaluationRound.findFirst({
+          where: { planVersionId: round.planVersionId, sortOrder: { lt: round.sortOrder } },
+          select: { id: true },
+        });
+        const submissions = await transaction.cfpSubmission.findMany({
+          where: {
+            eventId: input.eventId,
+            status: { in: [...eligibleSubmissionStatuses] },
+            ...(earlierRound ? { evaluationAdvancements: { some: { targetRoundId: input.roundId } } } : {}),
+            ...(input.trackId ? { categories: { some: { categoryId: input.trackId } } } : {}),
+          },
+          orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+          select: { id: true },
+        });
+
+        const existing = await transaction.evaluationAssignment.findMany({
+          where: { roundId: input.roundId, reviewerId: { in: reviewerIds } },
+          select: { id: true, reviewerId: true, submissionId: true, status: true },
+        });
+        const activeStatuses = new Set<EvaluationAssignmentStatus>([
+          EvaluationAssignmentStatus.ASSIGNED,
+          EvaluationAssignmentStatus.COMPLETED,
+        ]);
+        const loads = new Map(reviewerIds.map((reviewerId) => [reviewerId, 0]));
+        const coveredSubmissionIds = new Set<string>();
+        const existingByPair = new Map<string, (typeof existing)[number]>();
+        for (const assignment of existing) {
+          existingByPair.set(`${assignment.submissionId}:${assignment.reviewerId}`, assignment);
+          if (!activeStatuses.has(assignment.status)) continue;
+          loads.set(assignment.reviewerId, (loads.get(assignment.reviewerId) ?? 0) + 1);
+          coveredSubmissionIds.add(assignment.submissionId);
+        }
+
+        let assignmentsCreated = 0;
+        let submissionsSkipped = 0;
+        const now = new Date();
+        for (const submission of submissions) {
+          if (coveredSubmissionIds.has(submission.id)) continue;
+          const reviewerId = reviewerIds
+            .filter((id) => input.perReviewerCap === undefined || (loads.get(id) ?? 0) < input.perReviewerCap)
+            .sort((left, right) => (loads.get(left) ?? 0) - (loads.get(right) ?? 0))[0];
+          if (!reviewerId) {
+            submissionsSkipped += 1;
+            continue;
+          }
+
+          const prior = existingByPair.get(`${submission.id}:${reviewerId}`);
+          if (prior) {
+            await transaction.evaluationAssignment.update({
+              where: { id: prior.id },
+              data: {
+                committeeId: null,
+                status: EvaluationAssignmentStatus.ASSIGNED,
+                assignedAt: now,
+                completedAt: null,
+                revokedAt: null,
+              },
+            });
+          } else {
+            await transaction.evaluationAssignment.create({
+              data: { roundId: input.roundId, submissionId: submission.id, reviewerId, assignedAt: now },
+            });
+          }
+          loads.set(reviewerId, (loads.get(reviewerId) ?? 0) + 1);
+          assignmentsCreated += 1;
+        }
+
+        return { assignmentsCreated, submissionsSkipped };
+      });
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
   }
 
   async assignCommittee(input: AssignCommitteeInput): Promise<number> {
