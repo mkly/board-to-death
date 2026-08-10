@@ -160,7 +160,9 @@ test("administers speaker resource lifecycle, ordering, sanitization, and event 
   await page.getByRole("button", { name: "Archive", exact: true }).click();
   await page.getByRole("button", { name: "Archive resource" }).click();
   await expect(page.getByText("Resource archived.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Speaker slides/ })).toBeHidden();
+  // The archived row takes its reorder buttons with it, so a strict `toBeHidden` resolves three
+  // elements while the refresh is still in flight; counting them retries until the row is gone.
+  await expect(page.getByRole("button", { name: /Speaker slides/ })).toHaveCount(0);
 
   await page.goto(`/events/${eventSlug}/resources`);
   await expect(page.getByText("No published resources")).toBeVisible();

@@ -291,7 +291,9 @@ test("creates an audience portal, previews its match, and enforces participant v
   await page.getByRole("tab", { name: "Content" }).click();
   await page.getByRole("checkbox", { name: "Resources" }).uncheck();
   await page.getByRole("tab", { name: "Fields" }).click();
-  await page.getByLabel("Organization").click();
+  // Exact: the dashboard sidebar renders an "Active organization" combobox that a substring match
+  // also resolves once the admin belongs to more than one organization.
+  await page.getByLabel("Organization", { exact: true }).click();
   await page.getByRole("option", { name: "View only" }).click();
   await page.getByLabel("Accessibility needs").click();
   await page.getByRole("option", { name: "Hidden" }).click();
@@ -311,7 +313,7 @@ test("creates an audience portal, previews its match, and enforces participant v
   expect(hiddenResource?.status()).toBe(404);
 
   await page.goto(`/portal/${fixture.eventSlug}/profile`);
-  await expect(page.getByLabel("Organization")).toBeDisabled();
+  await expect(page.getByLabel("Organization", { exact: true })).toBeDisabled();
   await expect(page.getByLabel("Accessibility needs")).toBeHidden();
 });
 
