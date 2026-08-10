@@ -62,7 +62,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
                 orientation="vertical"
                 className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center"
               />
-              <SearchDialog eventSlug={shell.activeEvent?.slug} />
+              <SearchDialog eventSlug={shell.activeEvent?.slug} hasOrganization={Boolean(shell.activeOrganization)} />
             </div>
             <div className="flex items-center gap-2">
               <ThemeSwitcher />

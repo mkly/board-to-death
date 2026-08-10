@@ -83,7 +83,7 @@ export function AppSidebar({
         <EventSwitcher events={events} activeEvent={activeEvent} />
       </SidebarHeader>
       <SidebarContent className="py-2">
-        <NavMain items={getSidebarItems(activeEvent?.slug)} />
+        <NavMain items={getSidebarItems(activeEvent?.slug, Boolean(activeOrganization))} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

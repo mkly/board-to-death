@@ -76,6 +76,19 @@ describe("organization invitations", () => {
     });
     assert.equal(pending.inviterId, inviter.id);
     assert.equal(pending.status, OrganizationInvitationStatus.PENDING);
+    assert.deepEqual(await service.list(organization.id), {
+      invitations: [
+        {
+          id: pending.id,
+          email: invitee.email,
+          role: OrganizationMemberRole.OWNER,
+          status: OrganizationInvitationStatus.PENDING,
+          expiresAt: pending.expiresAt,
+          createdAt: pending.createdAt,
+        },
+      ],
+      memberships: [],
+    });
 
     const result = await service.accept(tokenFromCallback(callbackURL), invitee);
     const membership = await client.organizationMember.findUniqueOrThrow({
@@ -172,5 +185,64 @@ describe("organization invitations", () => {
 
     await service.revoke(organization.id, pending.id);
     await assert.rejects(() => service.accept(tokenFromCallback(replacementCallback), invitee), /invalid, expired, or/);
+  });
+
+  test("lists memberships and preserves at least one active owner when access changes", async () => {
+    const organization = await createOrganization();
+    const owner = await createUser("Membership Owner");
+    const member = await createUser("Membership Member");
+    const [ownerMembership, memberMembership] = await Promise.all([
+      client.organizationMember.create({
+        data: { orgId: organization.id, userId: owner.id, role: OrganizationMemberRole.OWNER },
+      }),
+      client.organizationMember.create({
+        data: { orgId: organization.id, userId: member.id, role: OrganizationMemberRole.MEMBER },
+      }),
+    ]);
+
+    const snapshot = await service.list(organization.id);
+    assert.deepEqual(
+      snapshot.memberships.map(({ id, userId, email, displayName, role, status }) => ({
+        id,
+        userId,
+        email,
+        displayName,
+        role,
+        status,
+      })),
+      [
+        {
+          id: ownerMembership.id,
+          userId: owner.id,
+          email: owner.email,
+          displayName: owner.name,
+          role: OrganizationMemberRole.OWNER,
+          status: MembershipStatus.ACTIVE,
+        },
+        {
+          id: memberMembership.id,
+          userId: member.id,
+          email: member.email,
+          displayName: member.name,
+          role: OrganizationMemberRole.MEMBER,
+          status: MembershipStatus.ACTIVE,
+        },
+      ],
+    );
+
+    await service.setMembershipActive(organization.id, memberMembership.id, false);
+    assert.equal(
+      (await client.organizationMember.findUniqueOrThrow({ where: { id: memberMembership.id } })).status,
+      MembershipStatus.REVOKED,
+    );
+    await assert.rejects(
+      () => service.setMembershipActive(organization.id, ownerMembership.id, false),
+      /Add another active owner/,
+    );
+    await service.setMembershipActive(organization.id, memberMembership.id, true);
+    assert.equal(
+      (await client.organizationMember.findUniqueOrThrow({ where: { id: memberMembership.id } })).status,
+      MembershipStatus.ACTIVE,
+    );
   });
 });
