@@ -120,7 +120,14 @@ export function SpreadsheetImportWorkspace({ event, recentImports }: Spreadsheet
     }
     startTransition(async () => {
       const result = await action(requestForm(event.slug, entityType, file, includeMapping ? mapping : undefined));
-      setState(result);
+      // Preview and commit answer without the column list, so carry the one
+      // inspect returned. Dropping it would hide the mapping controls exactly
+      // when a rejected preview needs them remapped.
+      setState((current) => ({
+        ...result,
+        headers: result.headers ?? current.headers,
+        fields: result.fields ?? current.fields,
+      }));
       if (result.status === "ready" && result.headers && result.fields) {
         const suggestions = Object.fromEntries(
           result.headers.map((header) => {
