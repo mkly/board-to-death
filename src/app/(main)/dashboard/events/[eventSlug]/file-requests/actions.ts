@@ -6,6 +6,8 @@ import { notFound, redirect } from "next/navigation";
 import type { FileRequestReplacementPolicy, FileRequestTargetKind } from "@/generated/prisma/client";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
+import { deliverFileRequestFulfillmentLinks } from "@/server/files/fulfillment-email";
+import { FileRequestFulfillmentLinkError, FileRequestFulfillmentLinkService } from "@/server/files/fulfillment-links";
 import {
   archiveFileRequest,
   assignFileRequest,
@@ -52,7 +54,7 @@ function destination(
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof RepositoryError) return error.message;
+  if (error instanceof RepositoryError || error instanceof FileRequestFulfillmentLinkError) return error.message;
   console.error(error);
   return "The file request could not be saved. Try again.";
 }
@@ -116,6 +118,15 @@ function buildTarget(kind: FileRequestTargetKind, targetId: string): FileRequest
   if (kind === "CONTACT") return { kind, contactId: targetId };
   if (kind === "GROUP") return { kind, groupId: targetId };
   return { kind, submissionId: targetId };
+}
+
+async function issueFulfillmentLinks(eventId: string, assignmentId: string): Promise<number> {
+  const links = await new FileRequestFulfillmentLinkService({ database: getDatabaseClient() }).issue(
+    eventId,
+    assignmentId,
+  );
+  await deliverFileRequestFulfillmentLinks(links);
+  return links.length;
 }
 
 export async function createFileRequestAction(eventSlug: string, formData: FormData): Promise<never> {
@@ -187,15 +198,51 @@ export async function assignFileRequestAction(
   formData: FormData,
 ): Promise<never> {
   const event = await requireAuthorizedEvent(eventSlug);
+  let recipientCount = 0;
+  let createdAssignmentId: string | undefined;
   try {
     const kind = parseTargetKind(formData);
     const targetId = requiredField(formData, "targetId");
     if (targetId === "") throw new RepositoryError("invalid-input", "Choose a target to assign this request to.");
-    await assignFileRequest(getDatabaseClient(), event.id, requestId, buildTarget(kind, targetId));
+    const assignment = await assignFileRequest(getDatabaseClient(), event.id, requestId, buildTarget(kind, targetId));
+    createdAssignmentId = assignment.id;
+    if (kind === "CONTACT" || kind === "GROUP") {
+      recipientCount = await issueFulfillmentLinks(event.id, assignment.id);
+    }
+  } catch (error) {
+    if (createdAssignmentId) {
+      await getDatabaseClient().fileRequestAssignment.deleteMany({
+        where: { eventId: event.id, id: createdAssignmentId, status: "PENDING", files: { none: {} } },
+      });
+    }
+    redirect(destination(event.slug, { requestId, error: errorMessage(error) }));
+  }
+  return refreshAndRedirect(
+    event.slug,
+    requestId,
+    recipientCount > 0
+      ? `File request assigned. A fulfillment link was sent to ${recipientCount} contact${recipientCount === 1 ? "" : "s"}.`
+      : "File request assigned.",
+  );
+}
+
+export async function resendFulfillmentLinkAction(
+  eventSlug: string,
+  requestId: string,
+  assignmentId: string,
+): Promise<never> {
+  const event = await requireAuthorizedEvent(eventSlug);
+  let recipientCount = 0;
+  try {
+    recipientCount = await issueFulfillmentLinks(event.id, assignmentId);
   } catch (error) {
     redirect(destination(event.slug, { requestId, error: errorMessage(error) }));
   }
-  return refreshAndRedirect(event.slug, requestId, "File request assigned.");
+  return refreshAndRedirect(
+    event.slug,
+    requestId,
+    `A fresh fulfillment link was sent to ${recipientCount} contact${recipientCount === 1 ? "" : "s"}.`,
+  );
 }
 
 export async function withdrawAssignmentAction(
