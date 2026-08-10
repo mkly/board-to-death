@@ -75,11 +75,20 @@ function groupBy(items: SearchItem[]) {
   }));
 }
 
-export function SearchDialog({ eventSlug }: { readonly eventSlug?: string }) {
+export function SearchDialog({
+  eventSlug,
+  hasOrganization = false,
+}: {
+  readonly eventSlug?: string;
+  readonly hasOrganization?: boolean;
+}) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const router = useRouter();
-  const searchItems = React.useMemo(() => createSearchItems(getSidebarItems(eventSlug)), [eventSlug]);
+  const searchItems = React.useMemo(
+    () => createSearchItems(getSidebarItems(eventSlug, hasOrganization)),
+    [eventSlug, hasOrganization],
+  );
   const recommendations = React.useMemo(() => getAvailableItems(searchItems), [searchItems]);
 
   React.useEffect(() => {

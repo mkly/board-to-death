@@ -94,4 +94,17 @@ describe("program workspace navigation", () => {
     );
     expect(dashboardEventHref("indie games", "settings")).toBe("/dashboard/events/indie%20games/settings");
   });
+
+  test("adds organization membership settings only for organization members", () => {
+    expect(getSidebarItems("tabletop-summit")).toHaveLength(1);
+    expect(getSidebarItems("tabletop-summit", true)[1]).toMatchObject({
+      label: "Organization",
+      items: [
+        {
+          id: "organization-team",
+          url: "/dashboard/organization",
+        },
+      ],
+    });
+  });
 });

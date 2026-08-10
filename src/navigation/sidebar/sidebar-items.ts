@@ -100,8 +100,8 @@ export function dashboardEventHref(eventSlug: string, workspace: DashboardWorksp
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/${workspacePath}`;
 }
 
-export function getSidebarItems(eventSlug?: string): NavGroup[] {
-  return [
+export function getSidebarItems(eventSlug?: string, hasOrganization = false): NavGroup[] {
+  const groups: NavGroup[] = [
     {
       id: 1,
       label: "Program workspace",
@@ -178,4 +178,19 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
       }),
     },
   ];
+  if (hasOrganization) {
+    groups.push({
+      id: 2,
+      label: "Organization",
+      items: [
+        {
+          id: "organization-team",
+          title: "Members & invitations",
+          icon: Building2,
+          url: "/dashboard/organization",
+        },
+      ],
+    });
+  }
+  return groups;
 }

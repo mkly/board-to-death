@@ -1,7 +1,7 @@
 import {
   MembershipStatus,
   OrganizationInvitationStatus,
-  type OrganizationMemberRole,
+  OrganizationMemberRole,
   type Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
@@ -37,6 +37,29 @@ export type OrganizationInvitationDelivery = (input: {
   readonly email: string;
   readonly callbackURL: string;
 }) => Promise<void>;
+
+export interface OrganizationInvitationListItem {
+  readonly id: string;
+  readonly email: string;
+  readonly role: OrganizationMemberRole;
+  readonly status: OrganizationInvitationStatus;
+  readonly expiresAt: Date;
+  readonly createdAt: Date;
+}
+
+export interface OrganizationMembershipListItem {
+  readonly id: string;
+  readonly userId: string;
+  readonly email: string;
+  readonly displayName: string;
+  readonly role: OrganizationMemberRole;
+  readonly status: MembershipStatus;
+}
+
+export interface OrganizationTeamSnapshot {
+  readonly invitations: readonly OrganizationInvitationListItem[];
+  readonly memberships: readonly OrganizationMembershipListItem[];
+}
 
 function normalizeEmail(email: string): string {
   const normalized = email.trim().toLowerCase();
@@ -94,6 +117,30 @@ export class OrganizationInvitationService {
       email: invitation.email,
       organizationName: invitation.organization.name,
       role: invitation.role,
+    };
+  }
+
+  async list(organizationId: string): Promise<OrganizationTeamSnapshot> {
+    await requireOrganization(this.#client, organizationId);
+    const [invitations, memberships] = await Promise.all([
+      this.#client.organizationInvitation.findMany({
+        where: { orgId: organizationId },
+        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        select: { id: true, email: true, role: true, status: true, expiresAt: true, createdAt: true },
+      }),
+      this.#client.organizationMember.findMany({
+        where: { orgId: organizationId },
+        orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+        select: { id: true, userId: true, role: true, status: true, user: { select: { email: true, name: true } } },
+      }),
+    ]);
+    return {
+      invitations,
+      memberships: memberships.map(({ user, ...membership }) => ({
+        ...membership,
+        email: user.email,
+        displayName: user.name,
+      })),
     };
   }
 
@@ -158,6 +205,37 @@ export class OrganizationInvitationService {
       data: { status: OrganizationInvitationStatus.REVOKED },
     });
     if (result.count === 0) throw new RepositoryError("not-found", "That pending invitation was not found.");
+  }
+
+  async setMembershipActive(organizationId: string, membershipId: string, active: boolean): Promise<void> {
+    await this.#client.$transaction(async (transaction) => {
+      const membership = await transaction.organizationMember.findFirst({
+        where: { id: membershipId, orgId: organizationId },
+        select: { id: true, role: true, status: true },
+      });
+      if (!membership) throw new RepositoryError("not-found", "That organization membership was not found.");
+
+      if (
+        !active &&
+        membership.role === OrganizationMemberRole.OWNER &&
+        membership.status === MembershipStatus.ACTIVE
+      ) {
+        const activeOwnerCount = await transaction.organizationMember.count({
+          where: { orgId: organizationId, role: OrganizationMemberRole.OWNER, status: MembershipStatus.ACTIVE },
+        });
+        if (activeOwnerCount <= 1) {
+          throw new RepositoryError("conflict", "Add another active owner before removing this owner's access.");
+        }
+      }
+
+      await transaction.organizationMember.update({
+        where: { id: membership.id },
+        data: {
+          status: active ? MembershipStatus.ACTIVE : MembershipStatus.REVOKED,
+          revokedAt: active ? null : new Date(),
+        },
+      });
+    });
   }
 
   async accept(
