@@ -13,6 +13,7 @@ import {
   ReviewerVisibility,
 } from "../../../src/generated/prisma/client.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { grantSeededOrganizationAccess } from "./organization-access.ts";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 const databaseUrl =
@@ -60,6 +61,7 @@ async function createAdministratorSession(): Promise<string> {
   const verified = await auth.handler(new Request(link, { redirect: "manual" }));
   const match = (verified.headers.get("set-cookie") ?? "").match(/better-auth\.session_token=([^;]+)/);
   if (!match?.[1]) throw new Error("Expected Better Auth to create a browser session cookie.");
+  await grantSeededOrganizationAccess("admin@example.test");
   return match[1];
 }
 

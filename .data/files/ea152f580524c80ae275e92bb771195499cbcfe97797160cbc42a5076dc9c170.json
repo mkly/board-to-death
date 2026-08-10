@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "key": "events/00000000-0000-4000-8000-000000000001/speakers/00000000-0000-4000-8000-000000000009/02e7e5ba-81a3-466e-ac07-e78e202e0968",
+  "contentType": "application/pdf",
+  "contentDisposition": "attachment; filename=\"agreement.pdf\"; filename*=UTF-8''agreement.pdf",
+  "etag": "c04a4dda36fa1fc86eedfe798b092942e219c75cf2155542e1e916551373b727",
+  "metadata": {
+    "owner-event-id": "00000000-0000-4000-8000-000000000001",
+    "owner-speaker-id": "00000000-0000-4000-8000-000000000009",
+    "original-file-name": "agreement.pdf"
+  },
+  "bytes": "JVBERi0xLjdib2FyZC10by1kZWF0aA=="
+}

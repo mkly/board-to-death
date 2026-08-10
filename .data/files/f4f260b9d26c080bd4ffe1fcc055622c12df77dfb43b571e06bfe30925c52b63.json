@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "key": "events/00000000-0000-4000-8000-000000000001/speakers/00000000-0000-4000-8000-000000000009/3f25d38c-a725-400d-b632-c5cf1481ecc4",
+  "contentType": "text/plain",
+  "contentDisposition": "attachment; filename=\"notes.txt\"; filename*=UTF-8''notes.txt",
+  "etag": "b50e7cd63d908d7e9c2316115f08468c525f7b974059c6ca5647715d36dbd14e",
+  "metadata": {
+    "owner-event-id": "00000000-0000-4000-8000-000000000001",
+    "owner-speaker-id": "00000000-0000-4000-8000-000000000009",
+    "original-file-name": "notes.txt"
+  },
+  "bytes": "U2Vzc2lvbiBub3RlcyBmb3IgdGhlIG9yZ2FuaXplcnMu"
+}

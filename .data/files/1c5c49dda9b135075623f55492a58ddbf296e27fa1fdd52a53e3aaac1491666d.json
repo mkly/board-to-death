@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "key": "events/8e8738d9-2df0-47f7-a3c1-092b4d818794/file-requests/ce5b506c-3d5a-4459-96fd-2a4003027842/assignments/9712db0a-8537-4eb6-b12e-732527e8e62d/49fcca25-7a73-4f9f-8537-ecf8081cd5db",
+  "contentType": "application/pdf",
+  "contentDisposition": "attachment; filename=\"signed-contract.pdf\"; filename*=UTF-8''signed-contract.pdf",
+  "etag": "86edbaa24831badfa0a8b04bb410141e2ee4182b6d0014493fe262a7a331c20b",
+  "metadata": {
+    "owner-event-id": "8e8738d9-2df0-47f7-a3c1-092b4d818794",
+    "owner-assignment-id": "9712db0a-8537-4eb6-b12e-732527e8e62d",
+    "original-file-name": "signed-contract.pdf"
+  },
+  "bytes": "JVBERi0xLjc="
+}

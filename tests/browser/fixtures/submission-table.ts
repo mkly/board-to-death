@@ -11,6 +11,7 @@ import {
 import type { CfpFormDefinition } from "../../../src/lib/cfp/index.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
 import { CfpFormRepository } from "../../../src/server/cfp/repositories.ts";
+import { grantSeededOrganizationAccess } from "./organization-access.ts";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 const databaseUrl =
@@ -210,6 +211,7 @@ async function signIn() {
   const verified = await auth.handler(new Request(link, { redirect: "manual" }));
   const value = (verified.headers.get("set-cookie") ?? "").match(/better-auth\.session_token=([^;]+)/)?.[1];
   if (!value) throw new Error("Expected Better Auth to create a submission-table browser session cookie.");
+  await grantSeededOrganizationAccess("admin@example.test");
   return { value };
 }
 
