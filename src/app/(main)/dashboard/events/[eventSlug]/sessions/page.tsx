@@ -41,7 +41,7 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
   const trackNames = new Map(tracks.map((track) => [track.id, track.name]));
   const customFieldValues = await client.customFieldValue.findMany({
     where: { eventId: event.id, sessionId: { in: sessions.map(({ id }) => id) } },
-    select: { sessionId: true, definitionId: true, value: true },
+    select: { id: true, sessionId: true, definitionId: true, value: true },
   });
   const sessionTitles = new Map(sessions.map((session) => [session.id, session.version.title]));
 
@@ -98,7 +98,7 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
           versionNumber: session.version.versionNumber,
           customFieldValues: customFieldValues
             .filter((value) => value.sessionId === session.id)
-            .map(({ definitionId, value }) => ({ definitionId, value })),
+            .map(({ id, definitionId, value }) => ({ id, definitionId, value })),
         }))}
       />
     </div>

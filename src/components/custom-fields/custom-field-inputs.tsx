@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -22,12 +24,16 @@ export interface CustomFieldInputDefinition {
 }
 
 export interface CustomFieldInputValue {
+  readonly id?: string;
   readonly definitionId: string;
   readonly value: unknown;
 }
 
-function storedValue(values: readonly CustomFieldInputValue[], definitionId: string): unknown {
-  return values.find((entry) => entry.definitionId === definitionId)?.value;
+function storedEntry(
+  values: readonly CustomFieldInputValue[],
+  definitionId: string,
+): CustomFieldInputValue | undefined {
+  return values.find((entry) => entry.definitionId === definitionId);
 }
 
 function Description({ children }: { readonly children: string | null }) {
@@ -46,11 +52,13 @@ export function CustomFieldInputs({
   values = [],
   disabled = false,
   idPrefix = "",
+  fileDownloadBasePath,
 }: {
   readonly definitions: readonly CustomFieldInputDefinition[];
   readonly values?: readonly CustomFieldInputValue[];
   readonly disabled?: boolean;
   readonly idPrefix?: string;
+  readonly fileDownloadBasePath?: string;
 }) {
   if (definitions.length === 0) return null;
   return (
@@ -60,7 +68,8 @@ export function CustomFieldInputs({
         {definitions.map((definition) => {
           const name = `${customFieldFormPrefix}${definition.id}`;
           const id = `${idPrefix}custom-field-${definition.id}`;
-          const stored = storedValue(values, definition.id);
+          const entry = storedEntry(values, definition.id);
+          const stored = entry?.value;
           if (definition.type === CustomFieldType.LONG_TEXT) {
             return (
               <Field key={definition.id} data-disabled={disabled || undefined}>
@@ -159,7 +168,20 @@ export function CustomFieldInputs({
                   required={definition.required && !fileName}
                   disabled={disabled}
                 />
-                <FieldDescription>{fileName ? `Current file: ${fileName}` : definition.description}</FieldDescription>
+                <FieldDescription>
+                  {fileName ? (
+                    <>
+                      Current file:{" "}
+                      {entry?.id && fileDownloadBasePath ? (
+                        <Link href={`${fileDownloadBasePath}/${encodeURIComponent(entry.id)}`}>{fileName}</Link>
+                      ) : (
+                        fileName
+                      )}
+                    </>
+                  ) : (
+                    definition.description
+                  )}
+                </FieldDescription>
               </Field>
             );
           }

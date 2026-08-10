@@ -166,7 +166,11 @@ function ContactEditor({
               <FieldLabel htmlFor="contact-phone">Phone</FieldLabel>
               <Input defaultValue={contact.phone ?? ""} id="contact-phone" name="phone" type="tel" />
             </Field>
-            <CustomFieldInputs definitions={definitions} values={contact.customFieldValues} />
+            <CustomFieldInputs
+              definitions={definitions}
+              values={contact.customFieldValues}
+              fileDownloadBasePath={`/dashboard/events/${encodeURIComponent(eventSlug)}/custom-fields/files`}
+            />
             <SavedCustomFields definitions={definitions} values={contact.customFieldValues} />
           </FieldGroup>
         </CardContent>

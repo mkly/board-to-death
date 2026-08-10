@@ -9,14 +9,13 @@ import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { CustomFieldEntityType, CustomFieldType, ProgramSessionParticipantRole } from "@/generated/prisma/client";
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { storeCustomFieldFile } from "@/server/custom-fields/files";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
-import { contentDisposition, createFileStorage, safeFileName } from "@/server/infrastructure";
+import { createFileStorage } from "@/server/infrastructure";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
-
-import { randomUUID } from "node:crypto";
 
 export interface SessionMutationState {
   readonly status: "idle" | "success" | "error";
@@ -171,27 +170,24 @@ export async function saveProgramSession(
       rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
     });
     for (const { definition, file } of customInput.files) {
-      const fileName = safeFileName(file.name);
-      if (!fileName) return { status: "error", message: `${definition.label} has an invalid file name.` };
-      const objectKey = `events/${event.id}/custom-fields/${definition.id}/sessions/${saved.id}/${randomUUID()}`;
-      const stored = await storage.put({
-        key: objectKey,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-        contentType: file.type || "application/octet-stream",
-        contentDisposition: contentDisposition(fileName),
-        metadata: { eventId: event.id, definitionId: definition.id, sessionId: saved.id },
+      const stored = await storeCustomFieldFile({
+        eventId: event.id,
+        definitionId: definition.id,
+        fieldLabel: definition.label,
+        pathSegment: `sessions/${saved.id}`,
+        file,
+        storage,
       });
-      if (!stored.ok) return { status: "error", message: `${definition.label} could not be stored. Try again.` };
       try {
-        await customFields.setValue(event.id, definition.id, target, { objectKey, fileName });
+        await customFields.setValue(event.id, definition.id, target, stored);
       } catch (error) {
-        await storage.delete(objectKey);
+        await storage.delete(stored.objectKey);
         throw error;
       }
       const previous = existingValues.find(({ definitionId }) => definitionId === definition.id)?.value;
       if (typeof previous === "object" && previous !== null && !Array.isArray(previous) && "objectKey" in previous) {
         const previousKey = previous.objectKey;
-        if (typeof previousKey === "string" && previousKey !== objectKey) await storage.delete(previousKey);
+        if (typeof previousKey === "string" && previousKey !== stored.objectKey) await storage.delete(previousKey);
       }
     }
     revalidatePath(`/dashboard/events/${event.slug}/sessions`);

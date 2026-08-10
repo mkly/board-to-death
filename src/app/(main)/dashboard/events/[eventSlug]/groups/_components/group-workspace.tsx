@@ -420,6 +420,7 @@ export function GroupWorkspace({
                         <div className="flex flex-col gap-5 md:col-span-5">
                           <CustomFieldInputs
                             definitions={customFieldDefinitions}
+                            fileDownloadBasePath={`/dashboard/events/${encodeURIComponent(event.slug)}/custom-fields/files`}
                             idPrefix={`group-${group.id}-`}
                             values={group.customFieldValues}
                           />

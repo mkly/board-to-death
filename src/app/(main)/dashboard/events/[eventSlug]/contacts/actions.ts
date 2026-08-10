@@ -11,15 +11,15 @@ import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } fr
 import { isAllowedAdminEmail } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createContact, linkDirectoryPersonToEvent, updateContact } from "@/server/contacts/repositories";
+import { storeCustomFieldFile } from "@/server/custom-fields/files";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, type CustomFieldTarget } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
-import { contentDisposition, createFileStorage, safeFileName } from "@/server/infrastructure";
+import { createFileStorage } from "@/server/infrastructure";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
-import { randomUUID } from "node:crypto";
 
 export interface ContactRecordMutationState {
   readonly status: "idle" | "success" | "error";
@@ -96,27 +96,24 @@ async function saveCustomFields({
 
   const storage = createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH });
   for (const { definition, file } of parsed.files) {
-    const fileName = safeFileName(file.name);
-    if (!fileName) throw new RepositoryError("invalid-input", `${definition.label} has an invalid file name.`);
-    const objectKey = `events/${eventId}/custom-fields/${definition.id}/${pathSegment}/${randomUUID()}`;
-    const stored = await storage.put({
-      key: objectKey,
-      bytes: new Uint8Array(await file.arrayBuffer()),
-      contentType: file.type || "application/octet-stream",
-      contentDisposition: contentDisposition(fileName),
-      metadata: { eventId, definitionId: definition.id, recordType: target.entityType },
+    const stored = await storeCustomFieldFile({
+      eventId,
+      definitionId: definition.id,
+      fieldLabel: definition.label,
+      pathSegment,
+      file,
+      storage,
     });
-    if (!stored.ok) throw new RepositoryError("invalid-input", `${definition.label} could not be stored. Try again.`);
     try {
-      await repository.setValue(eventId, definition.id, target, { objectKey, fileName });
+      await repository.setValue(eventId, definition.id, target, stored);
     } catch (error) {
-      await storage.delete(objectKey);
+      await storage.delete(stored.objectKey);
       throw error;
     }
     const previous = existing.find(({ definitionId }) => definitionId === definition.id)?.value;
     if (typeof previous === "object" && previous !== null && !Array.isArray(previous) && "objectKey" in previous) {
       const previousKey = previous.objectKey;
-      if (typeof previousKey === "string" && previousKey !== objectKey) await storage.delete(previousKey);
+      if (typeof previousKey === "string" && previousKey !== stored.objectKey) await storage.delete(previousKey);
     }
   }
 }
