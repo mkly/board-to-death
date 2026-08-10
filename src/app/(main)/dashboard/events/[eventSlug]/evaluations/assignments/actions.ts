@@ -5,8 +5,7 @@ import { headers } from "next/headers";
 
 import { z } from "zod";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
-import { getAllowedAdminEmails, isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { EvaluationAssignmentRepository } from "@/server/evaluations/assignments";
@@ -36,12 +35,6 @@ export async function manageEvaluationAssignments(
   _previousState: ManageAssignmentsState,
   formData: FormData,
 ): Promise<ManageAssignmentsState> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const allowedEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
-  if (!session || !isAllowedAdminEmail(session.user.email, allowedEmails)) {
-    return { status: "error", message: "Your administrator session expired. Sign in and try again." };
-  }
-
   const result = inputSchema.safeParse({
     operation: formData.get("operation"),
     eventSlug: formData.get("eventSlug"),
@@ -53,6 +46,11 @@ export async function manageEvaluationAssignments(
   });
   if (!result.success) {
     return { status: "error", message: result.error.issues[0]?.message ?? "Check the assignment fields." };
+  }
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: result.data.eventSlug }))) {
+    return { status: "error", message: "Your administrator session expired. Sign in and try again." };
   }
 
   const client = getDatabaseClient();
@@ -121,12 +119,6 @@ export async function reopenEvaluationAssignment(
   _previousState: ManageAssignmentsState,
   formData: FormData,
 ): Promise<ManageAssignmentsState> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const allowedEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
-  if (!session || !isAllowedAdminEmail(session.user.email, allowedEmails)) {
-    return { status: "error", message: "Your administrator session expired. Sign in and try again." };
-  }
-
   const result = reopenSchema.safeParse({
     eventSlug: formData.get("eventSlug"),
     assignmentId: formData.get("assignmentId"),
@@ -134,6 +126,11 @@ export async function reopenEvaluationAssignment(
   });
   if (!result.success) {
     return { status: "error", message: result.error.issues[0]?.message ?? "Check the assignment fields." };
+  }
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: result.data.eventSlug }))) {
+    return { status: "error", message: "Your administrator session expired. Sign in and try again." };
   }
 
   const client = getDatabaseClient();

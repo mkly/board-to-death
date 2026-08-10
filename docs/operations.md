@@ -75,7 +75,8 @@ placement, and a completed Accelevents-style speaker resource sync.
 
 The fixture labels its actors `demo-admin` and `demo-reviewer` and uses `ada@example.test` and
 `reviewer@example.test`. These are data labels, not login accounts: seeding creates no passwords or authentication
-sessions, and reaching the demo event as an operator still goes through `AUTH_ALLOWED_EMAILS` like any other access.
+sessions. To reach the demo event as an operator, the signed-in user needs an active membership in the demo event's
+organization or an active organizer membership on the event.
 Its integration configuration points at `local://adapters/accelevents/board-to-death-demo`, a deterministic local
 adapter reference used only by the fixture, not a production credential.
 
@@ -107,19 +108,15 @@ they reach production is still the operator's responsibility.
 
 ## Roles and security boundaries
 
-Access control has two independent layers.
-
-The app-level gate is `AUTH_ALLOWED_EMAILS`, a comma-separated allowlist compared case-insensitively against the
-signed-in session's email (`src/server/auth/admin-access.ts`). An email outside this list has no admin access to the
-application regardless of any event- or form-level role below it. Keep this list to real operators; anyone added
-here can act on every event.
+Access control has two independent layers. `AUTH_ALLOWED_EMAILS` is retained only as a bootstrap configuration value;
+it does not gate magic-link delivery or routine dashboard access.
 
 Within an authenticated session, event-scoped resources (event programs, reviews, profiles, submissions, sessions,
 files, tasks) are authorized per event against one or more `EventRole` values — `organizer-admin`, `reviewer`,
-`applicant`, or `speaker` (`src/server/authorization/policy.ts`). An organizer-admin can read and write everything
-scoped to their event; a reviewer can act on reviews they are assigned to; an applicant or speaker can act only on
-resources they own. These roles are derived per request from the underlying event data (organizer status, reviewer
-assignment, submission or speaker ownership) rather than granted through a separate role-management screen.
+`applicant`, or `speaker` (`src/server/authorization/policy.ts`). An active organization member is an organizer for
+that organization's events; active `EventMembership` rows add event-specific roles. A reviewer can act on assigned
+reviews, while an applicant or speaker can act only on owned resources. Memberships are resolved on every request,
+so revocation takes effect immediately.
 
 Separately, each CFP form has its own `CfpAdminRole` — `OWNER`, `EDITOR`, or `REVIEWER` — assigned per form as
 `CfpPolicyAdminAssignment` records through that form's setup screen in the dashboard. This controls who can edit a
@@ -149,7 +146,7 @@ Set these project environment variables (Settings → Environment Variables):
 | `DATABASE_URL` | Must point at a **pooled** Postgres endpoint (Neon/Supabase pooler, PgBouncer, or Prisma Accelerate). |
 | `AUTH_SECRET` | At least 32 characters. |
 | `BETTER_AUTH_SECRET` | At least 32 characters. |
-| `AUTH_ALLOWED_EMAILS` | Comma-separated admin allowlist. |
+| `AUTH_ALLOWED_EMAILS` | Bootstrap-only legacy setting; not a runtime authorization gate. |
 | `AUTH_MAGIC_LINK_WEBHOOK_URL` | Required in production; magic links are not printed to the console there. |
 | `AUTH_MAGIC_LINK_WEBHOOK_TOKEN` | Optional. |
 

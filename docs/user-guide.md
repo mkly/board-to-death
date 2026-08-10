@@ -19,9 +19,10 @@ in the example links.
 | Prospective speaker | `/speaker-interest/{publicId}` | A published interest form accepts contact details for the event's sourcing pipeline. No admin session is required. |
 | Attendee | `/embed/{eventSlug}` or `/events/{eventSlug}/resources` | Attendees see the latest published program snapshot and published resource pages. |
 
-The admin magic-link login checks `AUTH_ALLOWED_EMAILS` before granting dashboard access. Event authorization then
-checks organizer, reviewer, applicant, or speaker ownership for the requested event. A missing or unauthorized
-event-owned record returns the same not-found response so one event cannot reveal another event's IDs.
+Magic-link delivery is not email-allowlisted. Dashboard and event access come from active organization and event
+memberships; event authorization then checks organizer, reviewer, applicant, or speaker ownership for the requested
+resource. A missing or unauthorized event-owned record returns the same not-found response so one event cannot reveal
+another event's IDs.
 
 ## Organizer journey
 

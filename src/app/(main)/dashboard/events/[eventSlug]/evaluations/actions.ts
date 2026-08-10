@@ -6,9 +6,8 @@ import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { EvaluationRoundStatus, ReviewerVisibility } from "@/generated/prisma/client";
-import { getAllowedAdminEmails, isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { EvaluationPlanRepository } from "@/server/evaluations";
@@ -46,8 +45,6 @@ const criterionSchema = z
     path: ["maximum"],
   });
 
-const allowedAdminEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
-
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
@@ -57,7 +54,7 @@ async function requireAdminEvent(
   eventSlug: string,
 ): Promise<{ readonly id: string; readonly slug: string; readonly actorId: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email, allowedAdminEmails)) {
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
     throw new Error("Administrator access is required.");
   }
   const event = await getDatabaseClient().event.findUnique({

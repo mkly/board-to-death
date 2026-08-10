@@ -17,7 +17,7 @@ interface AuthorizedCfpEvent {
   readonly id: string;
   readonly slug: string;
   readonly startsAt: Date;
-  readonly administratorEmail: string;
+  readonly administratorId: string;
   readonly administratorName: string;
 }
 
@@ -30,7 +30,7 @@ async function requireAuthorizedEvent(eventSlug: string): Promise<AuthorizedCfpE
     id: event.id,
     slug: event.slug,
     startsAt: event.startsAt,
-    administratorEmail: shell.user.email,
+    administratorId: shell.user.id,
     administratorName: shell.user.name.trim() || shell.user.email,
   };
 }
@@ -86,7 +86,7 @@ export async function createCfpFormDraft(eventSlug: string): Promise<never> {
   try {
     const administrator = await new CfpAdministratorRepository(client).ensure({
       eventId: event.id,
-      externalId: event.administratorEmail,
+      externalId: event.administratorId,
       displayName: event.administratorName,
     });
     await new CfpPolicyRepository(client).create({
@@ -144,7 +144,7 @@ async function transitionCfpForm(
       event.id,
       formId,
       status,
-      event.administratorEmail,
+      event.administratorId,
     );
   } catch (error) {
     redirect(destination(eventSlug, { error: errorMessage(error) }));

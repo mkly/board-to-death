@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 
 import { AgendaPlacementRepository } from "@/server/agenda";
 import { createAgendaCsv } from "@/server/agenda/export";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
@@ -18,7 +18,9 @@ function responseBody(bytes: Uint8Array): ArrayBuffer {
 
 export async function GET(request: Request, { params }: AgendaExportRouteContext): Promise<Response> {
   const [{ eventSlug }, session] = await Promise.all([params, auth.api.getSession({ headers: await headers() })]);
-  if (!session || !isAllowedAdminEmail(session.user.email)) return new Response("Not found", { status: 404 });
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
+    return new Response("Not found", { status: 404 });
+  }
 
   const client = getDatabaseClient();
   const event = await client.event.findUnique({

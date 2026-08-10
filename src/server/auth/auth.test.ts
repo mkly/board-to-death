@@ -2,10 +2,8 @@ import { base32 } from "@better-auth/utils/base32";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { PrismaClient } from "@/generated/prisma/client";
 
-import { getAllowedAdminEmails, isAllowedAdminEmail, isAuthorizedAdminSession } from "./admin-access";
 import { createAuth } from "./auth-factory";
 
 const baseURL = "http://localhost:3000";
@@ -16,26 +14,6 @@ const deliveredLinks: string[] = [];
 let activeCookie = "";
 let auth: ReturnType<typeof createAuth>;
 let database: PrismaClient;
-
-test("uses the runtime-config allowlist for dashboard session authorization", () => {
-  const originalAllowedEmails = process.env.AUTH_ALLOWED_EMAILS;
-
-  try {
-    delete process.env.AUTH_ALLOWED_EMAILS;
-
-    const runtimeAllowedEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
-    const session = { user: { email: testEmail } };
-
-    expect(isAllowedAdminEmail(session.user.email, runtimeAllowedEmails)).toBe(true);
-    expect(isAuthorizedAdminSession(session)).toBe(true);
-  } finally {
-    if (originalAllowedEmails === undefined) {
-      delete process.env.AUTH_ALLOWED_EMAILS;
-    } else {
-      process.env.AUTH_ALLOWED_EMAILS = originalAllowedEmails;
-    }
-  }
-});
 
 function request(path: string, init?: RequestInit): Request {
   return new Request(new URL(path, baseURL), {
@@ -104,7 +82,6 @@ databaseDescribe("admin magic-link authentication", () => {
     auth = createAuth({
       baseURL,
       database,
-      isAllowedEmail: (email) => email.toLowerCase() === testEmail,
       secret: "test-only-better-auth-secret-at-least-32-characters",
       sendMagicLink: async ({ url }) => {
         deliveredLinks.push(url);
@@ -125,13 +102,13 @@ databaseDescribe("admin magic-link authentication", () => {
     await database.$disconnect();
   });
 
-  test("delivers links only for configured administrator addresses", async () => {
+  test("delivers links without using an administrator email allowlist", async () => {
     const allowed = await requestMagicLink();
     const denied = await requestMagicLink("stranger@example.test");
 
     expect(allowed.status).toBe(200);
     expect(denied.status).toBe(200);
-    expect(deliveredLinks).toHaveLength(1);
+    expect(deliveredLinks).toHaveLength(2);
     expect(deliveredLinks[0]).toContain("/api/auth/magic-link/verify");
   });
 
@@ -154,17 +131,6 @@ databaseDescribe("admin magic-link authentication", () => {
     expect(session?.user.email).toBe(testEmail);
     expect(replay.headers.get("location")).toContain("error=INVALID_TOKEN");
     expect(forged).toBeNull();
-
-    const originalAllowedEmails = process.env.AUTH_ALLOWED_EMAILS;
-    try {
-      process.env.AUTH_ALLOWED_EMAILS = `  ${testEmail.toUpperCase()}  `;
-      expect(isAuthorizedAdminSession(session)).toBe(true);
-
-      process.env.AUTH_ALLOWED_EMAILS = "another-admin@example.test";
-      expect(isAuthorizedAdminSession(session)).toBe(false);
-    } finally {
-      process.env.AUTH_ALLOWED_EMAILS = originalAllowedEmails;
-    }
   });
 
   test("refreshes aged sessions, expires old sessions, and revokes on logout", async () => {

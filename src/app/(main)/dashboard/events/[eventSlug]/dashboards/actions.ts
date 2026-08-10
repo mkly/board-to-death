@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { CustomDashboardTemplate, DashboardWidgetDataSource } from "@/generated/prisma/client";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { CustomDashboardRepository } from "@/server/dashboard/custom-dashboards";
 import { getDatabaseClient } from "@/server/database/client";
@@ -89,7 +89,7 @@ function validationErrors(error: z.ZodError): Readonly<Record<string, readonly s
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   return getDatabaseClient().event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });
 }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import { validateEmailTemplate } from "@/lib/communications/email-templates";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { EmailTemplateRepository, type PersistedEmailTemplate } from "@/server/communications/templates";
 import { getDatabaseClient } from "@/server/database/client";
@@ -31,10 +32,12 @@ export async function saveEmailTemplate(
   _previousState: SaveEmailTemplateState,
   formData: FormData,
 ): Promise<SaveEmailTemplateState> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { status: "error", message: "Your session expired. Sign in and try again." };
-
   const eventSlug = fieldValue(formData, "eventSlug");
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
+    return { status: "error", message: "Your session expired. Sign in and try again." };
+  }
+
   const templateId = fieldValue(formData, "templateId");
   const definition = {
     key: fieldValue(formData, "key"),

@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/prisma/client";
-import { getAllowedAdminEmails, isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
 import { DEFAULT_SPEAKER_INVITATION_LIFETIME_MS, SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
@@ -35,7 +35,6 @@ const decisionSchema = actionSchema.extend({
   ]),
   expectedDecisionNumber: z.number().int().nonnegative(),
 });
-const allowedAdminEmails = getAllowedAdminEmails(getRuntimeConfig().server.AUTH_ALLOWED_EMAILS);
 const runtimeConfig = getRuntimeConfig().server;
 const invitationLifetimeDays = Math.round(DEFAULT_SPEAKER_INVITATION_LIFETIME_MS / 86_400_000);
 const confirmationExpiry = `This link expires in ${invitationLifetimeDays} days`;
@@ -66,7 +65,7 @@ function destination(
 
 async function requireAdminEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email, allowedAdminEmails)) {
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
     throw new Error("Administrator access is required.");
   }
   const event = await getDatabaseClient().event.findUnique({

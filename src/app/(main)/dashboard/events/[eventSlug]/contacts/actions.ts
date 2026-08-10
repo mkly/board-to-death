@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createContact, linkDirectoryPersonToEvent, updateContact } from "@/server/contacts/repositories";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
@@ -55,7 +55,7 @@ function errors(error: z.ZodError): Readonly<Record<string, readonly string[]>> 
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   return getDatabaseClient().event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });
 }
 

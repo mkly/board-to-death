@@ -5,11 +5,15 @@ import {
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
   EvaluationStatus,
+  EventMembershipRole,
+  MembershipStatus,
   type Prisma,
   type PrismaClient,
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
 import { parseCfpDefinition } from "../../lib/cfp/index.ts";
+import { resolveMembershipPrincipal } from "../authorization/membership-principal.ts";
+import { authorizeEventResource } from "../authorization/policy.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
 export type ReviewerProgressState = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE";
@@ -80,7 +84,7 @@ export interface EvaluationSubmissionInput {
 }
 
 const assignmentInclude = {
-  reviewer: { select: { displayName: true } },
+  reviewer: { select: { displayName: true, identityId: true } },
   round: {
     select: {
       title: true,
@@ -101,7 +105,7 @@ const assignmentInclude = {
       planVersion: {
         select: {
           title: true,
-          plan: { select: { event: { select: { name: true, slug: true } } } },
+          plan: { select: { event: { select: { id: true, name: true, slug: true } } } },
         },
       },
     },
@@ -281,15 +285,25 @@ async function loadMutableAssignment(
     where: {
       id: assignmentId,
       status: { not: EvaluationAssignmentStatus.REVOKED },
-      reviewer: { identityId, status: EvaluationReviewerStatus.ACTIVE },
+      reviewer: {
+        identityId,
+        status: EvaluationReviewerStatus.ACTIVE,
+        event: {
+          memberships: {
+            some: { userId: identityId, status: MembershipStatus.ACTIVE, roles: { has: EventMembershipRole.REVIEWER } },
+          },
+        },
+      },
       round: {
         status: EvaluationRoundStatus.OPEN,
         planVersion: { status: EvaluationPlanVersionStatus.ACTIVE },
       },
     },
     select: {
+      reviewer: { select: { identityId: true } },
       round: {
         select: {
+          planVersion: { select: { plan: { select: { eventId: true } } } },
           criteria: { select: { id: true, label: true, minimum: true, maximum: true, required: true } },
         },
       },
@@ -304,6 +318,13 @@ async function loadMutableAssignment(
     },
   });
   if (!assignment) throw new RepositoryError("not-found", "The reviewer assignment was not found.");
+  const { principal } = await resolveMembershipPrincipal(transaction, identityId);
+  authorizeEventResource(principal, {
+    eventId: assignment.round.planVersion.plan.eventId,
+    kind: "review",
+    action: "write",
+    assignedReviewerIds: [assignment.reviewer.identityId],
+  });
   if (assignment.evaluation?.status === EvaluationStatus.FINAL) {
     throw new RepositoryError(
       "invalid-input",
@@ -452,19 +473,42 @@ export class ReviewerWorkspaceRepository {
   }
 
   async list(identityId: string): Promise<ReviewerAssignmentSummary[]> {
-    const assignments = await this.client.evaluationAssignment.findMany({
-      where: {
-        status: { not: EvaluationAssignmentStatus.REVOKED },
-        reviewer: { identityId, status: EvaluationReviewerStatus.ACTIVE },
-        round: {
-          status: EvaluationRoundStatus.OPEN,
-          planVersion: { status: EvaluationPlanVersionStatus.ACTIVE },
+    const [{ principal }, assignments] = await Promise.all([
+      resolveMembershipPrincipal(this.client, identityId),
+      this.client.evaluationAssignment.findMany({
+        where: {
+          status: { not: EvaluationAssignmentStatus.REVOKED },
+          reviewer: {
+            identityId,
+            status: EvaluationReviewerStatus.ACTIVE,
+            event: {
+              memberships: {
+                some: {
+                  userId: identityId,
+                  status: MembershipStatus.ACTIVE,
+                  roles: { has: EventMembershipRole.REVIEWER },
+                },
+              },
+            },
+          },
+          round: {
+            status: EvaluationRoundStatus.OPEN,
+            planVersion: { status: EvaluationPlanVersionStatus.ACTIVE },
+          },
         },
-      },
-      orderBy: [{ round: { planVersion: { plan: { event: { startsAt: "asc" } } } } }, { assignedAt: "asc" }],
-      include: assignmentInclude,
+        orderBy: [{ round: { planVersion: { plan: { event: { startsAt: "asc" } } } } }, { assignedAt: "asc" }],
+        include: assignmentInclude,
+      }),
+    ]);
+    return assignments.map((assignment) => {
+      authorizeEventResource(principal, {
+        eventId: assignment.round.planVersion.plan.event.id,
+        kind: "review",
+        action: "read",
+        assignedReviewerIds: [assignment.reviewer.identityId],
+      });
+      return summaryOf(assignment);
     });
-    return assignments.map(summaryOf);
   }
 
   async get(identityId: string, assignmentId: string): Promise<ReviewerAssignmentDetail | null> {
@@ -472,7 +516,19 @@ export class ReviewerWorkspaceRepository {
       where: {
         id: assignmentId,
         status: { not: EvaluationAssignmentStatus.REVOKED },
-        reviewer: { identityId, status: EvaluationReviewerStatus.ACTIVE },
+        reviewer: {
+          identityId,
+          status: EvaluationReviewerStatus.ACTIVE,
+          event: {
+            memberships: {
+              some: {
+                userId: identityId,
+                status: MembershipStatus.ACTIVE,
+                roles: { has: EventMembershipRole.REVIEWER },
+              },
+            },
+          },
+        },
         round: {
           status: EvaluationRoundStatus.OPEN,
           planVersion: { status: EvaluationPlanVersionStatus.ACTIVE },
@@ -481,6 +537,14 @@ export class ReviewerWorkspaceRepository {
       include: assignmentInclude,
     });
     if (!assignment) return null;
+
+    const { principal } = await resolveMembershipPrincipal(this.client, identityId);
+    authorizeEventResource(principal, {
+      eventId: assignment.round.planVersion.plan.event.id,
+      kind: "review",
+      action: "read",
+      assignedReviewerIds: [assignment.reviewer.identityId],
+    });
 
     const visibility = visibilityOf(assignment);
     const exposeIdentity = visibility === ReviewerVisibility.IDENTIFIED;

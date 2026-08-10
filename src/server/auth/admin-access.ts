@@ -1,23 +1,35 @@
-import { getRuntimeConfig } from "@/config/runtime-env.server";
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-export function getAllowedAdminEmails(value = getRuntimeConfig().server.AUTH_ALLOWED_EMAILS): ReadonlySet<string> {
-  return new Set((value ?? "").split(",").map(normalizeEmail).filter(Boolean));
-}
-
-export function isAllowedAdminEmail(email: string, allowedEmails = getAllowedAdminEmails()): boolean {
-  return allowedEmails.has(normalizeEmail(email));
-}
+import { resolveMembershipPrincipal } from "@/server/authorization/membership-principal";
+import { authorizeEventResource, organizerEventIds } from "@/server/authorization/policy";
+import { getDatabaseClient } from "@/server/database/client";
 
 interface AdminSession {
   readonly user: {
-    readonly email: string;
+    readonly id: string;
   };
 }
 
-export function isAuthorizedAdminSession<T extends AdminSession>(session: T | null | undefined): session is T {
-  return session !== null && session !== undefined && isAllowedAdminEmail(session.user.email);
+export type EventReference = { readonly id: string } | { readonly slug: string };
+
+export async function isAuthorizedAdminSession(
+  session: AdminSession | null | undefined,
+  eventReference?: EventReference,
+): Promise<boolean> {
+  if (!session) return false;
+
+  const database = getDatabaseClient();
+  const { principal } = await resolveMembershipPrincipal(database, session.user.id);
+  if (!eventReference) return organizerEventIds(principal).length > 0;
+
+  const event = await database.event.findFirst({
+    where: "id" in eventReference ? { id: eventReference.id } : { slug: eventReference.slug },
+    select: { id: true },
+  });
+  if (!event) return false;
+
+  try {
+    authorizeEventResource(principal, { eventId: event.id, kind: "event-program", action: "write" });
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { CfpSubmissionRepository } from "@/server/cfp/submissions";
 import { getDatabaseClient } from "@/server/database/client";
@@ -17,7 +17,7 @@ export default async function SubmissionDetailPage({ params }: SubmissionDetailP
     params,
     auth.api.getSession({ headers: await headers() }),
   ]);
-  if (!session || !isAllowedAdminEmail(session.user.email)) notFound();
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) notFound();
 
   const submission = await new CfpSubmissionRepository(getDatabaseClient()).getDetailByEventSlug(
     eventSlug,

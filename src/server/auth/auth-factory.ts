@@ -11,7 +11,8 @@ import { passwordlessTwoFactor } from "./passwordless-two-factor.ts";
 interface CreateAuthOptions {
   readonly baseURL: string;
   readonly database: PrismaClient;
-  readonly isAllowedEmail: (email: string) => boolean | Promise<boolean>;
+  /** @deprecated Magic-link delivery is no longer gated by an email allowlist. */
+  readonly isAllowedEmail?: (email: string) => boolean | Promise<boolean>;
   readonly secret: string;
   readonly sendMagicLink: SendMagicLink;
   readonly twoFactorLockoutDuration?: number;
@@ -22,7 +23,6 @@ interface CreateAuthOptions {
 export function createAuth({
   baseURL,
   database,
-  isAllowedEmail,
   secret,
   sendMagicLink,
   twoFactorLockoutDuration,
@@ -43,9 +43,7 @@ export function createAuth({
         expiresIn: 60 * 10,
         storeToken: "hashed",
         sendMagicLink: async ({ email, url }) => {
-          if (await isAllowedEmail(email)) {
-            await sendMagicLink({ email, url });
-          }
+          await sendMagicLink({ email, url });
         },
       }),
       twoFactor({
