@@ -33,6 +33,9 @@ interface Fixture {
   readonly otherReviewerId: string;
   readonly committeeId: string;
   readonly otherCommitteeId: string;
+  readonly formVersionId: string;
+  readonly designCategoryId: string;
+  readonly strategyCategoryId: string;
   readonly firstSubmissionId: string;
   readonly secondSubmissionId: string;
   readonly draftSubmissionId: string;
@@ -73,6 +76,11 @@ async function createFixture(): Promise<Fixture> {
   assert.ok(formVersion);
   assert.ok(otherFormVersion);
 
+  const [designCategory, strategyCategory] = await Promise.all([
+    client.cfpCategory.create({ data: { eventId: event.id, key: "design", label: "Game design" } }),
+    client.cfpCategory.create({ data: { eventId: event.id, key: "strategy", label: "Strategy" } }),
+  ]);
+
   const [firstSubmission, secondSubmission, draftSubmission, otherSubmission] = await Promise.all([
     client.cfpSubmission.create({
       data: {
@@ -81,6 +89,7 @@ async function createFixture(): Promise<Fixture> {
         kind: CfpSubmissionKind.ABSTRACT,
         status: CfpSubmissionStatus.SUBMITTED,
         submittedAt: new Date("2027-01-10T18:00:00.000Z"),
+        categories: { create: { categoryId: designCategory.id, sortOrder: 0 } },
       },
     }),
     client.cfpSubmission.create({
@@ -91,6 +100,7 @@ async function createFixture(): Promise<Fixture> {
         status: CfpSubmissionStatus.UNDER_REVIEW,
         submittedAt: new Date("2027-01-11T18:00:00.000Z"),
         reviewStartedAt: new Date("2027-01-12T18:00:00.000Z"),
+        categories: { create: { categoryId: strategyCategory.id, sortOrder: 0 } },
       },
     }),
     client.cfpSubmission.create({
@@ -218,6 +228,9 @@ async function createFixture(): Promise<Fixture> {
     otherReviewerId: otherReviewer.id,
     committeeId: committee.id,
     otherCommitteeId: otherCommittee.id,
+    formVersionId: formVersion.id,
+    designCategoryId: designCategory.id,
+    strategyCategoryId: strategyCategory.id,
     firstSubmissionId: firstSubmission.id,
     secondSubmissionId: secondSubmission.id,
     draftSubmissionId: draftSubmission.id,
@@ -265,6 +278,55 @@ describe("reviewer and committee assignments", () => {
         submissionIds: [fixture.firstSubmissionId],
       }),
       /already has an active assignment/,
+    );
+  });
+
+  test("auto-distributes uncovered submissions evenly with a per-reviewer cap and track filter", async () => {
+    const fixture = await createFixture();
+    const thirdSubmission = await client.cfpSubmission.create({
+      data: {
+        eventId: fixture.eventId,
+        formVersionId: fixture.formVersionId,
+        kind: CfpSubmissionKind.ABSTRACT,
+        status: CfpSubmissionStatus.SUBMITTED,
+        submittedAt: new Date("2027-01-12T18:00:00.000Z"),
+        categories: { create: { categoryId: fixture.strategyCategoryId, sortOrder: 0 } },
+      },
+    });
+    const reviewerIds = [fixture.sourceReviewerId, fixture.targetReviewerId];
+
+    assert.deepEqual(
+      await repository.autoDistribute({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        reviewerIds,
+        perReviewerCap: 1,
+        trackId: fixture.designCategoryId,
+      }),
+      { assignmentsCreated: 1, submissionsSkipped: 0 },
+    );
+    assert.deepEqual(
+      await repository.autoDistribute({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        reviewerIds,
+        perReviewerCap: 1,
+      }),
+      { assignmentsCreated: 1, submissionsSkipped: 1 },
+    );
+
+    const assignments = await client.evaluationAssignment.findMany({
+      where: { roundId: fixture.openRoundId, status: EvaluationAssignmentStatus.ASSIGNED },
+      orderBy: { reviewerId: "asc" },
+    });
+    assert.equal(assignments.length, 2);
+    assert.deepEqual(
+      reviewerIds.map((reviewerId) => assignments.filter((assignment) => assignment.reviewerId === reviewerId).length),
+      [1, 1],
+    );
+    assert.equal(
+      assignments.some(({ submissionId }) => submissionId === thirdSubmission.id),
+      false,
     );
   });
 
