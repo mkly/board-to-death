@@ -4,11 +4,24 @@ import { useActionState, useState } from "react";
 
 import Link from "next/link";
 
-import { ArrowDownIcon, ArrowUpIcon, Columns3Icon, DownloadIcon, FileSearchIcon, SearchIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CircleCheckIcon,
+  CircleIcon,
+  Clock3Icon,
+  Columns3Icon,
+  DownloadIcon,
+  FileSearchIcon,
+  FileTextIcon,
+  type LucideIcon,
+  ScanSearchIcon,
+  SearchIcon,
+} from "lucide-react";
 
 import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -96,13 +109,13 @@ const kindLabels: Readonly<Record<CfpSubmissionKind, string>> = {
 };
 
 const statusVariants: Readonly<Record<CfpSubmissionStatus, BadgeVariant>> = {
-  DRAFT: "outline",
+  DRAFT: "secondary",
   SUBMITTED: "secondary",
-  UNDER_REVIEW: "default",
-  WAITLISTED: "outline",
+  UNDER_REVIEW: "secondary",
+  WAITLISTED: "secondary",
   ACCEPTED: "default",
   REJECTED: "destructive",
-  CONFIRMED: "secondary",
+  CONFIRMED: "default",
 };
 
 function filterParams(filters: CfpSubmissionListQuery, page?: number): URLSearchParams {
@@ -139,18 +152,34 @@ function MetricCard({
   label,
   value,
   description,
+  icon: Icon,
+  tone = "primary",
 }: {
   readonly label: string;
   readonly value: number;
   readonly description: string;
+  readonly icon: LucideIcon;
+  readonly tone?: "primary" | "secondary";
 }) {
   return (
-    <Card size="sm">
+    <Card className={cn("min-h-40 shadow-sm", tone === "secondary" && "ring-secondary/30")}>
       <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
+        <CardDescription className={cn("font-medium text-base", tone === "secondary" && "text-secondary")}>
+          {label}
+        </CardDescription>
+        <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>
+        <CardAction
+          className={cn(
+            "flex size-10 items-center justify-center rounded-full ring-1",
+            tone === "secondary"
+              ? "bg-secondary/10 text-secondary ring-secondary/30"
+              : "bg-primary/10 text-primary ring-primary/20",
+          )}
+        >
+          <Icon aria-hidden="true" />
+        </CardAction>
       </CardHeader>
-      <CardContent className="text-muted-foreground text-xs">{description}</CardContent>
+      <CardContent className="mt-auto text-muted-foreground text-sm">{description}</CardContent>
     </Card>
   );
 }
@@ -163,7 +192,7 @@ function FilterBar({
   return (
     <form
       action={`/dashboard/events/${encodeURIComponent(eventSlug)}/submissions`}
-      className="rounded-xl border bg-card p-4"
+      className="rounded-xl border bg-card p-5 shadow-xs"
     >
       <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[minmax(14rem,1fr)_repeat(4,minmax(8rem,0.45fr))_minmax(9rem,0.5fr)_auto]">
         <Field>
@@ -321,7 +350,12 @@ function displayCell(
     case "assignees":
       return item.assignees.map(({ displayName }) => displayName).join(", ") || "Unassigned";
     case "status":
-      return <Badge variant={statusVariants[item.status]}>{statusLabels[item.status]}</Badge>;
+      return (
+        <Badge variant={statusVariants[item.status]}>
+          <CircleIcon aria-hidden="true" className="fill-current" data-icon="inline-start" />
+          {statusLabels[item.status]}
+        </Badge>
+      );
     case "submittedAt":
       return item.submittedAt ? dateFormatter.format(item.submittedAt) : "Draft";
     case "updatedAt":
@@ -502,25 +536,41 @@ export function SubmissionsWorkspace({
   const lastVisible = Math.min(result.total, result.page * result.pageSize);
 
   return (
-    <main className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <p className="text-muted-foreground text-sm">{event.name}</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-tight">Submissions</h1>
-        <p className="text-muted-foreground text-sm">Track proposal intake, review progress, and decisions.</p>
+    <main className="flex flex-col gap-8">
+      <header className="flex flex-col gap-2">
+        <p className="font-medium text-muted-foreground text-sm">{event.name}</p>
+        <h1 className="font-heading font-semibold text-3xl tracking-tight sm:text-4xl">Submissions</h1>
+        <p className="max-w-2xl text-base text-muted-foreground">
+          Track proposal intake, review progress, and final decisions for your event.
+        </p>
       </header>
-      <section aria-label="Submission lifecycle metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Submission lifecycle metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total submissions"
           value={Object.values(result.metrics).reduce((sum, count) => sum + count, 0)}
           description="All lifecycle states"
+          icon={FileTextIcon}
         />
         <MetricCard
           label="Awaiting review"
           value={result.metrics.SUBMITTED}
           description="Submitted and not yet started"
+          icon={Clock3Icon}
+          tone="secondary"
         />
-        <MetricCard label="In review" value={result.metrics.UNDER_REVIEW} description="Actively under evaluation" />
-        <MetricCard label="Decisions" value={decided} description="Waitlisted, accepted, rejected, or confirmed" />
+        <MetricCard
+          label="In review"
+          value={result.metrics.UNDER_REVIEW}
+          description="Actively under evaluation"
+          icon={ScanSearchIcon}
+        />
+        <MetricCard
+          label="Decisions"
+          value={decided}
+          description="Waitlisted, accepted, rejected, or confirmed"
+          icon={CircleCheckIcon}
+          tone="secondary"
+        />
       </section>
       <nav aria-label="Submission status" className="flex flex-wrap gap-2">
         <Button size="sm" variant={filters.status ? "ghost" : "secondary"} asChild>
@@ -536,7 +586,7 @@ export function SubmissionsWorkspace({
         ))}
       </nav>
       <FilterBar eventSlug={event.slug} filters={filters} options={options} />
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader className="flex-row items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
             <CardTitle>Submission queue</CardTitle>

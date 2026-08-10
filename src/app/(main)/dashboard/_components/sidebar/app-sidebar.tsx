@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
+import { cn } from "@/lib/utils";
 import { dashboardEventHref, getSidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 
@@ -47,21 +48,28 @@ export function AppSidebar({ user, events, activeEvent, ...props }: AppSidebarPr
   const collapsible = isSynced ? sidebarCollapsible : props.collapsible;
 
   return (
-    <Sidebar {...props} variant={variant} collapsible={collapsible}>
-      <SidebarHeader>
+    <Sidebar
+      {...props}
+      className={cn("border-sidebar-border/60", props.className)}
+      variant={variant}
+      collapsible={collapsible}
+    >
+      <SidebarHeader className="gap-3 border-sidebar-border/60 border-b p-4">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <Link prefetch={false} href={activeEvent ? dashboardEventHref(activeEvent.slug) : "/dashboard"}>
-                <Command />
-                <span className="font-semibold text-base">{APP_CONFIG.name}</span>
+                <span className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground shadow-xs">
+                  <Command />
+                </span>
+                <span className="font-heading font-semibold text-base">{APP_CONFIG.name}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
         <EventSwitcher events={events} activeEvent={activeEvent} />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="py-2">
         <NavMain items={getSidebarItems(activeEvent?.slug)} />
       </SidebarContent>
       <SidebarFooter>
