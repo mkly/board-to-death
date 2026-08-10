@@ -1,7 +1,7 @@
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import type { Prisma } from "@/generated/prisma/client";
 import { getDatabaseClient } from "@/server/database/client";
-import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
+import { SpeakerFileService } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 
 import { requirePortalContent } from "../../../../../_lib/portal-session";
@@ -35,10 +35,7 @@ export async function GET(_request: Request, context: TaskFileRouteContext): Pro
   if (typeof response?.objectKey !== "string") return notFound();
 
   const files = new SpeakerFileService({
-    storage: createFileStorage({
-      driver: "local",
-      rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
-    }),
+    storage: getConfiguredFileStorage(),
   });
   const stored = await files.read(response.objectKey, { role: "speaker", ...viewer });
   if (!stored.ok) return notFound();

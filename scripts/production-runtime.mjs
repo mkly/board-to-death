@@ -43,11 +43,13 @@ export async function prepareProductionRuntime({
   const { parseRuntimeConfig } = await import("../src/config/runtime-env.server.ts");
   const config = parseRuntimeConfig(environment);
 
-  try {
-    await makeDirectory(config.server.FILE_STORAGE_PATH, { recursive: true, mode: 0o700 });
-    await checkAccess(config.server.FILE_STORAGE_PATH, fsConstants.R_OK | fsConstants.W_OK);
-  } catch {
-    throw new ProductionRuntimeError("FILE_STORAGE_PATH could not be prepared for read/write access");
+  if (config.server.FILE_STORAGE_DRIVER === "local") {
+    try {
+      await makeDirectory(config.server.FILE_STORAGE_PATH, { recursive: true, mode: 0o700 });
+      await checkAccess(config.server.FILE_STORAGE_PATH, fsConstants.R_OK | fsConstants.W_OK);
+    } catch {
+      throw new ProductionRuntimeError("FILE_STORAGE_PATH could not be prepared for read/write access");
+    }
   }
 
   return config;

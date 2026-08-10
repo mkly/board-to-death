@@ -1,13 +1,12 @@
 import { headers } from "next/headers";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { createFileRequestBundle } from "@/server/files/exports";
 import { createPrismaFileRequestStore } from "@/server/files/prisma-store";
 import { FileRequestFileService } from "@/server/files/request-files";
-import { createFileStorage } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 
 interface FileRequestExportContext {
   readonly params: Promise<{ readonly eventSlug: string }>;
@@ -30,7 +29,7 @@ export async function GET(_request: Request, context: FileRequestExportContext):
   if (!event) return notFound();
 
   const files = new FileRequestFileService({
-    storage: createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH }),
+    storage: getConfiguredFileStorage(),
     store: createPrismaFileRequestStore(client),
   });
   const collected = await files.collectForEvent(event.id);

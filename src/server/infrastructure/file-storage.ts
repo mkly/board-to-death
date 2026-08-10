@@ -2,6 +2,7 @@ import type { FileStorageService, FileWrite, InfrastructureResult, StoredFile } 
 import { InMemoryFileStorage } from "./fakes.ts";
 import { isSafeObjectKey } from "./object-key.ts";
 import { captureInfrastructureResult, infrastructureFailure, infrastructureSuccess } from "./results.ts";
+import { S3FileStorage, type S3FileStorageOptions } from "./s3-file-storage.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -20,9 +21,14 @@ export interface LocalFileStorageOptions {
   readonly rootDirectory: string;
 }
 
+interface S3DriverOptions extends S3FileStorageOptions {
+  readonly driver: "s3";
+}
+
 export type FileStorageOptions =
   | { readonly driver: "memory" }
-  | { readonly driver: "local"; readonly rootDirectory: string };
+  | { readonly driver: "local"; readonly rootDirectory: string }
+  | S3DriverOptions;
 
 function objectFileName(key: string): string {
   return `${createHash("sha256").update(key).digest("hex")}.json`;
@@ -131,7 +137,12 @@ export class LocalFileStorage implements FileStorageService {
 }
 
 export function createFileStorage(options: FileStorageOptions): FileStorageService {
-  return options.driver === "memory"
-    ? new InMemoryFileStorage()
-    : new LocalFileStorage({ rootDirectory: options.rootDirectory });
+  switch (options.driver) {
+    case "memory":
+      return new InMemoryFileStorage();
+    case "s3":
+      return new S3FileStorage(options);
+    default:
+      return new LocalFileStorage({ rootDirectory: options.rootDirectory });
+  }
 }

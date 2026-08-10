@@ -1,11 +1,11 @@
 import { headers } from "next/headers";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import type { Prisma } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
-import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
+import { SpeakerFileService } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 
 interface AdminTaskFileRouteContext {
   readonly params: Promise<{
@@ -41,7 +41,7 @@ export async function GET(_request: Request, context: AdminTaskFileRouteContext)
   if (!assignment || typeof response?.objectKey !== "string") return notFound();
 
   const files = new SpeakerFileService({
-    storage: createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH }),
+    storage: getConfiguredFileStorage(),
   });
   const stored = await files.read(response.objectKey, { role: "admin", eventId: assignment.eventId });
   if (!stored.ok) return notFound();

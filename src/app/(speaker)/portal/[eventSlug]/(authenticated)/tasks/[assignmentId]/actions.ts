@@ -1,13 +1,14 @@
-"use server";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
+
+("use server");
 
 import { revalidatePath } from "next/cache";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import type { Prisma } from "@/generated/prisma/client";
 import { answersFromFormData, parsePortalFormDefinition, validatePortalFormAnswers } from "@/lib/portal-forms";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
-import { createFileStorage, SpeakerFileService } from "@/server/infrastructure";
+import { SpeakerFileService } from "@/server/infrastructure";
 import { SpeakerPortalRepository } from "@/server/speaker-portal/dashboard";
 import { SpeakerOnboardingRepository, speakerTaskResponseKind } from "@/server/speakers";
 import { addSpeakerTaskFileComment } from "@/server/speakers/file-comments";
@@ -50,10 +51,7 @@ export interface TaskFormState {
 
 function speakerFiles(): SpeakerFileService {
   return new SpeakerFileService({
-    storage: createFileStorage({
-      driver: "local",
-      rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
-    }),
+    storage: getConfiguredFileStorage(),
   });
 }
 

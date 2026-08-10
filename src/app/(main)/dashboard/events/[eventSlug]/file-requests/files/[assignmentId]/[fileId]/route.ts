@@ -1,12 +1,11 @@
 import { headers } from "next/headers";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { createPrismaFileRequestStore } from "@/server/files/prisma-store";
 import { FileRequestFileService } from "@/server/files/request-files";
-import { createFileStorage } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 
 interface FileRequestDownloadContext {
   readonly params: Promise<{
@@ -36,7 +35,7 @@ export async function GET(_request: Request, context: FileRequestDownloadContext
   if (!event) return notFound();
 
   const files = new FileRequestFileService({
-    storage: createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH }),
+    storage: getConfiguredFileStorage(),
     store: createPrismaFileRequestStore(client),
   });
   const stored = await files.download({ role: "admin", eventId: event.id }, assignmentId, fileId);

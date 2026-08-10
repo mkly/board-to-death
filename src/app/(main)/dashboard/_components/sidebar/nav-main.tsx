@@ -95,8 +95,12 @@ export function NavMain({ items }: NavMainProps) {
   const path = usePathname();
 
   const isItemActive = (item: NavMainItem) => {
+    if (item.disabled) {
+      return false;
+    }
+
     if (hasSubItems(item)) {
-      return item.subItems.some((sub) => path.startsWith(sub.url));
+      return item.subItems.some((sub) => !sub.disabled && path.startsWith(sub.url));
     }
 
     return path === item.url;
@@ -107,7 +111,7 @@ export function NavMain({ items }: NavMainProps) {
   };
 
   const isSubmenuOpen = (item: NavMainParentItem) => {
-    return item.subItems.some((sub) => path.startsWith(sub.url));
+    return item.subItems.some((sub) => !sub.disabled && path.startsWith(sub.url));
   };
 
   return (
@@ -219,7 +223,7 @@ function NavDropdownItem({ item, isActive, isSubItemActive }: NavDropdownItemPro
                     href={subItem.url}
                     target={subItem.newTab ? "_blank" : undefined}
                     rel={subItem.newTab ? "noreferrer" : undefined}
-                    aria-current={isSubItemActive(subItem.url) ? "page" : undefined}
+                    aria-current={!subItem.disabled && isSubItemActive(subItem.url) ? "page" : undefined}
                     className="flex items-center gap-2"
                   >
                     {SubIcon && <SubIcon />}
@@ -260,7 +264,7 @@ function NavCollapsibleItem({ item, isActive, defaultOpen, isSubItemActive }: Na
                   <SidebarMenuSubButton
                     asChild
                     aria-disabled={subItem.disabled}
-                    isActive={isSubItemActive(subItem.url)}
+                    isActive={!subItem.disabled && isSubItemActive(subItem.url)}
                   >
                     <Link
                       prefetch={false}

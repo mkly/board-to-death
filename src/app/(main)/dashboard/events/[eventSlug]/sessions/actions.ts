@@ -1,11 +1,12 @@
-"use server";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
+
+("use server");
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import { z } from "zod";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import {
   CustomFieldEntityType,
   CustomFieldType,
@@ -19,7 +20,6 @@ import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, validateCustomFieldValue } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
-import { createFileStorage } from "@/server/infrastructure";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
 
 export interface SessionMutationState {
@@ -189,10 +189,7 @@ export async function saveProgramSession(
     for (const entry of customInput.values) {
       await customFields.setValue(event.id, entry.definition.id, target, entry.value);
     }
-    const storage = createFileStorage({
-      driver: "local",
-      rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
-    });
+    const storage = getConfiguredFileStorage();
     for (const { definition, prepared } of files) {
       const stored = await putCustomFieldFile({
         eventId: event.id,

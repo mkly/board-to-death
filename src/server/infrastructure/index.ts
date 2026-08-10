@@ -48,6 +48,8 @@ export {
   infrastructureSuccess,
   normalizeInfrastructureFailure,
 } from "./results.ts";
+export type { S3FileStorageOptions } from "./s3-file-storage.ts";
+export { S3FileStorage } from "./s3-file-storage.ts";
 export type {
   SpeakerFileDownload,
   SpeakerFileOwner,

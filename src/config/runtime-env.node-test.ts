@@ -13,6 +13,7 @@ const productionEnvironment = {
   BETTER_AUTH_SECRET: "a-production-better-auth-secret-with-enough-entropy",
   BETTER_AUTH_URL: "https://events.example.com",
   DATABASE_URL: "postgresql://app:password@database.example.com:5432/board_to_death",
+  FILE_STORAGE_DRIVER: "local",
   FILE_STORAGE_PATH: "/var/lib/board-to-death/files",
   NEXT_PUBLIC_APP_URL: "https://events.example.com",
   NODE_ENV: "production",
@@ -29,7 +30,12 @@ const productionProcessEnvironment = Object.fromEntries(
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "DATABASE_URL",
+        "FILE_STORAGE_DRIVER",
         "FILE_STORAGE_PATH",
+        "FILE_STORAGE_S3_BUCKET",
+        "FILE_STORAGE_S3_REGION",
+        "FILE_STORAGE_S3_ENDPOINT",
+        "FILE_STORAGE_S3_FORCE_PATH_STYLE",
         "NEXT_PUBLIC_APP_URL",
         "NEXT_RUNTIME",
         "RESEND_API_KEY",
@@ -71,7 +77,6 @@ test("production requires every configured server and public value", () => {
         "BETTER_AUTH_SECRET is required when NODE_ENV=production",
         "BETTER_AUTH_URL is required when NODE_ENV=production",
         "AUTH_ALLOWED_EMAILS is required when NODE_ENV=production",
-        "FILE_STORAGE_PATH is required when NODE_ENV=production",
         "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
       ]);
       return true;
@@ -155,6 +160,15 @@ test("malformed URLs produce keyed runtime configuration errors in every mode", 
 
 test("production requires an absolute persistent file-storage path", () => {
   assert.throws(
+    () => parseServerRuntimeConfig({ ...productionEnvironment, FILE_STORAGE_PATH: undefined }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, ["FILE_STORAGE_PATH is required when NODE_ENV=production"]);
+      return true;
+    },
+  );
+
+  assert.throws(
     () => parseServerRuntimeConfig({ ...productionEnvironment, FILE_STORAGE_PATH: "./ephemeral-files" }),
     (error: unknown) => {
       assert.ok(error instanceof RuntimeConfigError);
@@ -163,6 +177,36 @@ test("production requires an absolute persistent file-storage path", () => {
       return true;
     },
   );
+});
+
+test("production defaults to the S3 driver and requires its bucket and region", () => {
+  const s3Environment = {
+    ...productionEnvironment,
+    FILE_STORAGE_DRIVER: undefined,
+    FILE_STORAGE_PATH: undefined,
+  };
+
+  assert.throws(
+    () => parseServerRuntimeConfig(s3Environment),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConfigError);
+      assert.deepEqual(error.issues, [
+        "FILE_STORAGE_S3_BUCKET is required when FILE_STORAGE_DRIVER=s3",
+        "FILE_STORAGE_S3_REGION is required when FILE_STORAGE_DRIVER=s3",
+      ]);
+      return true;
+    },
+  );
+
+  const config = parseServerRuntimeConfig({
+    ...s3Environment,
+    FILE_STORAGE_S3_BUCKET: "board-to-death-files",
+    FILE_STORAGE_S3_REGION: "us-east-1",
+  });
+
+  assert.equal(config.FILE_STORAGE_DRIVER, "s3");
+  assert.equal(config.FILE_STORAGE_S3_BUCKET, "board-to-death-files");
+  assert.equal(config.FILE_STORAGE_S3_REGION, "us-east-1");
 });
 
 test("production accepts complete Resend delivery configuration and rejects partial configuration", () => {
@@ -210,6 +254,7 @@ const vercelEnvironment = {
   AUTH_SECRET: productionEnvironment.AUTH_SECRET,
   BETTER_AUTH_SECRET: productionEnvironment.BETTER_AUTH_SECRET,
   DATABASE_URL: productionEnvironment.DATABASE_URL,
+  FILE_STORAGE_DRIVER: "local",
   NODE_ENV: "production",
   VERCEL: "1",
 } as const;
@@ -261,7 +306,6 @@ test("the Vercel defaults do not apply off Vercel", () => {
       assert.ok(error instanceof RuntimeConfigError);
       assert.deepEqual(error.issues, [
         "BETTER_AUTH_URL is required when NODE_ENV=production",
-        "FILE_STORAGE_PATH is required when NODE_ENV=production",
         "NEXT_PUBLIC_APP_URL is required when NODE_ENV=production",
       ]);
       return true;

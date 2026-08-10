@@ -20,6 +20,7 @@ function productionEnvironment(storagePath) {
     BETTER_AUTH_SECRET: "production-better-auth-secret-with-enough-entropy",
     BETTER_AUTH_URL: "https://events.example.com",
     DATABASE_URL: "postgresql://app:password@database.example.com:5432/board_to_death",
+    FILE_STORAGE_DRIVER: "local",
     FILE_STORAGE_PATH: storagePath,
     NEXT_PUBLIC_APP_URL: "https://events.example.com",
     NODE_ENV: "production",
@@ -33,7 +34,7 @@ test("production validation rejects missing configuration without echoing suppli
     prepareProductionRuntime({ environment: { NODE_ENV: "production", AUTH_SECRET: secret } }),
     (error) => {
       assert.match(error.message, /DATABASE_URL is required/);
-      assert.match(error.message, /FILE_STORAGE_PATH is required/);
+      assert.match(error.message, /BETTER_AUTH_SECRET is required/);
       assert.doesNotMatch(error.message, new RegExp(secret));
       return true;
     },
@@ -64,6 +65,24 @@ test("validation prepares the configured persistent storage path for restart-saf
 
   assert.equal(first.server.FILE_STORAGE_PATH, storagePath);
   assert.equal(second.server.FILE_STORAGE_PATH, storagePath);
+});
+
+test("the S3 driver needs no local storage preparation", async () => {
+  const environment = {
+    ...productionEnvironment(undefined),
+    FILE_STORAGE_DRIVER: undefined,
+    FILE_STORAGE_PATH: undefined,
+    FILE_STORAGE_S3_BUCKET: "board-to-death-files",
+    FILE_STORAGE_S3_REGION: "us-east-1",
+  };
+  const refuse = async () => {
+    throw new Error("the filesystem must not be touched for the S3 driver");
+  };
+
+  const config = await prepareProductionRuntime({ environment, makeDirectory: refuse, checkAccess: refuse });
+
+  assert.equal(config.server.FILE_STORAGE_DRIVER, "s3");
+  assert.equal(config.server.FILE_STORAGE_S3_BUCKET, "board-to-death-files");
 });
 
 test("migration failures are returned to the deployment caller and prevent startup", async () => {

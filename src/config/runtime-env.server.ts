@@ -23,7 +23,12 @@ const SERVER_KEYS = [
   "AUTH_MAGIC_LINK_WEBHOOK_TOKEN",
   "RESEND_API_KEY",
   "RESEND_FROM_EMAIL",
+  "FILE_STORAGE_DRIVER",
   "FILE_STORAGE_PATH",
+  "FILE_STORAGE_S3_BUCKET",
+  "FILE_STORAGE_S3_REGION",
+  "FILE_STORAGE_S3_ENDPOINT",
+  "FILE_STORAGE_S3_FORCE_PATH_STYLE",
 ] as const;
 const REQUIRED_PRODUCTION_SERVER_KEYS = [
   "AUTH_SECRET",
@@ -31,7 +36,6 @@ const REQUIRED_PRODUCTION_SERVER_KEYS = [
   "BETTER_AUTH_SECRET",
   "BETTER_AUTH_URL",
   "AUTH_ALLOWED_EMAILS",
-  "FILE_STORAGE_PATH",
 ] as const;
 
 type ServerRuntimeKey = (typeof SERVER_KEYS)[number];
@@ -44,6 +48,7 @@ const DEFAULTS: Record<Exclude<RuntimeMode, "production">, ServerRuntimeValues> 
     BETTER_AUTH_SECRET: "local-development-better-auth-secret",
     BETTER_AUTH_URL: "http://localhost:3000",
     AUTH_ALLOWED_EMAILS: "admin@example.com",
+    FILE_STORAGE_DRIVER: "local",
     FILE_STORAGE_PATH: "./.data/files",
   },
   test: {
@@ -52,6 +57,7 @@ const DEFAULTS: Record<Exclude<RuntimeMode, "production">, ServerRuntimeValues> 
     BETTER_AUTH_SECRET: "test-only-better-auth-secret-not-for-production",
     BETTER_AUTH_URL: "http://localhost:3000",
     AUTH_ALLOWED_EMAILS: "admin@example.test",
+    FILE_STORAGE_DRIVER: "local",
     FILE_STORAGE_PATH: "./.data/test-files",
   },
 };
@@ -89,7 +95,18 @@ const serverSchema = z.object({
   AUTH_MAGIC_LINK_WEBHOOK_TOKEN: z.string().optional(),
   RESEND_API_KEY: z.string().min(1, "must not be empty").optional(),
   RESEND_FROM_EMAIL: z.string().email("must be a valid email address").optional(),
-  FILE_STORAGE_PATH: z.string().min(1, "must not be empty"),
+  FILE_STORAGE_DRIVER: z.enum(["local", "s3"], { message: "must be local or s3" }),
+  FILE_STORAGE_PATH: z.string().min(1, "must not be empty").optional(),
+  FILE_STORAGE_S3_BUCKET: z.string().min(1, "must not be empty").optional(),
+  FILE_STORAGE_S3_REGION: z.string().min(1, "must not be empty").optional(),
+  FILE_STORAGE_S3_ENDPOINT: z
+    .string()
+    .url("must be a valid URL")
+    .refine((value) => hasAllowedUrlProtocol(value, ["http:", "https:"]), {
+      message: "must use the http or https protocol",
+    })
+    .optional(),
+  FILE_STORAGE_S3_FORCE_PATH_STYLE: z.enum(["true", "false"], { message: "must be true or false" }).optional(),
 });
 
 export type ServerRuntimeConfig = z.infer<typeof serverSchema>;
@@ -124,6 +141,10 @@ function getServerValues(environment: Environment, mode: RuntimeMode): ServerRun
     }),
   ) as Record<ServerRuntimeKey, string | undefined>;
 
+  // Production stores files in S3; the local-disk driver is the development
+  // and test default and stays available only as explicit configuration.
+  values.FILE_STORAGE_DRIVER ??= mode === "production" ? "s3" : "local";
+
   const requiredKeys = mode === "production" ? REQUIRED_PRODUCTION_SERVER_KEYS : SERVER_KEYS.slice(0, 5);
   const missing = requiredKeys.filter((key) => values[key] === undefined);
 
@@ -157,8 +178,24 @@ export function parseServerRuntimeConfig(environment: Environment): ServerRuntim
     ]);
   }
 
-  if (mode === "production" && !isAbsolute(result.data.FILE_STORAGE_PATH)) {
-    throw new RuntimeConfigError(["FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production"]);
+  if (result.data.FILE_STORAGE_DRIVER === "s3") {
+    const missingS3Keys = (["FILE_STORAGE_S3_BUCKET", "FILE_STORAGE_S3_REGION"] as const).filter(
+      (key) => result.data[key] === undefined,
+    );
+    if (missingS3Keys.length > 0) {
+      throw new RuntimeConfigError(missingS3Keys.map((key) => `${key} is required when FILE_STORAGE_DRIVER=s3`));
+    }
+  } else {
+    if (result.data.FILE_STORAGE_PATH === undefined) {
+      throw new RuntimeConfigError([
+        mode === "production"
+          ? "FILE_STORAGE_PATH is required when NODE_ENV=production"
+          : "FILE_STORAGE_PATH is required when FILE_STORAGE_DRIVER=local",
+      ]);
+    }
+    if (mode === "production" && !isAbsolute(result.data.FILE_STORAGE_PATH)) {
+      throw new RuntimeConfigError(["FILE_STORAGE_PATH must be an absolute path when NODE_ENV=production"]);
+    }
   }
 
   return result.data;

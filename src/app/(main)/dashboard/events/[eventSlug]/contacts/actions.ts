@@ -1,4 +1,6 @@
-"use server";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
+
+("use server");
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -6,7 +8,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
@@ -22,7 +23,6 @@ import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, type CustomFieldTarget } from "@/server/custom-fields/repositories";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
-import { createFileStorage } from "@/server/infrastructure";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
@@ -112,7 +112,7 @@ async function saveCustomFields({
     await repository.setValue(eventId, entry.definition.id, target, entry.value);
   }
 
-  const storage = createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH });
+  const storage = getConfiguredFileStorage();
   for (const { definition, file } of parsed.files) {
     const stored = await storeCustomFieldFile({
       eventId,

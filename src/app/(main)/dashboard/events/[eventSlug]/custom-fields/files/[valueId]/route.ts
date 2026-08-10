@@ -1,11 +1,10 @@
 import { headers } from "next/headers";
 
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { CustomFieldFileService, createPrismaCustomFieldFileStore } from "@/server/custom-fields/files";
 import { getDatabaseClient } from "@/server/database/client";
-import { createFileStorage } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 
 interface CustomFieldFileRouteContext {
   readonly params: Promise<{ readonly eventSlug: string; readonly valueId: string }>;
@@ -27,7 +26,7 @@ export async function GET(_request: Request, context: CustomFieldFileRouteContex
   if (!event) return notFound();
 
   const file = await new CustomFieldFileService({
-    storage: createFileStorage({ driver: "local", rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH }),
+    storage: getConfiguredFileStorage(),
     store: createPrismaCustomFieldFileStore(client),
   }).download(event.id, valueId);
   if (!file) return notFound();

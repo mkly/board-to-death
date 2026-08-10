@@ -1,6 +1,5 @@
-import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { getDatabaseClient } from "@/server/database/client";
-import { createFileStorage } from "@/server/infrastructure";
+import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 import { PublishedProgramRepository } from "@/server/published-program";
 
 interface RouteContext {
@@ -19,10 +18,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   const speaker = publication.version.snapshot.speakers.find((candidate) => candidate.id === speakerId);
   if (!speaker?.photoObjectKey) return notFound();
 
-  const storage = createFileStorage({
-    driver: "local",
-    rootDirectory: getRuntimeConfig().server.FILE_STORAGE_PATH,
-  });
+  const storage = getConfiguredFileStorage();
   const stored = await storage.get(speaker.photoObjectKey);
   if (!stored.ok || !stored.value.metadata.contentType.startsWith("image/")) return notFound();
 

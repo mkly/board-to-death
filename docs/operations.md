@@ -17,11 +17,17 @@ absolute path. Existing process environment values take precedence over values i
 to the service account and never copy it into the repository or application image.
 
 Production requires `AUTH_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, `DATABASE_URL`,
-`NEXT_PUBLIC_APP_URL`, and an absolute `FILE_STORAGE_PATH`. Production also requires a way to deliver magic links:
-either `AUTH_MAGIC_LINK_WEBHOOK_URL`, or both `RESEND_API_KEY` and `RESEND_FROM_EMAIL` together. Setting only one of
-the Resend pair is rejected the same as setting neither. `AUTH_MAGIC_LINK_WEBHOOK_TOKEN` is optional when the
-delivery endpoint does not authenticate requests. The configured file path is created with service-account-only
-permissions when absent and must live on a persistent mounted volume.
+`NEXT_PUBLIC_APP_URL`, and file storage configuration. `FILE_STORAGE_DRIVER` defaults to `s3` in production, which
+requires `FILE_STORAGE_S3_BUCKET` and `FILE_STORAGE_S3_REGION`; AWS credentials come from the standard SDK provider
+chain (environment variables, profile, or instance/task role) and are never configured through the app's own keys.
+`FILE_STORAGE_S3_ENDPOINT` and `FILE_STORAGE_S3_FORCE_PATH_STYLE` are optional, for S3-compatible stores such as
+MinIO or R2. Setting `FILE_STORAGE_DRIVER=local` instead requires an absolute `FILE_STORAGE_PATH`; that path is
+created with service-account-only permissions when absent and must live on a persistent mounted volume.
+
+Production also requires a way to deliver magic links: either `AUTH_MAGIC_LINK_WEBHOOK_URL`, or both
+`RESEND_API_KEY` and `RESEND_FROM_EMAIL` together. Setting only one of the Resend pair is rejected the same as
+setting neither. `AUTH_MAGIC_LINK_WEBHOOK_TOKEN` is optional when the delivery endpoint does not authenticate
+requests.
 
 Validate configuration and storage access without printing values:
 
@@ -125,7 +131,9 @@ holding an event role does not by itself grant a CFP form admin role, and vice v
 
 ## Health and restart
 
-`GET /api/health` returns `200` only when PostgreSQL answers a query and `FILE_STORAGE_PATH` is readable and writable.
+`GET /api/health` returns `200` only when PostgreSQL answers a query and file storage responds: with the S3 driver it
+probes the bucket with the configured credentials, with the local driver it checks `FILE_STORAGE_PATH` is readable and
+writable.
 It returns `503` with only the failed check names otherwise; provider errors, URLs, paths, and credentials are never
 included. Do not route user traffic until the endpoint reports `ready`, and remove the instance from rotation before
 sending its shutdown signal.
@@ -151,15 +159,16 @@ Set these project environment variables (Settings → Environment Variables):
 | `AUTH_MAGIC_LINK_WEBHOOK_TOKEN` | Optional. |
 
 `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, and `FILE_STORAGE_PATH` are **not** required on Vercel and are usually better
-left unset. The runtime config derives the first two from `VERCEL_PROJECT_PRODUCTION_URL` (production) or `VERCEL_URL`
+left unset. The runtime config derives the URLs from `VERCEL_PROJECT_PRODUCTION_URL` (production) or `VERCEL_URL`
 (preview), so every preview deployment authenticates against its own host instead of a hardcoded origin. Setting them
 explicitly still wins, but pins every preview to that one origin. Leave Vercel's "Automatically expose System
 Environment Variables" setting on — the client bundle reads the `NEXT_PUBLIC_VERCEL_*` twins.
 
-`FILE_STORAGE_PATH` defaults to `/tmp/board-to-death/files`, the only writable location in a Vercel function. That is
-per-instance scratch space that disappears between invocations, so it satisfies the readiness probe but is **not**
-durable storage. Anything that must survive a request needs an object store (Vercel Blob, S3) behind
-`FileStorageService` before it is wired into a route.
+File storage on Vercel defaults to the S3 driver like any other production deployment, so also set
+`FILE_STORAGE_S3_BUCKET`, `FILE_STORAGE_S3_REGION`, and AWS credentials (`AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`). Setting `FILE_STORAGE_DRIVER=local` instead falls back to `/tmp/board-to-death/files`,
+the only writable location in a Vercel function — per-instance scratch space that disappears between invocations,
+so it satisfies the readiness probe but is **not** durable storage.
 
 Migrations do not run on deploy. Apply them as a separate release step against the same database before promoting:
 
@@ -221,6 +230,7 @@ To bring up a real instance from an image built or promoted by `./scripts/bootst
    NEXT_PUBLIC_APP_URL=https://events.example.com
    AUTH_ALLOWED_EMAILS=admin@example.com
    AUTH_MAGIC_LINK_WEBHOOK_URL=https://events.example.com/hooks/magic-link
+   FILE_STORAGE_DRIVER=local
    FILE_STORAGE_PATH=/var/lib/board-to-death/files
    EOF
    incus exec my-app-instance -- install -d -m 0700 /var/lib/board-to-death/files
@@ -276,7 +286,8 @@ A redeploy repeats steps 2 and 4–6 against the existing container and volume; 
 
 ## Persistence, backup, and recovery
 
-Back up PostgreSQL and the volume mounted at `FILE_STORAGE_PATH` together according to the application's recovery-point
+Back up PostgreSQL and the file store — the S3 bucket (bucket versioning or replication), or with the local driver the
+volume mounted at `FILE_STORAGE_PATH` — together according to the application's recovery-point
 requirements. The `.next` directory is a replaceable build artifact, not application data. Restore the database and
 file volume to a consistent point, validate configuration, run `runtime:migrate`, then start and wait for `/api/health`.
 
@@ -292,7 +303,8 @@ message per problem rather than a partial start. Common messages and their fix:
 
 | Message | Fix |
 | --- | --- |
-| `<KEY> is required when NODE_ENV=production` | Set the named variable — `AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, `FILE_STORAGE_PATH`, or `NEXT_PUBLIC_APP_URL`. |
+| `<KEY> is required when NODE_ENV=production` | Set the named variable — `AUTH_SECRET`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `AUTH_ALLOWED_EMAILS`, `NEXT_PUBLIC_APP_URL`, or (local driver only) `FILE_STORAGE_PATH`. |
+| `<KEY> is required when FILE_STORAGE_DRIVER=s3` | The S3 driver is active (the production default) but `FILE_STORAGE_S3_BUCKET` or `FILE_STORAGE_S3_REGION` is unset. Set them, or set `FILE_STORAGE_DRIVER=local` with a `FILE_STORAGE_PATH`. |
 | `must contain at least 32 characters` | `AUTH_SECRET` or `BETTER_AUTH_SECRET` is too short; generate a longer one, for example `openssl rand -hex 32`. |
 | `must use the postgres or postgresql protocol` | `DATABASE_URL` has the wrong URL scheme. |
 | `must use the http or https protocol` | `BETTER_AUTH_URL` (or `AUTH_MAGIC_LINK_WEBHOOK_URL`) has the wrong URL scheme. |
@@ -304,14 +316,15 @@ The parser groups its checks rather than reporting all of them at once: it lists
 together, then every malformed value together, then the delivery and storage-path checks. Fix everything a run
 lists, then rerun — a clean pass can still surface a later group's message.
 
-**`FILE_STORAGE_PATH could not be prepared for read/write access.`** The service account cannot create or write the
+**`FILE_STORAGE_PATH could not be prepared for read/write access.`** (Local driver only.) The service account cannot create or write the
 configured directory. Confirm the parent directory — typically the mounted persistent volume — exists, is owned by
 the service account, and is not mounted read-only.
 
 **`GET /api/health` returns `503`.** The body names only which checks failed (database, storage), never a
 connection string, path, or credential. A failed database check usually means `DATABASE_URL` is unreachable or the
-database has not finished starting; a failed storage check usually means the persistent volume is not attached yet
-or lost its permissions across a restart. Do not route traffic to an instance, and remove it from rotation before
+database has not finished starting; a failed storage check usually means the bucket is unreachable or the credentials
+were rejected (S3 driver), or the persistent volume is not attached yet or lost its permissions across a restart
+(local driver). Do not route traffic to an instance, and remove it from rotation before
 sending its shutdown signal, until this returns `200`.
 
 **A release-time migration (`runtime:migrate` / `db:deploy`) fails partway through.** Do not start the new
