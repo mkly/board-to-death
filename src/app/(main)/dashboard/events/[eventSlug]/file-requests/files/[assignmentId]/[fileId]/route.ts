@@ -29,7 +29,7 @@ export async function GET(_request: Request, context: FileRequestDownloadContext
     context.params,
     auth.api.getSession({ headers: await headers() }),
   ]);
-  if (!isAuthorizedAdminSession(session)) return notFound();
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return notFound();
 
   const client = getDatabaseClient();
   const event = await client.event.findUnique({ where: { slug: eventSlug }, select: { id: true } });

@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 
 import { CfpSubmissionKind, CfpSubmissionStatus } from "@/generated/prisma/client";
 import { defaultSubmissionColumns, parseSubmissionView } from "@/lib/cfp/submission-table";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createSubmissionCsv, createSubmissionXlsx } from "@/server/cfp/exports";
 import { CfpSubmissionRepository, type CfpSubmissionSortKey } from "@/server/cfp/submissions";
@@ -22,7 +22,9 @@ function responseBody(bytes: Uint8Array): ArrayBuffer {
 
 export async function GET(request: Request, { params }: ExportRouteContext): Promise<Response> {
   const [{ eventSlug }, session] = await Promise.all([params, auth.api.getSession({ headers: await headers() })]);
-  if (!session || !isAllowedAdminEmail(session.user.email)) return new Response("Not found", { status: 404 });
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
+    return new Response("Not found", { status: 404 });
+  }
 
   const client = getDatabaseClient();
   const event = await client.event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });

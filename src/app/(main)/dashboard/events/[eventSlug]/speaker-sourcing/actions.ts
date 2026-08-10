@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
@@ -25,7 +25,7 @@ function stringValue(formData: FormData, name: string): string {
 
 async function authorizedContext(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   const event = await getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
     select: { id: true, name: true, slug: true },

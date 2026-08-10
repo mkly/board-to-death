@@ -4,11 +4,11 @@ const mocks = vi.hoisted(() => ({
   findEvent: vi.fn(),
   findSavedView: vi.fn(),
   getSession: vi.fn(),
-  isAllowedAdminEmail: vi.fn(),
+  isAuthorizedAdminSession: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
-vi.mock("@/server/auth/admin-access", () => ({ isAllowedAdminEmail: mocks.isAllowedAdminEmail }));
+vi.mock("@/server/auth/admin-access", () => ({ isAuthorizedAdminSession: mocks.isAuthorizedAdminSession }));
 vi.mock("@/server/auth/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/server/database/client", () => ({
   getDatabaseClient: () => ({
@@ -22,7 +22,7 @@ import { GET } from "./route";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSession.mockResolvedValue({ user: { email: "admin@example.test", id: "admin-1" } });
-  mocks.isAllowedAdminEmail.mockReturnValue(true);
+  mocks.isAuthorizedAdminSession.mockResolvedValue(true);
   mocks.findEvent.mockResolvedValue({ id: "event-1", slug: "event-one" });
 });
 

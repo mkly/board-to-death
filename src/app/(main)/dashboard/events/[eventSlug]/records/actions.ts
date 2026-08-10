@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 
 import { z } from "zod";
 
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { type BulkEditFailure, type BulkEditField, BulkEditOperationRepository } from "@/server/bulk-edit/operations";
 import { getDatabaseClient } from "@/server/database/client";
@@ -39,7 +39,7 @@ export async function applyBulkEdit(eventSlug: string, input: BulkEditActionInpu
   }
 
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) {
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: parsed.data.eventSlug }))) {
     return { status: "error", message: "This event is not available." };
   }
 

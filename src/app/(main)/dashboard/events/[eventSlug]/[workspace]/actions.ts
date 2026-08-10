@@ -48,7 +48,7 @@ function timeField(formData: FormData, name: string): number {
 
 async function requireAdminEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!isAuthorizedAdminSession(session)) throw new AuthorizationError("unauthenticated");
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) throw new AuthorizationError("unauthenticated");
 
   const event = await getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },

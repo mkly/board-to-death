@@ -386,7 +386,7 @@ export class CfpAdministratorRepository {
     readonly externalId: string;
     readonly displayName: string;
   }): Promise<CfpAdministrator> {
-    const externalId = requireText(input.externalId, "externalId").toLowerCase();
+    const externalId = requireText(input.externalId, "externalId");
     const displayName = requireText(input.displayName, "displayName");
     try {
       return await this.client.cfpAdministrator.upsert({
@@ -495,7 +495,7 @@ export class CfpPolicyRepository {
 
     const actor = await this.client.cfpAdministrator.findUnique({
       where: {
-        eventId_externalId: { eventId, externalId: requireText(actorExternalId, "actorExternalId").toLowerCase() },
+        eventId_externalId: { eventId, externalId: requireText(actorExternalId, "actorExternalId") },
       },
       select: { id: true },
     });
@@ -564,7 +564,7 @@ export class CfpPolicyRepository {
               select: { id: true, key: true, status: true },
             },
             cfpAdministrators: {
-              where: { externalId: actorExternalId.trim().toLowerCase() },
+              where: { externalId: actorExternalId.trim() },
               select: { id: true },
             },
           },
@@ -606,7 +606,7 @@ export class CfpPolicyRepository {
                   select: { id: true, key: true, status: true },
                 },
                 cfpAdministrators: {
-                  where: { externalId: actorExternalId.trim().toLowerCase() },
+                  where: { externalId: actorExternalId.trim() },
                   select: { id: true },
                 },
               },

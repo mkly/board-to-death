@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { CustomFieldEntityType } from "@/generated/prisma/client";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { CfpSubmissionRepository } from "@/server/cfp/submissions";
 import { CustomFieldRepository } from "@/server/custom-fields/repositories";
@@ -19,7 +19,7 @@ export default async function SubmissionDetailPage({ params }: SubmissionDetailP
     params,
     auth.api.getSession({ headers: await headers() }),
   ]);
-  if (!session || !isAllowedAdminEmail(session.user.email)) notFound();
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) notFound();
 
   const client = getDatabaseClient();
   const submission = await new CfpSubmissionRepository(client).getDetailByEventSlug(eventSlug, submissionId);
