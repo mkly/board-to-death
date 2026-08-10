@@ -5,6 +5,30 @@ export interface CfpNormalizedAnswer {
   readonly value: boolean | number | string | readonly string[];
 }
 
+const proposalTitleQuestionIds = new Set(["title", "proposal-title", "session-title", "talk-title"]);
+const proposalTitleQuestionLabels = new Set(["title", "proposal title", "session title", "talk title"]);
+
+function normalizedQuestionLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, " ");
+}
+
+export function proposalTitleFromAnswers(
+  definition: CfpFormDefinition,
+  answers: readonly { readonly questionId: string; readonly value: unknown }[],
+): string | null {
+  const titleQuestion = definition.sections
+    .flatMap(({ questions }) => questions)
+    .find(
+      ({ id, label }) =>
+        proposalTitleQuestionIds.has(id) || proposalTitleQuestionLabels.has(normalizedQuestionLabel(label)),
+    );
+  const title = answers.find(({ questionId }) => questionId === titleQuestion?.id)?.value;
+  return typeof title === "string" && title.trim() !== "" ? title.trim() : null;
+}
+
 export type CfpAnswerValidationResult =
   | { readonly ok: true; readonly answers: readonly CfpNormalizedAnswer[]; readonly categoryKeys: readonly string[] }
   | { readonly ok: false; readonly errors: Readonly<Record<string, readonly string[]>> };

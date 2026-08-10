@@ -17,6 +17,7 @@ export interface CfpApplicantMessageContext {
     readonly location: string | null;
   };
   readonly recipient: CfpApplicantRecipient;
+  readonly proposalTitle: string;
 }
 
 export interface QueueCfpThankYouInput extends CfpApplicantMessageContext {
@@ -33,7 +34,7 @@ export interface QueuedCfpThankYou {
   readonly duplicate: boolean;
 }
 
-function messageValues({ event, recipient }: CfpApplicantMessageContext) {
+function messageValues({ event, recipient, proposalTitle }: CfpApplicantMessageContext) {
   const eventStartDate = new Intl.DateTimeFormat("en-US", {
     dateStyle: "long",
     timeZone: event.timezone,
@@ -44,6 +45,7 @@ function messageValues({ event, recipient }: CfpApplicantMessageContext) {
     "event.location": event.location ?? "Online",
     "recipient.name": recipient.name,
     "recipient.email": recipient.email,
+    "session.title": proposalTitle,
   } as const;
 }
 
@@ -55,7 +57,7 @@ export function renderCfpApplicantMessage(
     {
       key: "cfp-thank-you",
       name: "CFP thank-you",
-      subjectTemplate: "Thank you for submitting to {{event.name}}",
+      subjectTemplate: "Submission received: {{session.title}} — {{event.name}}",
       bodyTemplate,
     },
     messageValues(context),
@@ -102,7 +104,7 @@ export class CfpThankYouRepository {
             eventId: input.event.id,
             templateId: template.id,
             version: input.policyVersionNumber,
-            subjectTemplate: "Thank you for submitting to {{event.name}}",
+            subjectTemplate: "Submission received: {{session.title}} — {{event.name}}",
             htmlTemplate: bodyTemplate,
           },
           update: {},

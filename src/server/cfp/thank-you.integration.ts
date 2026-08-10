@@ -76,6 +76,7 @@ describe("CFP thank-you delivery", () => {
       policyVersionNumber: 3,
       submissionId: submission.id,
       recipient: { email: "avery@example.test", name: "Avery Chen" },
+      proposalTitle: "Designing Welcoming Game Nights",
       bodyTemplate: "Thank you, **{{recipient.name}}**, for submitting to {{event.name}}.",
       portalUrl: `https://events.example.test/portal/${event.slug}/sign-in`,
     } as const;
@@ -110,7 +111,7 @@ describe("CFP thank-you delivery", () => {
     expect(infrastructure.email.sentMessages).toHaveLength(1);
     expect(infrastructure.email.sentMessages[0]).toMatchObject({
       to: [{ address: "avery@example.test", name: "Avery Chen" }],
-      subject: "Thank you for submitting to Board to Death 2027",
+      subject: "Submission received: Designing Welcoming Game Nights — Board to Death 2027",
     });
     expect(infrastructure.email.sentMessages[0]?.text).toContain(
       `https://events.example.test/portal/${event.slug}/sign-in`,

@@ -13,6 +13,7 @@ import {
   PrismaClient,
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
+import { CfpDecisionNotificationRepository } from "../cfp/decision-notifications.ts";
 import { RepositoryError } from "../events/repositories.ts";
 import { EvaluationDecisionRepository } from "./decisions.ts";
 import { EvaluationResultsRepository } from "./results.ts";
@@ -24,6 +25,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for evaluation decis
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const decisions = new EvaluationDecisionRepository(client);
+const decisionNotifications = new CfpDecisionNotificationRepository(client);
 const results = new EvaluationResultsRepository(client);
 
 const decisionDefinition = {
@@ -37,6 +39,7 @@ const decisionDefinition = {
       questions: [
         { id: "title", type: "short_text", label: "Proposal title", required: true },
         { id: "abstract", type: "long_text", label: "Abstract", required: true },
+        { id: "email", type: "email", label: "Applicant email", required: true },
       ],
     },
   ],
@@ -107,6 +110,7 @@ describe("final evaluation decisions", () => {
                   create: [
                     { questionId: "title", sortOrder: 0, value: `${label} proposal` },
                     { questionId: "abstract", sortOrder: 1, value: `${label} abstract` },
+                    { questionId: "email", sortOrder: 2, value: `${label}@decision.test` },
                   ],
                 },
               },
@@ -207,6 +211,29 @@ describe("final evaluation decisions", () => {
     });
     assert.equal(accepted.decisionNumber, 1);
     assert.equal(rejected.decisionNumber, 1);
+    const acceptedNotification = await decisionNotifications.queue(event.id, accepted.id);
+    const repeatedAcceptedNotification = await decisionNotifications.queue(event.id, accepted.id);
+    const rejectedNotification = await decisionNotifications.queue(event.id, rejected.id);
+    assert.equal(repeatedAcceptedNotification.deliveryId, acceptedNotification.deliveryId);
+    assert.equal(repeatedAcceptedNotification.duplicate, true);
+    assert.notEqual(rejectedNotification.deliveryId, acceptedNotification.deliveryId);
+    const notificationRecipients = await client.messageRecipient.findMany({
+      where: { deliveryId: { in: [acceptedNotification.deliveryId, rejectedNotification.deliveryId] } },
+      orderBy: { email: "asc" },
+      select: { email: true, subjectSnapshot: true, textSnapshot: true },
+    });
+    assert.deepEqual(notificationRecipients, [
+      {
+        email: "accept@decision.test",
+        subjectSnapshot: `Proposal accepted: accept proposal — ${event.name}`,
+        textSnapshot: `Congratulations, accept@decision.test. Your proposal **accept proposal** has been accepted for ${event.name}.`,
+      },
+      {
+        email: "reject@decision.test",
+        subjectSnapshot: `Proposal decision: reject proposal — ${event.name}`,
+        textSnapshot: `Hello reject@decision.test. Your proposal **reject proposal** was not selected for ${event.name}.`,
+      },
+    ]);
     assert.equal(
       await client.programSession.count({
         where: { sourceSubmissionId: { in: [waitlistedSubmission.id, acceptedSubmission.id] } },

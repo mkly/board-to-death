@@ -11,6 +11,7 @@ import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/pr
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
+import { CfpDecisionNotificationRepository } from "@/server/cfp/decision-notifications";
 import { DEFAULT_SPEAKER_INVITATION_LIFETIME_MS, SpeakerConfirmationService } from "@/server/cfp/speaker-confirmations";
 import { getDatabaseClient } from "@/server/database/client";
 import { emitWebhookEvent } from "@/server/developer-api/webhooks";
@@ -109,7 +110,7 @@ export async function recordEvaluationDecision(
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
     const client = getDatabaseClient();
-    await new EvaluationDecisionRepository(client).record({
+    const decision = await new EvaluationDecisionRepository(client).record({
       eventId: event.id,
       roundId: parsed.data.roundId,
       submissionId: parsed.data.submissionId,
@@ -117,6 +118,12 @@ export async function recordEvaluationDecision(
       expectedDecisionNumber: parsed.data.expectedDecisionNumber,
       actorId,
     });
+    if (
+      decision.outcome === EvaluationDecisionOutcome.ACCEPTED ||
+      decision.outcome === EvaluationDecisionOutcome.REJECTED
+    ) {
+      await new CfpDecisionNotificationRepository(client).queue(event.id, decision.id);
+    }
     await emitWebhookEvent(client, {
       eventId: event.id,
       type: "submission.status_changed",

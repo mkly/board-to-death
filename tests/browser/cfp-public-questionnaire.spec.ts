@@ -264,7 +264,7 @@ test("finalizes one published submission and shows it in the correct event dashb
     expect(thankYou.rows).toHaveLength(1);
     expect(thankYou.rows[0]).toMatchObject({
       email: "speaker@example.com",
-      subjectSnapshot: "Thank you for submitting to Plan Screen 20 Conference",
+      subjectSnapshot: "Submission received: Schema-driven CFPs — Plan Screen 20 Conference",
     });
     expect(thankYou.rows[0].textSnapshot).toContain(
       "Thank you, speaker@example.com, for sharing your proposal with Plan Screen 20 Conference.",

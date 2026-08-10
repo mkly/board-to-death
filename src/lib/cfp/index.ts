@@ -1,6 +1,7 @@
 export {
   type CfpAnswerValidationResult,
   type CfpNormalizedAnswer,
+  proposalTitleFromAnswers,
   validateCfpAnswers,
   visibleCfpQuestionIds,
 } from "./answers.ts";

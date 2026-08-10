@@ -8,7 +8,7 @@ import { portalHref, SPEAKER_SESSION_COOKIE } from "@/app/(speaker)/portal/[even
 import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { CfpDraftPolicy, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
-import { validateCfpAnswers } from "@/lib/cfp";
+import { proposalTitleFromAnswers, validateCfpAnswers } from "@/lib/cfp";
 import { customFieldFormPrefix } from "@/lib/custom-fields";
 import { CfpDraftRepository } from "@/server/cfp/drafts";
 import { CfpPublicAccessRepository } from "@/server/cfp/public-access";
@@ -258,7 +258,11 @@ export async function submitPublicCfpForm(
     if (!recipient) {
       return { status: "error", message: "This CFP has no applicant email field. Contact the organizer." };
     }
-    const messageContext = { event: lookup.event, recipient };
+    const proposalTitle = proposalTitleFromAnswers(lookup.form.definition, validation.answers);
+    if (!proposalTitle) {
+      return { status: "error", message: "This CFP has no proposal title field. Contact the organizer." };
+    }
+    const messageContext = { event: lookup.event, recipient, proposalTitle };
     const confirmation = renderCfpApplicantMessage(lookup.policy.messages.submissionConfirmation, messageContext);
     const submission = await new CfpSubmissionRepository(client).createFinalized({
       eventId: lookup.event.id,
