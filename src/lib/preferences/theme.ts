@@ -28,6 +28,14 @@ export const THEME_PRESET_OPTIONS = [
     },
   },
   {
+    label: "Emerald Rose Glow",
+    value: "emerald-rose-glow",
+    primary: {
+      light: "oklch(0.37805 0.07303 168.94)",
+      dark: "oklch(0.82143 0.04724 170.3)",
+    },
+  },
+  {
     label: "Soft Pop",
     value: "soft-pop",
     primary: {

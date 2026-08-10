@@ -169,6 +169,7 @@ describe("event custom fields", () => {
   test("rejects cross-event targets", async () => {
     const firstEventId = await createEvent("first-custom-fields-event");
     const secondEventId = await createEvent("second-custom-fields-event");
+    const firstTargets = await createTargets(firstEventId);
     const secondTargets = await createTargets(secondEventId);
     const definition = await fields.createDefinition(firstEventId, {
       entityType: CustomFieldEntityType.CONTACT,
@@ -176,6 +177,32 @@ describe("event custom fields", () => {
       label: "Private note",
       type: CustomFieldType.LONG_TEXT,
     });
+    const secondDefinition = await fields.createDefinition(secondEventId, {
+      entityType: CustomFieldEntityType.CONTACT,
+      key: "private-note",
+      label: "Private note",
+      type: CustomFieldType.LONG_TEXT,
+    });
+    await fields.setValue(
+      firstEventId,
+      definition.id,
+      { entityType: "CONTACT", contactId: firstTargets.contact.id },
+      "Shared search phrase",
+    );
+    await fields.setValue(
+      secondEventId,
+      secondDefinition.id,
+      { entityType: "CONTACT", contactId: secondTargets.contact.id },
+      "Shared search phrase",
+    );
+    assert.deepEqual(
+      await fields.matchingTargetIds(firstEventId, { definitionId: definition.id, query: "search phrase" }),
+      [firstTargets.contact.id],
+    );
+    await expectRepositoryError(
+      fields.matchingTargetIds(firstEventId, { definitionId: secondDefinition.id, query: "search phrase" }),
+      "not-found",
+    );
     await expectRepositoryError(
       fields.setValue(
         firstEventId,

@@ -60,12 +60,12 @@ export async function confirmBulkCommunication(
   _previousState: ConfirmBulkCommunicationState,
   formData: FormData,
 ): Promise<ConfirmBulkCommunicationState> {
+  const eventSlug = fieldValue(formData, "eventSlug");
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!isAuthorizedAdminSession(session)) {
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
     return { status: "error", message: "Your admin session expired. Sign in and try again." };
   }
 
-  const eventSlug = fieldValue(formData, "eventSlug");
   const templateId = fieldValue(formData, "templateId");
   const confirmationToken = fieldValue(formData, "confirmationToken");
   if (eventSlug === "" || templateId === "" || !UUID_PATTERN.test(confirmationToken)) {

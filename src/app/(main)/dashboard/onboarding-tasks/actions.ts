@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { type PortalFormField, type PortalFormSection, portalFormFieldTypes } from "@/lib/portal-forms";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database";
 import { RepositoryError } from "@/server/events";
@@ -51,9 +52,9 @@ function repository(): SpeakerOnboardingRepository {
   return new SpeakerOnboardingRepository(getDatabaseClient());
 }
 
-async function requireAdminSession(): Promise<void> {
+async function requireAdminSession(eventId: string): Promise<void> {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) throw new Error("Authentication is required.");
+  if (!(await isAuthorizedAdminSession(session, { id: eventId }))) throw new Error("Authentication is required.");
 }
 
 async function snapshot(eventId: string): Promise<OnboardingSnapshot> {
@@ -221,7 +222,7 @@ export async function createDefinition(eventId: string, formData: FormData): Pro
   const parsed = parseForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
   try {
-    await requireAdminSession();
+    await requireAdminSession(eventId);
     const tasks = repository();
     const definitions = await tasks.listDefinitions(eventId);
     await tasks.createDefinition({
@@ -243,7 +244,7 @@ export async function updateDefinition(
   const parsed = parseForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
   try {
-    await requireAdminSession();
+    await requireAdminSession(eventId);
     const tasks = repository();
     const definition = await tasks.getDefinition(eventId, definitionId);
     const latest = definition?.versions.at(-1);
@@ -259,7 +260,7 @@ export async function updateDefinition(
 
 export async function moveDefinition(eventId: string, definitionId: string, offset: -1 | 1): Promise<MutationResult> {
   try {
-    await requireAdminSession();
+    await requireAdminSession(eventId);
     const tasks = repository();
     const definitions = await tasks.listDefinitions(eventId);
     const index = definitions.findIndex(({ id }) => id === definitionId);
@@ -278,7 +279,7 @@ export async function moveDefinition(eventId: string, definitionId: string, offs
 
 export async function archiveDefinition(eventId: string, definitionId: string): Promise<MutationResult> {
   try {
-    await requireAdminSession();
+    await requireAdminSession(eventId);
     await repository().archiveDefinition(eventId, definitionId);
     return success(eventId, "Onboarding task archived.");
   } catch (error) {
@@ -288,7 +289,7 @@ export async function archiveDefinition(eventId: string, definitionId: string): 
 
 export async function duplicateDefinition(eventId: string, definitionId: string): Promise<MutationResult> {
   try {
-    await requireAdminSession();
+    await requireAdminSession(eventId);
     await repository().duplicateDefinition(eventId, definitionId, `task-${randomUUID()}`);
     return success(eventId, "Onboarding task duplicated.");
   } catch (error) {

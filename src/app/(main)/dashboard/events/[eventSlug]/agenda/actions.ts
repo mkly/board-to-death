@@ -7,7 +7,7 @@ import { Temporal } from "temporal-polyfill";
 import { z } from "zod";
 
 import { AgendaConflictError, type AgendaConflictPolicy, AgendaPlacementRepository } from "@/server/agenda";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { emitWebhookEvent } from "@/server/developer-api/webhooks";
@@ -84,7 +84,7 @@ function validationErrors(error: z.ZodError): Readonly<Record<string, readonly s
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   return getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
     select: { id: true, slug: true, timezone: true },

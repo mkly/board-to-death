@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { CfpSubmissionStatus } from "@/generated/prisma/client";
 import type { CfpFormDefinition } from "@/lib/cfp";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
@@ -104,7 +104,7 @@ function errors(error: z.ZodError): Readonly<Record<string, readonly string[]>> 
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   const event = await getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
     select: { id: true, slug: true },

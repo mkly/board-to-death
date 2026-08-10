@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { CustomFieldEntityType, CustomFieldType, ProgramSessionParticipantRole } from "@/generated/prisma/client";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
 import { CustomFieldRepository, validateCustomFieldValue } from "@/server/custom-fields/repositories";
@@ -86,7 +86,7 @@ function participantValues(formData: FormData) {
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   return getDatabaseClient().event.findFirst({
     where: { slug: eventSlug, archivedAt: null },
     select: { id: true, slug: true },

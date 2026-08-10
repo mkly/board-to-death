@@ -23,12 +23,12 @@ export async function cancelBulkDelivery(
   _previousState: CancelBulkDeliveryState,
   formData: FormData,
 ): Promise<CancelBulkDeliveryState> {
+  const eventSlug = value(formData, "eventSlug");
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!isAuthorizedAdminSession(session)) {
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
     return { status: "error", message: "Your admin session expired. Sign in and try again." };
   }
 
-  const eventSlug = value(formData, "eventSlug");
   const deliveryId = value(formData, "deliveryId");
   const client = getDatabaseClient();
   const event = await client.event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { IntegrationRemoteRecordStatus } from "@/generated/prisma/client";
-import { isAllowedAdminEmail } from "@/server/auth/admin-access";
+import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 import { ApiTokenService } from "@/server/developer-api";
@@ -67,7 +67,7 @@ const sessionMappingSchema = z.object({
 
 async function authorizedEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !isAllowedAdminEmail(session.user.email)) return null;
+  if (!(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
   return getDatabaseClient().event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });
 }
 

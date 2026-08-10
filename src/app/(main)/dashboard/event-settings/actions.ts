@@ -9,6 +9,7 @@ import { z } from "zod";
 import { EventType } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { getRequestAuthorization } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database";
 import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "@/server/events";
 
@@ -128,8 +129,11 @@ function failureResult(error: unknown): MutationResult {
   return { ok: false, message: "The settings could not be saved. Try again." };
 }
 
-async function isAuthorizedAdmin(): Promise<boolean> {
-  return isAuthorizedAdminSession(await auth.api.getSession({ headers: await headers() }));
+async function isAuthorizedAdmin(eventId?: string): Promise<boolean> {
+  return isAuthorizedAdminSession(
+    await auth.api.getSession({ headers: await headers() }),
+    eventId ? { id: eventId } : undefined,
+  );
 }
 
 async function snapshot(eventId: string): Promise<EventSettingsSnapshot> {
@@ -155,7 +159,8 @@ async function snapshot(eventId: string): Promise<EventSettingsSnapshot> {
 }
 
 export async function cloneEvent(sourceEventId: string, formData: FormData): Promise<MutationResult> {
-  if (!(await isAuthorizedAdmin())) return { ok: false, message: "You are not authorized to clone events." };
+  if (!(await isAuthorizedAdmin(sourceEventId)))
+    return { ok: false, message: "You are not authorized to clone events." };
   const parsed = cloneEventSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -177,7 +182,7 @@ export async function cloneEvent(sourceEventId: string, formData: FormData): Pro
 }
 
 export async function archiveEvent(eventId: string): Promise<MutationResult> {
-  if (!(await isAuthorizedAdmin())) return { ok: false, message: "You are not authorized to archive events." };
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to archive events." };
   try {
     await repositories().events.archive(eventId);
     return success(eventId, "Event archived and is now read-only.");
@@ -187,7 +192,7 @@ export async function archiveEvent(eventId: string): Promise<MutationResult> {
 }
 
 export async function restoreEvent(eventId: string): Promise<MutationResult> {
-  if (!(await isAuthorizedAdmin())) return { ok: false, message: "You are not authorized to restore events." };
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to restore events." };
   try {
     await repositories().events.restore(eventId);
     return success(eventId, "Event restored.");
@@ -202,10 +207,15 @@ async function success(eventId: string, message: string): Promise<MutationResult
 }
 
 export async function createEvent(formData: FormData): Promise<MutationResult> {
+  const authorization = await getRequestAuthorization();
+  if (!authorization?.activeOrganization) return { ok: false, message: "You are not authorized to create events." };
   const parsed = parseEventForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
   try {
-    const event = await repositories().events.create(eventInput(parsed.data));
+    const event = await repositories().events.create({
+      ...eventInput(parsed.data),
+      orgId: authorization.activeOrganization.id,
+    });
     return success(event.id, "Event created.");
   } catch (error) {
     return failureResult(error);
@@ -213,6 +223,7 @@ export async function createEvent(formData: FormData): Promise<MutationResult> {
 }
 
 export async function updateEvent(eventId: string, formData: FormData): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   const parsed = parseEventForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
   try {
@@ -224,6 +235,7 @@ export async function updateEvent(eventId: string, formData: FormData): Promise<
 }
 
 export async function createRoom(eventId: string, formData: FormData): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   const parsed = namedItemSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) return invalidResult(parsed.error);
   try {
@@ -235,6 +247,7 @@ export async function createRoom(eventId: string, formData: FormData): Promise<M
 }
 
 export async function updateRoom(eventId: string, roomId: string, formData: FormData): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   const parsed = namedItemSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) return invalidResult(parsed.error);
   try {
@@ -246,6 +259,7 @@ export async function updateRoom(eventId: string, roomId: string, formData: Form
 }
 
 export async function deleteRoom(eventId: string, roomId: string): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   try {
     await repositories().rooms.delete(eventId, roomId);
     return success(eventId, "Room removed.");
@@ -255,6 +269,7 @@ export async function deleteRoom(eventId: string, roomId: string): Promise<Mutat
 }
 
 export async function moveRoom(eventId: string, roomId: string, offset: -1 | 1): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   try {
     const repository = repositories().rooms;
     const rows = await repository.list(eventId);
@@ -273,6 +288,7 @@ export async function moveRoom(eventId: string, roomId: string, offset: -1 | 1):
 }
 
 export async function createTrack(eventId: string, formData: FormData): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   const parsed = trackSchema.safeParse({ name: formData.get("name"), color: formData.get("color") });
   if (!parsed.success) return invalidResult(parsed.error);
   try {
@@ -284,6 +300,7 @@ export async function createTrack(eventId: string, formData: FormData): Promise<
 }
 
 export async function updateTrack(eventId: string, trackId: string, formData: FormData): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   const parsed = trackSchema.safeParse({ name: formData.get("name"), color: formData.get("color") });
   if (!parsed.success) return invalidResult(parsed.error);
   try {
@@ -295,6 +312,7 @@ export async function updateTrack(eventId: string, trackId: string, formData: Fo
 }
 
 export async function deleteTrack(eventId: string, trackId: string): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   try {
     await repositories().tracks.delete(eventId, trackId);
     return success(eventId, "Track removed.");
@@ -304,6 +322,7 @@ export async function deleteTrack(eventId: string, trackId: string): Promise<Mut
 }
 
 export async function moveTrack(eventId: string, trackId: string, offset: -1 | 1): Promise<MutationResult> {
+  if (!(await isAuthorizedAdmin(eventId))) return { ok: false, message: "You are not authorized to edit this event." };
   try {
     const repository = repositories().tracks;
     const rows = await repository.list(eventId);
