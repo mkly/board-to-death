@@ -10,6 +10,7 @@ import { getRuntimeConfig } from "@/config/runtime-env.server";
 import { type CustomFieldDefinition, CustomFieldEntityType, CustomFieldType } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { DirectorySegmentRepository } from "@/server/contacts/directory-segments";
 import { createContact, linkDirectoryPersonToEvent, updateContact } from "@/server/contacts/repositories";
 import { storeCustomFieldFile } from "@/server/custom-fields/files";
 import { parseCustomFieldFormData } from "@/server/custom-fields/form-values";
@@ -192,4 +193,53 @@ export async function linkDirectoryPersonAction(eventSlug: string, personId: str
 
   revalidatePath(contactsPath(event.slug));
   redirect(`${contactsPath(event.slug)}?notice=${encodeURIComponent("Contact added from the directory.")}`);
+}
+
+const directorySegmentSchema = z.object({
+  name: z.string().trim().min(1, "Enter a segment name.").max(100),
+  query: z.string().trim().max(200),
+  organization: z.string().trim().max(200),
+  jobTitle: z.string().trim().max(200),
+  eventId: z.union([z.literal(""), z.uuid("The selected event is invalid.")]),
+});
+
+export async function saveDirectorySegmentAction(eventSlug: string, formData: FormData): Promise<never> {
+  const shell = await getDashboardShellData();
+  const event = findAuthorizedEvent(shell.events, eventSlug);
+  if (!event || shell.activeEvent?.id !== event.id) notFound();
+
+  const parsed = directorySegmentSchema.safeParse({
+    name: stringValue(formData, "name"),
+    query: stringValue(formData, "q"),
+    organization: stringValue(formData, "organization"),
+    jobTitle: stringValue(formData, "jobTitle"),
+    eventId: stringValue(formData, "participatedEventId"),
+  });
+  if (!parsed.success) {
+    redirect(
+      `${contactsPath(event.slug)}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid segment.")}`,
+    );
+  }
+
+  let segmentId = "";
+  try {
+    const segment = await new DirectorySegmentRepository(getDatabaseClient()).createForEvent(
+      event.id,
+      parsed.data.name,
+      {
+        query: parsed.data.query,
+        organization: parsed.data.organization,
+        jobTitle: parsed.data.jobTitle,
+        eventId: parsed.data.eventId,
+      },
+    );
+    segmentId = segment.id;
+  } catch (error) {
+    const message = error instanceof RepositoryError ? error.message : "The segment could not be saved.";
+    redirect(`${contactsPath(event.slug)}?error=${encodeURIComponent(message)}`);
+  }
+
+  revalidatePath(contactsPath(event.slug));
+  const destination = new URLSearchParams({ segment: segmentId, notice: "Segment saved." });
+  redirect(`${contactsPath(event.slug)}?${destination.toString()}`);
 }

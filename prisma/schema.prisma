@@ -419,16 +419,32 @@ enum EventInvitationStatus {
 }
 
 model Organization {
-  id        String               @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String               @unique
-  createdAt DateTime             @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime             @updatedAt @db.Timestamptz(3)
-  members   OrganizationMember[]
-  events    Event[]
-  people    Person[]
+  id                String             @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String             @unique
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(3)
+  members           OrganizationMember[]
+  events            Event[]
+  people            Person[]
+  directorySegments DirectorySegment[]
 
   @@map("organizations")
+}
+
+model DirectorySegment {
+  id           String       @id @default(uuid()) @db.Uuid
+  orgId        String       @db.Uuid
+  name         String
+  filters      Json
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(3)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, name])
+  @@unique([orgId, id])
+  @@index([orgId, createdAt])
+  @@map("directory_segments")
 }
 
 model OrganizationMember {
