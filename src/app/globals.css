@@ -204,6 +204,9 @@ These serve as the fallback; there is no separate default.css file. */
   html[data-font="outfit"] body {
     --font-sans: var(--font-outfit);
   }
+  html[data-font="plusJakartaSans"] body {
+    --font-sans: var(--font-plus-jakarta-sans);
+  }
   html[data-font="geistMono"] body {
     --font-sans: var(--font-geist-mono);
   }
