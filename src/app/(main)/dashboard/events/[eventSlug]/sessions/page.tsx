@@ -80,6 +80,7 @@ export default async function SessionsPage({ params, searchParams }: SessionsPag
         sessions={sessions.map((session) => ({
           id: session.id,
           kind: session.kind,
+          contentApprovalStatus: session.contentApprovalStatus,
           archived: session.archivedAt !== null,
           title: session.version.title,
           description: session.version.description,

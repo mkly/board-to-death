@@ -232,6 +232,12 @@ enum ProgramSessionKind {
   PROMOTED
 }
 
+enum ProgramSessionContentApprovalStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+}
+
 enum CustomFieldEntityType {
   CONTACT
   PROGRAM_SESSION
@@ -1541,6 +1547,7 @@ model ProgramSession {
   id                 String                  @id @default(uuid()) @db.Uuid
   eventId            String                  @db.Uuid
   kind               ProgramSessionKind
+  contentApprovalStatus ProgramSessionContentApprovalStatus @default(DRAFT)
   sourceSubmissionId String?                 @unique @db.Uuid
   parentSessionId    String?                 @db.Uuid
   archivedAt         DateTime?               @db.Timestamptz(3)

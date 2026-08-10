@@ -3,6 +3,7 @@ import {
   CfpSubmissionStatus,
   type Prisma,
   type PrismaClient,
+  ProgramSessionContentApprovalStatus,
   ProgramSessionKind,
   ProgramSessionParticipantRole,
 } from "../../generated/prisma/client.ts";
@@ -40,9 +41,11 @@ export interface PromoteProgramSessionInput {
 
 export interface CreateProgramSessionInput extends ProgramSessionVersionInput {
   readonly eventId: string;
+  readonly contentApprovalStatus?: ProgramSessionContentApprovalStatus;
 }
 
 export interface UpdateProgramSessionInput {
+  readonly contentApprovalStatus?: ProgramSessionContentApprovalStatus;
   readonly title?: string;
   readonly description?: string | null;
   readonly durationMinutes?: number;
@@ -69,6 +72,7 @@ export interface PersistedProgramSession {
   readonly id: string;
   readonly eventId: string;
   readonly kind: ProgramSessionKind;
+  readonly contentApprovalStatus: ProgramSessionContentApprovalStatus;
   readonly sourceSubmissionId: string | null;
   readonly parentSessionId: string | null;
   readonly archivedAt: Date | null;
@@ -200,6 +204,7 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
     id: stored.id,
     eventId: stored.eventId,
     kind: stored.kind,
+    contentApprovalStatus: stored.contentApprovalStatus,
     sourceSubmissionId: stored.sourceSubmissionId,
     parentSessionId: stored.parentSessionId,
     archivedAt: stored.archivedAt,
@@ -414,10 +419,11 @@ export class ProgramSessionRepository {
           ...participantInput,
         });
         await requireVersionReferences(transaction, eventId, version);
-        if (parentSessionId !== current.parentSessionId) {
+        const contentApprovalStatus = input.contentApprovalStatus ?? current.contentApprovalStatus;
+        if (parentSessionId !== current.parentSessionId || contentApprovalStatus !== current.contentApprovalStatus) {
           await transaction.programSession.update({
             where: { eventId_id: { eventId, id: sessionId } },
-            data: { parentSessionId },
+            data: { parentSessionId, contentApprovalStatus },
           });
         }
         await createVersion(transaction, eventId, sessionId, previous.versionNumber + 1, version);
@@ -534,7 +540,12 @@ export class ProgramSessionRepository {
         await requireVersionReferences(transaction, input.eventId, version);
         await this.requireParent(transaction, input.eventId, null, input.parentSessionId ?? null);
         const session = await transaction.programSession.create({
-          data: { eventId: input.eventId, kind, parentSessionId: input.parentSessionId ?? null },
+          data: {
+            eventId: input.eventId,
+            kind,
+            parentSessionId: input.parentSessionId ?? null,
+            contentApprovalStatus: input.contentApprovalStatus ?? ProgramSessionContentApprovalStatus.DRAFT,
+          },
           select: { id: true },
         });
         await createVersion(transaction, input.eventId, session.id, 1, version);
