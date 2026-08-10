@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Globe } from "lucide-react";
 
 import { APP_CONFIG } from "@/config/app-config";
@@ -13,6 +15,15 @@ export default function LoginV2() {
           <p className="text-muted-foreground text-sm">We&apos;ll email you a secure, single-use link.</p>
         </div>
         <LoginForm />
+      </div>
+
+      <div className="absolute top-5 flex w-full justify-end px-10">
+        <div className="text-muted-foreground text-sm">
+          Don&apos;t have an account?{" "}
+          <Link prefetch={false} className="text-foreground" href="/auth/v2/register">
+            Create your organization
+          </Link>
+        </div>
       </div>
 
       <div className="absolute bottom-5 flex w-full justify-between px-10">

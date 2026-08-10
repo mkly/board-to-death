@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Command } from "lucide-react";
 
 import { LoginForm } from "../../_components/login-form";
@@ -35,6 +37,12 @@ export default async function LoginV1({ searchParams }: LoginV1Props) {
           </div>
           <div className="space-y-4">
             <LoginForm callbackURL={callbackURL} />
+            <p className="text-center text-muted-foreground text-xs">
+              Don&apos;t have an account?{" "}
+              <Link prefetch={false} href="/auth/v1/register" className="text-primary">
+                Create your organization
+              </Link>
+            </p>
           </div>
         </div>
       </div>
