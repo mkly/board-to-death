@@ -137,5 +137,13 @@ const verified = await browserAuth.handler(new Request(deliveredLink, { redirect
 const sessionCookie = verified.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
 if (!sessionCookie) throw new Error("Expected Better Auth to issue a browser session cookie.");
 
-process.stdout.write(JSON.stringify({ eventId: event.id, eventSlug: event.slug, sessionCookie }));
+process.stdout.write(
+  JSON.stringify({
+    eventId: event.id,
+    eventSlug: event.slug,
+    otherEventId: otherEvent.id,
+    otherEventSlug: otherEvent.slug,
+    sessionCookie,
+  }),
+);
 await database.$disconnect();
