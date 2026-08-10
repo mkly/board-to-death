@@ -15,3 +15,13 @@ export {
   type PlaceAgendaSessionInput,
   type UpdateAgendaPlacementInput,
 } from "./placements.ts";
+export {
+  type AgendaProposalBounds,
+  type AgendaProposalPlacement,
+  type AgendaProposalPlan,
+  type AgendaProposalRoom,
+  type AgendaProposalSession,
+  type AgendaScheduleProposal,
+  proposeAgendaSchedule,
+  type UnplacedAgendaSession,
+} from "./proposals.ts";
