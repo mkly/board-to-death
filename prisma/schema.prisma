@@ -250,6 +250,17 @@ enum CustomFieldType {
   URL
   FILE
 }
+
+enum SpreadsheetImportEntityType {
+  CONTACT
+  PROGRAM_SESSION
+}
+
+enum SpreadsheetImportChangeAction {
+  CREATED
+  UPDATED
+}
+
 enum ProgramSessionParticipantRole {
   SPEAKER
   MODERATOR
@@ -542,6 +553,7 @@ model Event {
   organization              Organization               @relation(fields: [orgId], references: [id], onDelete: Restrict)
   memberships               EventMembership[]
   invitations               EventInvitation[]
+  spreadsheetImports        SpreadsheetImport[]
 
   @@index([orgId, archivedAt, startsAt])
   @@index([archivedAt, startsAt])
@@ -1608,6 +1620,37 @@ model CustomFieldValue {
   @@index([eventId, groupId])
   @@index([eventId, submissionId])
   @@map("custom_field_values")
+}
+
+model SpreadsheetImport {
+  id         String                      @id @default(uuid()) @db.Uuid
+  eventId    String                      @db.Uuid
+  entityType SpreadsheetImportEntityType
+  fileName   String
+  mapping    Json
+  actorId    String
+  createdAt  DateTime                    @default(now()) @db.Timestamptz(3)
+  event      Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  changes    SpreadsheetImportChange[]
+
+  @@unique([eventId, id])
+  @@index([eventId, createdAt])
+  @@map("spreadsheet_imports")
+}
+
+model SpreadsheetImportChange {
+  id        String                        @id @default(uuid()) @db.Uuid
+  eventId   String                        @db.Uuid
+  importId  String                        @db.Uuid
+  rowNumber Int
+  targetId  String                        @db.Uuid
+  action    SpreadsheetImportChangeAction
+  createdAt DateTime                      @default(now()) @db.Timestamptz(3)
+  import    SpreadsheetImport             @relation(fields: [eventId, importId], references: [eventId, id], onDelete: Cascade)
+
+  @@unique([importId, rowNumber])
+  @@index([eventId, targetId])
+  @@map("spreadsheet_import_changes")
 }
 
 model ProgramSessionVersion {
