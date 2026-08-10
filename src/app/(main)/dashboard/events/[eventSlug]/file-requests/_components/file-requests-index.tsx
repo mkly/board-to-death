@@ -11,16 +11,24 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import type { FileRequestTargetKind } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 import type { FileRequestWithVersion } from "@/server/files/repositories";
+import type { EventFileLibraryEntry } from "@/server/files/request-files";
 
 import { restoreFileRequestAction } from "../actions";
+import { EventFilesLibrary } from "./event-files-library";
 import { FileRequestFormSheet } from "./file-request-form-sheet";
 import { contentTypeLabel, formatBytes, TARGET_KIND_LABELS } from "./file-request-options";
 
-const TABS: readonly { readonly id: string; readonly label: string; readonly kind?: FileRequestTargetKind }[] = [
-  { id: "all", label: "All Requests" },
-  { id: "contact", label: "Contact Requests", kind: "CONTACT" },
-  { id: "group", label: "Group Requests", kind: "GROUP" },
-  { id: "submission", label: "Submission Requests", kind: "SUBMISSION" },
+const TABS: readonly {
+  readonly id: string;
+  readonly label: string;
+  readonly view: "requests" | "files";
+  readonly kind?: FileRequestTargetKind;
+}[] = [
+  { id: "all", label: "All Requests", view: "requests" },
+  { id: "contact", label: "Contact Requests", view: "requests", kind: "CONTACT" },
+  { id: "group", label: "Group Requests", view: "requests", kind: "GROUP" },
+  { id: "submission", label: "Submission Requests", view: "requests", kind: "SUBMISSION" },
+  { id: "files", label: "Files Library", view: "files" },
 ];
 
 function indexHref(eventSlug: string, tab: string): string {
@@ -40,18 +48,25 @@ function dueLabel(dueOffsetDays: number | null): string {
 export function FileRequestsIndex({
   event,
   requests,
+  files,
   activeTab,
   notice,
   error,
 }: {
   readonly event: { readonly name: string; readonly slug: string };
   readonly requests: readonly FileRequestWithVersion[];
+  readonly files: readonly EventFileLibraryEntry[];
   readonly activeTab: string;
   readonly notice?: string;
   readonly error?: string;
 }) {
   const counts = new Map(
-    TABS.map((tab) => [tab.id, requests.filter((request) => !tab.kind || request.targetKind === tab.kind).length]),
+    TABS.map((tab) => [
+      tab.id,
+      tab.view === "files"
+        ? files.length
+        : requests.filter((request) => !tab.kind || request.targetKind === tab.kind).length,
+    ]),
   );
   const selected = TABS.find((tab) => tab.id === activeTab) ?? TABS[0];
   const visible = selected.kind ? requests.filter((request) => request.targetKind === selected.kind) : requests;
@@ -116,96 +131,100 @@ export function FileRequestsIndex({
         ))}
       </nav>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{selected.label}</CardTitle>
-          <CardDescription>
-            {visible.length === 0
-              ? "No file requests match this type."
-              : `${visible.length} file request${visible.length === 1 ? "" : "s"}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className={visible.length === 0 ? undefined : "px-0"}>
-          {visible.length === 0 ? (
-            <Empty className="border border-dashed">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <FileUp />
-                </EmptyMedia>
-                <EmptyTitle>No file requests yet</EmptyTitle>
-                <EmptyDescription>Create a file request to collect documents from participants</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <FileRequestFormSheet eventSlug={event.slug} label="Add file request" />
-              </EmptyContent>
-            </Empty>
-          ) : (
-            <Table>
-              <TableCaption className="sr-only">File requests for {event.name}</TableCaption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Request</TableHead>
-                  <TableHead className="hidden sm:table-cell">Type</TableHead>
-                  <TableHead className="hidden md:table-cell">Due</TableHead>
-                  <TableHead className="hidden lg:table-cell">Accepted</TableHead>
-                  <TableHead className="text-right">Collected</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.length > 0 &&
-                  visible.map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                          <Link
-                            className="font-medium underline-offset-4 hover:underline"
-                            href={requestHref(event.slug, request.id)}
-                          >
-                            {request.currentVersion.title}
-                          </Link>
-                          <span className="text-muted-foreground text-xs">
-                            {request.key} · version {request.currentVersion.versionNumber} ·{" "}
-                            {formatBytes(request.currentVersion.maxBytes)} max
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Badge variant="secondary">{TARGET_KIND_LABELS[request.targetKind]}</Badge>
-                          {request.archivedAt ? <Badge variant="outline">Archived</Badge> : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        {dueLabel(request.currentVersion.dueOffsetDays)}
-                      </TableCell>
-                      <TableCell className="hidden max-w-56 truncate lg:table-cell">
-                        {request.currentVersion.allowedContentTypes.map(contentTypeLabel).join(", ")}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {request.fulfilledCount}/{request.assignmentCount}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {request.archivedAt ? (
-                          <form action={restoreFileRequestAction.bind(null, event.slug, request.id)}>
-                            <Button size="sm" type="submit" variant="outline">
-                              <ArchiveRestore data-icon="inline-start" />
-                              Restore
+      {selected.view === "files" ? (
+        <EventFilesLibrary event={event} files={files} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>{selected.label}</CardTitle>
+            <CardDescription>
+              {visible.length === 0
+                ? "No file requests match this type."
+                : `${visible.length} file request${visible.length === 1 ? "" : "s"}`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className={visible.length === 0 ? undefined : "px-0"}>
+            {visible.length === 0 ? (
+              <Empty className="border border-dashed">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FileUp />
+                  </EmptyMedia>
+                  <EmptyTitle>No file requests yet</EmptyTitle>
+                  <EmptyDescription>Create a file request to collect documents from participants</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <FileRequestFormSheet eventSlug={event.slug} label="Add file request" />
+                </EmptyContent>
+              </Empty>
+            ) : (
+              <Table>
+                <TableCaption className="sr-only">File requests for {event.name}</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Request</TableHead>
+                    <TableHead className="hidden sm:table-cell">Type</TableHead>
+                    <TableHead className="hidden md:table-cell">Due</TableHead>
+                    <TableHead className="hidden lg:table-cell">Accepted</TableHead>
+                    <TableHead className="text-right">Collected</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {requests.length > 0 &&
+                    visible.map((request) => (
+                      <TableRow key={request.id}>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <Link
+                              className="font-medium underline-offset-4 hover:underline"
+                              href={requestHref(event.slug, request.id)}
+                            >
+                              {request.currentVersion.title}
+                            </Link>
+                            <span className="text-muted-foreground text-xs">
+                              {request.key} · version {request.currentVersion.versionNumber} ·{" "}
+                              {formatBytes(request.currentVersion.maxBytes)} max
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="secondary">{TARGET_KIND_LABELS[request.targetKind]}</Badge>
+                            {request.archivedAt ? <Badge variant="outline">Archived</Badge> : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {dueLabel(request.currentVersion.dueOffsetDays)}
+                        </TableCell>
+                        <TableCell className="hidden max-w-56 truncate lg:table-cell">
+                          {request.currentVersion.allowedContentTypes.map(contentTypeLabel).join(", ")}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {request.fulfilledCount}/{request.assignmentCount}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {request.archivedAt ? (
+                            <form action={restoreFileRequestAction.bind(null, event.slug, request.id)}>
+                              <Button size="sm" type="submit" variant="outline">
+                                <ArchiveRestore data-icon="inline-start" />
+                                Restore
+                              </Button>
+                            </form>
+                          ) : (
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={requestHref(event.slug, request.id)}>Manage</Link>
                             </Button>
-                          </form>
-                        ) : (
-                          <Button asChild size="sm" variant="outline">
-                            <Link href={requestHref(event.slug, request.id)}>Manage</Link>
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

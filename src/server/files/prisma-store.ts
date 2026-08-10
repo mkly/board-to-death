@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../generated/prisma/client.ts";
 import type {
   EventFileEntry,
+  EventFileLibraryEntry,
   FileRequestAssignmentRecord,
   FileRequestStore,
   RecordFileInput,
@@ -75,7 +76,7 @@ export function createPrismaFileRequestStore(client: PrismaClient): FileRequestS
         const superseded = input.supersedeExisting
           ? await transaction.fileRequestFile.findMany({
               where: { assignmentId: input.assignmentId, supersededAt: null },
-              select: { id: true, objectKey: true },
+              select: { id: true },
             })
           : [];
         if (superseded.length > 0) {
@@ -98,7 +99,7 @@ export function createPrismaFileRequestStore(client: PrismaClient): FileRequestS
           where: { id: input.assignmentId },
           data: { status: "FULFILLED", fulfilledAt: new Date() },
         });
-        return { file, supersededKeys: superseded.map((entry) => entry.objectKey) };
+        return { file };
       });
     },
 
@@ -139,6 +140,45 @@ export function createPrismaFileRequestStore(client: PrismaClient): FileRequestS
         targetLabel: targetLabel(assignment),
         file,
       }));
+    },
+
+    async listEventFileLibrary(eventId: string): Promise<readonly EventFileLibraryEntry[]> {
+      const files = await client.fileRequestFile.findMany({
+        where: { assignment: { eventId } },
+        include: {
+          uploadedByContact: { select: { givenName: true, familyName: true, email: true } },
+          assignment: {
+            include: {
+              request: { select: { key: true } },
+              requestVersion: { select: { title: true } },
+              contact: { select: { givenName: true, familyName: true, email: true } },
+              group: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { uploadedAt: "desc" },
+      });
+      const latestByAssignment = new Map<string, EventFileLibraryEntry>();
+      for (const { assignment, uploadedByContact, ...file } of files) {
+        const current = latestByAssignment.get(file.assignmentId);
+        if (current) {
+          latestByAssignment.set(file.assignmentId, { ...current, versionCount: current.versionCount + 1 });
+          continue;
+        }
+        const uploaderName = uploadedByContact
+          ? `${uploadedByContact.givenName} ${uploadedByContact.familyName}`.trim()
+          : "";
+        latestByAssignment.set(file.assignmentId, {
+          requestKey: assignment.request.key,
+          requestTitle: assignment.requestVersion.title,
+          targetLabel: targetLabel(assignment),
+          uploaderLabel:
+            uploaderName || uploadedByContact?.email || (assignment.submissionId ? "Speaker" : "Organizer"),
+          versionCount: 1,
+          file,
+        });
+      }
+      return [...latestByAssignment.values()];
     },
   };
 }
