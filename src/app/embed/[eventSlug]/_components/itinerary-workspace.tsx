@@ -2,17 +2,18 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
-import { CalendarDays, MapPin, Search, TriangleAlert, X } from "lucide-react";
+import { CalendarDays, Download, MapPin, Search, TriangleAlert, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Spinner } from "@/components/ui/spinner";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ export interface ItinerarySession {
 interface ItineraryWorkspaceProps {
   readonly density: EmbedDensity;
   readonly enabledFilters: readonly EmbedFilter[];
+  readonly eventSlug: string;
   readonly eventName: string;
   readonly sessions: readonly ItinerarySession[];
   readonly storageKey: string;
@@ -165,6 +167,7 @@ function SessionSummary({ session, timezone }: { readonly session: ItinerarySess
 export function ItineraryWorkspace({
   density,
   enabledFilters,
+  eventSlug,
   eventName,
   sessions,
   storageKey,
@@ -178,6 +181,7 @@ export function ItineraryWorkspace({
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
   const [restored, setRestored] = useState(false);
   const [droppedCount, setDroppedCount] = useState(0);
+  const [exporting, setExporting] = useState(false);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [trackId, setTrackId] = useState("");
@@ -260,6 +264,30 @@ export function ItineraryWorkspace({
         ? `${session.title} added to your itinerary. It overlaps with ${clash.title}.`
         : `${session.title} added to your itinerary.`,
     );
+  };
+
+  const downloadCalendar = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch(`/embed/${encodeURIComponent(eventSlug)}/itinerary.ics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ placementIds: selectedIds }),
+      });
+      if (!response.ok) throw new Error(`Calendar export failed with status ${response.status}.`);
+
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${eventSlug}-itinerary.ics`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus("Your itinerary calendar download is ready.");
+    } catch {
+      setStatus("Your itinerary calendar could not be downloaded. Please try again.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const filtersVisible = showSearch || (showTrack && tracks.length > 0) || (showDay && days.length > 1);
@@ -467,6 +495,18 @@ export function ItineraryWorkspace({
               <CardDescription>
                 {selectedSessions.length === 1 ? "1 session" : `${selectedSessions.length} sessions`} · {timezone}
               </CardDescription>
+              <CardAction>
+                <Button
+                  disabled={!restored || selectedSessions.length === 0 || exporting}
+                  onClick={downloadCalendar}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {exporting ? <Spinner data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                  Export iCal
+                </Button>
+              </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {droppedCount > 0 ? (
