@@ -40,9 +40,15 @@ export function createAuth({
     },
     plugins: [
       magicLink({
+        disableSignUp: true,
         expiresIn: 60 * 10,
         storeToken: "hashed",
         sendMagicLink: async ({ email, url }) => {
+          const user = await database.user.findUnique({
+            where: { email: email.trim().toLowerCase() },
+            select: { id: true },
+          });
+          if (!user) return;
           await sendMagicLink({ email, url });
         },
       }),

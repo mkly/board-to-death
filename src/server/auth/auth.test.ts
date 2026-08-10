@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { PrismaClient } from "@/generated/prisma/client";
 
 import { createAuth } from "./auth-factory";
+import { provisionMagicLinkUser } from "./magic-link-user";
 
 const baseURL = "http://localhost:3000";
 const testEmail = "admin@example.test";
@@ -96,20 +97,22 @@ databaseDescribe("admin magic-link authentication", () => {
     await database.account.deleteMany();
     await database.session.deleteMany();
     await database.user.deleteMany();
+    await provisionMagicLinkUser(database, { email: testEmail, name: "Admin" });
   });
 
   afterAll(async () => {
     await database.$disconnect();
   });
 
-  test("delivers links without using an administrator email allowlist", async () => {
+  test("delivers a link for an existing user without disclosing or creating an unknown user", async () => {
     const allowed = await requestMagicLink();
     const denied = await requestMagicLink("stranger@example.test");
 
     expect(allowed.status).toBe(200);
     expect(denied.status).toBe(200);
-    expect(deliveredLinks).toHaveLength(2);
+    expect(deliveredLinks).toHaveLength(1);
     expect(deliveredLinks[0]).toContain("/api/auth/magic-link/verify");
+    await expect(database.user.findUnique({ where: { email: "stranger@example.test" } })).resolves.toBeNull();
   });
 
   test("creates a database session from a single-use link and rejects forged cookies", async () => {

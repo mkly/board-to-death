@@ -8,6 +8,7 @@ import { z } from "zod";
 import { EventMembershipRole } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { provisionMagicLinkUser } from "@/server/auth/magic-link-user";
 import { getDatabaseClient } from "@/server/database/client";
 import { EventInvitationService, type InvitationDelivery } from "@/server/event-memberships";
 import { RepositoryError } from "@/server/events/repositories";
@@ -53,6 +54,7 @@ async function requireAdminEvent(eventSlug: string): Promise<{ readonly id: stri
 async function magicLinkDelivery(): Promise<InvitationDelivery> {
   const requestHeaders = new Headers(await headers());
   return async ({ email, name, callbackURL }) => {
+    await provisionMagicLinkUser(getDatabaseClient(), { email, name });
     await auth.api.signInMagicLink({
       headers: requestHeaders,
       body: { email, name, callbackURL, newUserCallbackURL: callbackURL, errorCallbackURL: callbackURL },
