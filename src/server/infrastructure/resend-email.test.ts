@@ -49,9 +49,7 @@ describe("ResendEmailService", () => {
       subject: "Conference update",
       text: "The schedule changed.",
       html: "<p>The schedule changed.</p>",
-      attachments: [
-        { filename: "schedule.txt", content: "VGhlIHNjaGVkdWxlIGNoYW5nZWQu", content_type: "text/plain" },
-      ],
+      attachments: [{ filename: "schedule.txt", content: "VGhlIHNjaGVkdWxlIGNoYW5nZWQu", content_type: "text/plain" }],
     });
   });
 
