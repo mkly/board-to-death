@@ -12,7 +12,9 @@ import {
   PrismaClient,
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
+import { RepositoryError } from "../events/repositories.ts";
 import { EvaluationAssignmentRepository } from "./assignments.ts";
+import { EvaluationPlanRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 
@@ -21,6 +23,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for reviewer assignm
 
 const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const repository = new EvaluationAssignmentRepository(client);
+const plans = new EvaluationPlanRepository(client);
 
 interface Fixture {
   readonly eventId: string;
@@ -351,6 +354,28 @@ describe("reviewer and committee assignments", () => {
     });
     assert.equal(assignments.find(({ reviewerId }) => reviewerId === fixture.sourceReviewerId)?.status, "RECUSED");
     assert.equal(assignments.find(({ reviewerId }) => reviewerId === fixture.targetReviewerId)?.status, "ASSIGNED");
+  });
+
+  test("does not let a recused assignment block closing the round", async () => {
+    const fixture = await createFixture();
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+    await assert.rejects(
+      plans.transition(fixture.eventId, fixture.openRoundId, EvaluationRoundStatus.CLOSED),
+      (error: unknown) => error instanceof RepositoryError && error.code === "invalid-input",
+    );
+
+    await client.evaluationAssignment.updateMany({
+      where: { roundId: fixture.openRoundId, reviewerId: fixture.sourceReviewerId },
+      data: { status: EvaluationAssignmentStatus.RECUSED, recusedAt: new Date("2027-01-18T18:00:00.000Z") },
+    });
+
+    const closed = await plans.transition(fixture.eventId, fixture.openRoundId, EvaluationRoundStatus.CLOSED);
+    assert.equal(closed.status, EvaluationRoundStatus.CLOSED);
   });
 
   test("bulk assigns current committee members and deduplicates overlapping individual and committee coverage", async () => {

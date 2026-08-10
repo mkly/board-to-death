@@ -279,7 +279,7 @@ export class EvaluationPlanRepository {
           const incompleteAssignments = await transaction.evaluationAssignment.count({
             where: {
               roundId: round.id,
-              status: { not: "REVOKED" },
+              status: { in: ["ASSIGNED", "COMPLETED"] },
               OR: [
                 { status: { not: "COMPLETED" } },
                 { evaluation: { is: null } },

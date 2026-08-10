@@ -102,6 +102,7 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
   const [draftState, draftAction, draftPending] = useActionState(saveEvaluationDraft, INITIAL_STATE);
   const [submitState, submitAction, submitPending] = useActionState(submitEvaluation, INITIAL_STATE);
   const [recusalState, recusalAction, recusalPending] = useActionState(declareEvaluationConflict, INITIAL_STATE);
+  const recusalFormId = `declare-conflict-${assignment.id}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -354,16 +355,16 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button type="button" variant="outline">
-                    <ShieldAlert data-icon="inline-start" />
-                    Declare conflict
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <form action={recusalAction} className="flex flex-col gap-4">
-                    <input type="hidden" name="assignmentId" value={assignment.id} />
+              <form id={recusalFormId} action={recusalAction}>
+                <input type="hidden" name="assignmentId" value={assignment.id} />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="outline" disabled={recusalPending}>
+                      {recusalPending ? <Spinner data-icon="inline-start" /> : <ShieldAlert data-icon="inline-start" />}
+                      {recusalPending ? "Declaring" : "Declare conflict"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Declare a conflict of interest?</AlertDialogTitle>
                       <AlertDialogDescription>
@@ -372,19 +373,14 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel disabled={recusalPending}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction type="submit" variant="destructive" disabled={recusalPending}>
-                        {recusalPending ? (
-                          <Spinner data-icon="inline-start" />
-                        ) : (
-                          <ShieldAlert data-icon="inline-start" />
-                        )}
-                        {recusalPending ? "Declaring" : "Declare conflict"}
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction type="submit" form={recusalFormId} variant="destructive">
+                        Declare conflict
                       </AlertDialogAction>
                     </AlertDialogFooter>
-                  </form>
-                </AlertDialogContent>
-              </AlertDialog>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </form>
             </CardContent>
           </Card>
         </aside>
