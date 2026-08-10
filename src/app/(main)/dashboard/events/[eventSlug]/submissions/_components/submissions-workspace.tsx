@@ -43,7 +43,6 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Pagination,
   PaginationContent,
@@ -52,6 +51,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   columnLabel,
@@ -162,25 +162,79 @@ function MetricCard({
   readonly tone?: "primary" | "secondary";
 }) {
   return (
-    <Card className={cn("min-h-40 shadow-sm", tone === "secondary" && "ring-secondary/30")}>
+    <Card className="min-h-40 shadow-sm">
       <CardHeader>
-        <CardDescription className={cn("font-medium text-base", tone === "secondary" && "text-secondary")}>
+        <CardDescription className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
           {label}
         </CardDescription>
-        <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>
+        <CardTitle
+          className={cn(
+            "font-extrabold text-3xl tabular-nums tracking-tight",
+            tone === "secondary" ? "text-secondary" : "text-primary",
+          )}
+        >
+          {value}
+        </CardTitle>
         <CardAction
           className={cn(
-            "flex size-10 items-center justify-center rounded-full ring-1",
+            "flex size-10 items-center justify-center rounded-lg ring-1",
             tone === "secondary"
-              ? "bg-secondary/10 text-secondary ring-secondary/30"
+              ? "bg-secondary/10 text-secondary ring-secondary/25"
               : "bg-primary/10 text-primary ring-primary/20",
           )}
         >
-          <Icon aria-hidden="true" />
+          <Icon className="size-4.5" aria-hidden="true" />
         </CardAction>
       </CardHeader>
       <CardContent className="mt-auto text-muted-foreground text-sm">{description}</CardContent>
     </Card>
+  );
+}
+
+const ALL_FILTER_VALUE = "all";
+
+function FilterSelect({
+  id,
+  name,
+  ariaLabel,
+  defaultValue,
+  allLabel,
+  options,
+  className,
+}: {
+  readonly id?: string;
+  readonly name: string;
+  readonly ariaLabel?: string;
+  readonly defaultValue: string;
+  readonly allLabel?: string;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly className?: string;
+}) {
+  const [selected, setSelected] = useState(allLabel && defaultValue === "" ? ALL_FILTER_VALUE : defaultValue);
+  const selectedLabel =
+    selected === ALL_FILTER_VALUE ? allLabel : options.find((option) => option.value === selected)?.label;
+
+  return (
+    <>
+      {/* The GET form expects an empty string for "all"; Radix forbids empty SelectItem values, so a hidden input carries the real value. */}
+      <input type="hidden" name={name} value={selected === ALL_FILTER_VALUE ? "" : selected} />
+      <Select value={selected} onValueChange={setSelected}>
+        <SelectTrigger id={id} aria-label={ariaLabel} className={cn("w-full", className)}>
+          {/* Radix SelectValue can't resolve item text on the server; render the label directly so it shows on first paint. */}
+          <SelectValue>
+            <span className="truncate">{selectedLabel}</span>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {allLabel && <SelectItem value={ALL_FILTER_VALUE}>{allLabel}</SelectItem>}
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </>
   );
 }
 
@@ -215,89 +269,77 @@ function FilterBar({
           <FieldLabel className="sr-only" htmlFor="submission-status">
             Status
           </FieldLabel>
-          <NativeSelect id="submission-status" name="status" defaultValue={filters.status ?? ""} className="w-full">
-            <NativeSelectOption value="">All statuses</NativeSelectOption>
-            {submissionStatuses.map((status) => (
-              <NativeSelectOption key={status} value={status}>
-                {statusLabels[status]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          <FilterSelect
+            id="submission-status"
+            name="status"
+            defaultValue={filters.status ?? ""}
+            allLabel="All statuses"
+            options={submissionStatuses.map((status) => ({ value: status, label: statusLabels[status] }))}
+          />
         </Field>
         <Field>
           <FieldLabel className="sr-only" htmlFor="submission-type">
             Type
           </FieldLabel>
-          <NativeSelect id="submission-type" name="type" defaultValue={filters.kind ?? ""} className="w-full">
-            <NativeSelectOption value="">All types</NativeSelectOption>
-            {submissionKinds.map((kind) => (
-              <NativeSelectOption key={kind} value={kind}>
-                {kindLabels[kind]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          <FilterSelect
+            id="submission-type"
+            name="type"
+            defaultValue={filters.kind ?? ""}
+            allLabel="All types"
+            options={submissionKinds.map((kind) => ({ value: kind, label: kindLabels[kind] }))}
+          />
         </Field>
         <Field>
           <FieldLabel className="sr-only" htmlFor="submission-category">
             Category
           </FieldLabel>
-          <NativeSelect
+          <FilterSelect
             id="submission-category"
             name="category"
             defaultValue={filters.categoryId ?? ""}
-            className="w-full"
-          >
-            <NativeSelectOption value="">All categories</NativeSelectOption>
-            {options.categories.map((category) => (
-              <NativeSelectOption key={category.id} value={category.id}>
-                {category.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            allLabel="All categories"
+            options={options.categories.map((category) => ({ value: category.id, label: category.label }))}
+          />
         </Field>
         <Field>
           <FieldLabel className="sr-only" htmlFor="submission-assignee">
             Assignee
           </FieldLabel>
-          <NativeSelect
+          <FilterSelect
             id="submission-assignee"
             name="assignee"
             defaultValue={filters.assigneeId ?? ""}
-            className="w-full"
-          >
-            <NativeSelectOption value="">All assignees</NativeSelectOption>
-            {options.assignees.map((assignee) => (
-              <NativeSelectOption key={assignee.id} value={assignee.id}>
-                {assignee.displayName}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            allLabel="All assignees"
+            options={options.assignees.map((assignee) => ({ value: assignee.id, label: assignee.displayName }))}
+          />
         </Field>
         <Field>
           <FieldLabel className="sr-only" htmlFor="submission-sort">
             Sort submissions
           </FieldLabel>
           <div className="flex gap-2">
-            <NativeSelect
+            <FilterSelect
               id="submission-sort"
               name="sort"
               defaultValue={filters.sortBy ?? "submittedAt"}
               className="min-w-0 flex-1"
-            >
-              <NativeSelectOption value="submittedAt">Submitted</NativeSelectOption>
-              <NativeSelectOption value="updatedAt">Updated</NativeSelectOption>
-              <NativeSelectOption value="status">Status</NativeSelectOption>
-              <NativeSelectOption value="formTitle">Submission</NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect
-              aria-label="Sort direction"
+              options={[
+                { value: "submittedAt", label: "Submitted" },
+                { value: "updatedAt", label: "Updated" },
+                { value: "status", label: "Status" },
+                { value: "formTitle", label: "Submission" },
+              ]}
+            />
+            <FilterSelect
               name="direction"
+              ariaLabel="Sort direction"
               defaultValue={filters.sortDirection ?? "desc"}
-              className="w-24"
-            >
-              <NativeSelectOption value="desc">Newest</NativeSelectOption>
-              <NativeSelectOption value="asc">Oldest</NativeSelectOption>
-            </NativeSelect>
+              className="w-28"
+              options={[
+                { value: "desc", label: "Newest" },
+                { value: "asc", label: "Oldest" },
+              ]}
+            />
           </div>
         </Field>
         <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-1">

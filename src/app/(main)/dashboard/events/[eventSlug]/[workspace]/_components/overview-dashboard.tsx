@@ -65,7 +65,7 @@ function MetricCard({
 }) {
   return (
     <Link href={href}>
-      <Card size="sm" className="h-full transition-colors hover:bg-accent/50">
+      <Card size="sm" className="h-full transition-colors hover:bg-accent/25">
         <CardHeader>
           <CardDescription>{label}</CardDescription>
           <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>

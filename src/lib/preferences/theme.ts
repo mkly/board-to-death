@@ -12,43 +12,11 @@ export type ResolvedThemeMode = "light" | "dark";
 
 export const THEME_PRESET_OPTIONS = [
   {
-    label: "Default",
-    value: "default",
-    primary: {
-      light: "oklch(0.205 0 0)",
-      dark: "oklch(0.922 0 0)",
-    },
-  },
-  {
-    label: "Brutalist",
-    value: "brutalist",
-    primary: {
-      light: "oklch(0.6489 0.237 26.9728)",
-      dark: "oklch(0.7044 0.1872 23.1858)",
-    },
-  },
-  {
     label: "Emerald Rose Glow",
     value: "emerald-rose-glow",
     primary: {
-      light: "oklch(0.37805 0.07303 168.94)",
-      dark: "oklch(0.82143 0.04724 170.3)",
-    },
-  },
-  {
-    label: "Soft Pop",
-    value: "soft-pop",
-    primary: {
-      light: "oklch(0.5106 0.2301 276.9656)",
-      dark: "oklch(0.6801 0.1583 276.9349)",
-    },
-  },
-  {
-    label: "Tangerine",
-    value: "tangerine",
-    primary: {
-      light: "oklch(0.64 0.17 36.44)",
-      dark: "oklch(0.64 0.17 36.44)",
+      light: "#003527",
+      dark: "#a7cfc0",
     },
   },
 ] as const;

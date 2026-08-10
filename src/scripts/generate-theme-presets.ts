@@ -4,7 +4,6 @@
  * This script scans the /styles/presets directory for CSS files containing theme definitions.
  * It extracts `label:`, `value:`, and primary color definitions (`--primary`) for both light and dark modes.
  * These primary colors are used to visually represent each theme in the UI (e.g., colored dots or theme previews).
- * Default theme colors are fetched from /app/globals.css.
  * All extracted metadata is injected into a marked section of the /lib/preferences/theme.ts file.
  *
  * Usage:
@@ -65,30 +64,6 @@ const presets = files.map((file) => {
 
   return { label, value, primary };
 });
-
-const globalStylesPath = path.resolve(__dirname, "../app/globals.css");
-
-let globalContent = "";
-try {
-  globalContent = fs.readFileSync(globalStylesPath, "utf8");
-} catch (err) {
-  console.error(`❌ Could not read globals.css at ${globalStylesPath}`);
-  console.error(err);
-  process.exit(1);
-}
-
-const defaultLightPrimaryRegex = /:root\s*{[^}]*--primary:\s*([^;]+);/;
-const defaultDarkPrimaryRegex = /\.dark\s*{[^}]*--primary:\s*([^;]+);/;
-
-const defaultLightPrimaryMatch = defaultLightPrimaryRegex.exec(globalContent);
-const defaultDarkPrimaryMatch = defaultDarkPrimaryRegex.exec(globalContent);
-
-const defaultPrimary = {
-  light: defaultLightPrimaryMatch?.[1]?.trim() ?? "",
-  dark: defaultDarkPrimaryMatch?.[1]?.trim() ?? "",
-};
-
-presets.unshift({ label: "Default", value: "default", primary: defaultPrimary });
 
 const generatedBlock = `// --- generated:themePresets:start ---
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Building2 } from "lucide-react";
+import { Building2, LoaderCircle } from "lucide-react";
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -20,7 +20,7 @@ export function OrganizationSwitcher({ organizations, activeOrganization }: Orga
   if (organizations.length === 1) {
     return (
       <div className="flex min-w-0 items-center gap-2 px-2 py-1 text-muted-foreground text-xs">
-        <Building2 />
+        <Building2 className="size-4 shrink-0" />
         <span className="truncate">{activeOrganization?.name}</span>
       </div>
     );
@@ -36,7 +36,15 @@ export function OrganizationSwitcher({ organizations, activeOrganization }: Orga
       }}
     >
       <SelectTrigger className="w-full" aria-label="Active organization">
-        <SelectValue placeholder="Choose an organization" />
+        {isSwitching ? (
+          <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+        ) : (
+          <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
+        {/* Radix SelectValue can't resolve item text on the server; render the name directly so it shows on first paint. */}
+        <SelectValue placeholder="Choose an organization">
+          <span className="truncate">{activeOrganization?.name}</span>
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

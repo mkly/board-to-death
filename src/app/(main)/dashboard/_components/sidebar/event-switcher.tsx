@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, LoaderCircle } from "lucide-react";
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -19,7 +19,7 @@ export function EventSwitcher({ events, activeEvent }: EventSwitcherProps) {
   if (events.length === 0) {
     return (
       <div className="flex min-w-0 items-center gap-2 rounded-lg border border-dashed p-2 text-muted-foreground text-xs">
-        <CalendarDays />
+        <CalendarDays className="size-4 shrink-0" />
         <span className="truncate">No events available</span>
       </div>
     );
@@ -35,7 +35,15 @@ export function EventSwitcher({ events, activeEvent }: EventSwitcherProps) {
       }}
     >
       <SelectTrigger className="w-full" aria-label="Active event">
-        <SelectValue placeholder="Choose an event" />
+        {isSwitching ? (
+          <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+        ) : (
+          <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
+        {/* Radix SelectValue can't resolve item text on the server; render the name directly so it shows on first paint. */}
+        <SelectValue placeholder="Choose an event">
+          <span className="truncate">{activeEvent?.name}</span>
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

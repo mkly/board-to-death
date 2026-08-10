@@ -4,87 +4,263 @@ value: emerald-rose-glow
 */
 
 :root[data-theme-preset="emerald-rose-glow"] {
-  --radius: 0.5rem;
-  --background: oklch(0.98117 0.00342 247.86);
-  --foreground: oklch(0.22412 0.00599 236.83);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22412 0.00599 236.83);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22412 0.00599 236.83);
-  --primary: oklch(0.37805 0.07303 168.94);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.5026 0.15335 13.82);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.94816 0.00344 247.86);
-  --muted-foreground: oklch(0.39555 0.01435 161.43);
-  --accent: oklch(0.7281 0.16861 13.307);
-  --accent-foreground: oklch(0.3559 0.13886 13.986);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.82642 0.01371 159.85);
-  --input: oklch(0.82642 0.01371 159.85);
-  --ring: oklch(0.47371 0.07307 168.13);
-  --chart-1: oklch(0.47371 0.07307 168.13);
-  --chart-2: oklch(0.5026 0.15335 13.82);
-  --chart-3: oklch(0.74472 0.15015 162.18);
-  --chart-4: oklch(0.81768 0.0727 167.57);
-  --chart-5: oklch(0.83831 0.09035 13.187);
-  --sidebar: oklch(0.37805 0.07303 168.94);
-  --sidebar-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.7281 0.16861 13.307);
-  --sidebar-primary-foreground: oklch(0.3559 0.13886 13.986);
-  --sidebar-accent: oklch(0.29245 0.05834 169.31);
-  --sidebar-accent-foreground: oklch(0.81768 0.0727 167.57);
-  --sidebar-border: oklch(0.47371 0.07307 168.13);
-  --sidebar-ring: oklch(0.7281 0.16861 13.307);
-  --shadow-2xs: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.05);
-  --shadow-xs: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.05);
-  --shadow-sm: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.1), 0 1px 2px -1px oklch(0.37805 0.07303 168.94 / 0.1);
-  --shadow: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.1), 0 1px 2px -1px oklch(0.37805 0.07303 168.94 / 0.1);
-  --shadow-md: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.1), 0 2px 4px -1px oklch(0.37805 0.07303 168.94 / 0.1);
-  --shadow-lg: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.1), 0 4px 6px -1px oklch(0.37805 0.07303 168.94 / 0.1);
-  --shadow-xl: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.1), 0 8px 10px -1px oklch(0.37805 0.07303 168.94 / 0.1);
-  --shadow-2xl: 0 1px 3px 0 oklch(0.37805 0.07303 168.94 / 0.25);
+  --radius: 0.125rem;
+  --background: #f7f9fb;
+  --foreground: #191c1e;
+  --card: rgba(255, 255, 255, 0.8);
+  --card-foreground: #191c1e;
+  --popover: #ffffff;
+  --popover-foreground: #191c1e;
+  --primary: #003527;
+  --primary-foreground: #ffffff;
+  --secondary: #c73e58;
+  --secondary-foreground: #ffffff;
+  --muted: #e9f0ec;
+  --muted-foreground: #404944;
+  --accent: rgba(149, 211, 186, 0.25);
+  --accent-foreground: #0b513d;
+  --destructive: #ba1a1a;
+  --border: rgba(149, 211, 186, 0.35);
+  --input: rgba(64, 73, 68, 0.18);
+  --ring: #2b6954;
+  --chart-1: #064e3b;
+  --chart-2: #a93349;
+  --chart-3: #31c98f;
+  --chart-4: #95d3ba;
+  --chart-5: #fe7488;
+  --sidebar: rgba(255, 255, 255, 0.7);
+  --sidebar-foreground: #404944;
+  --sidebar-primary: #003527;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(149, 211, 186, 0.28);
+  --sidebar-accent-foreground: #003527;
+  --sidebar-border: rgba(149, 211, 186, 0.3);
+  --sidebar-ring: #2b6954;
+  --shadow-2xs: 0 1px 3px 0 rgba(0, 53, 39, 0.05);
+  --shadow-xs: 0 2px 8px 0 rgba(0, 53, 39, 0.05);
+  --shadow-sm: 0 4px 30px rgba(0, 53, 39, 0.05);
+  --shadow: 0 4px 30px rgba(0, 53, 39, 0.05), 0 0 15px rgba(149, 211, 186, 0.1);
+  --shadow-md: 0 8px 32px rgba(149, 211, 186, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  --shadow-lg: 0 8px 40px rgba(0, 53, 39, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  --shadow-xl: 0 12px 40px rgba(149, 211, 186, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+  --shadow-2xl: 0 4px 20px rgba(0, 53, 39, 0.3), 0 0 15px rgba(254, 116, 136, 0.3);
 }
 
 .dark:root[data-theme-preset="emerald-rose-glow"] {
-  --radius: 0.5rem;
-  --background: oklch(0.2621 0.04875 172.55);
-  --foreground: oklch(0.9141 0.00424 236.5);
-  --card: oklch(0.22412 0.00599 236.83);
-  --card-foreground: oklch(0.9141 0.00424 236.5);
-  --popover: oklch(0.24124 0.00588 236.79);
-  --popover-foreground: oklch(0.9141 0.00424 236.5);
-  --primary: oklch(0.82143 0.04724 170.3);
-  --primary-foreground: oklch(0.30511 0.04895 171.58);
-  --secondary: oklch(0.83883 0.09052 11.482);
-  --secondary-foreground: oklch(0.32189 0.08743 12.233);
-  --muted: oklch(0.28278 0.00566 236.73);
-  --muted-foreground: oklch(0.82617 0.00945 161.3);
-  --accent: oklch(0.8085 0.14984 162.3);
-  --accent-foreground: oklch(0.30123 0.06562 162.45);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.39422 0.01042 168.24);
-  --input: oklch(0.39422 0.01042 168.24);
-  --ring: oklch(0.82143 0.04724 170.3);
-  --chart-1: oklch(0.8085 0.14984 162.3);
-  --chart-2: oklch(0.83883 0.09052 11.482);
-  --chart-3: oklch(0.62687 0.13657 162.45);
-  --chart-4: oklch(0.82143 0.04724 170.3);
-  --chart-5: oklch(0.78705 0.10573 11.634);
-  --sidebar: oklch(0.16448 0.00675 214.52);
-  --sidebar-foreground: oklch(0.9141 0.00424 236.5);
-  --sidebar-primary: oklch(0.83883 0.09052 11.482);
-  --sidebar-primary-foreground: oklch(0.32189 0.08743 12.233);
-  --sidebar-accent: oklch(0.2621 0.04875 172.55);
-  --sidebar-accent-foreground: oklch(0.82143 0.04724 170.3);
-  --sidebar-border: oklch(0.39422 0.01042 168.24);
-  --sidebar-ring: oklch(0.83883 0.09052 11.482);
-  --shadow-2xs: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.2);
-  --shadow-xs: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.2);
-  --shadow-sm: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.3), 0 1px 2px -1px oklch(0.16448 0.00675 214.52 / 0.3);
-  --shadow: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.3), 0 1px 2px -1px oklch(0.16448 0.00675 214.52 / 0.3);
-  --shadow-md: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.3), 0 2px 4px -1px oklch(0.16448 0.00675 214.52 / 0.3);
-  --shadow-lg: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.3), 0 4px 6px -1px oklch(0.16448 0.00675 214.52 / 0.3);
-  --shadow-xl: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.3), 0 8px 10px -1px oklch(0.16448 0.00675 214.52 / 0.3);
-  --shadow-2xl: 0 1px 3px 0 oklch(0.16448 0.00675 214.52 / 0.5);
+  --radius: 0.125rem;
+  --background: #0b0f10;
+  --foreground: #e0e3e5;
+  --card: rgba(2, 44, 34, 0.35);
+  --card-foreground: #e0e3e5;
+  --popover: #14201c;
+  --popover-foreground: #e0e3e5;
+  --primary: #a7cfc0;
+  --primary-foreground: #0f372c;
+  --secondary: #ffb2bb;
+  --secondary-foreground: #571c27;
+  --muted: #1d2022;
+  --muted-foreground: #c1c8c4;
+  --accent: rgba(167, 207, 192, 0.12);
+  --accent-foreground: #a7cfc0;
+  --destructive: #ffb4ab;
+  --border: rgba(167, 207, 192, 0.16);
+  --input: rgba(167, 207, 192, 0.2);
+  --ring: #a7cfc0;
+  --chart-1: #4edea3;
+  --chart-2: #ffb2bb;
+  --chart-3: #a7cfc0;
+  --chart-4: #00a16f;
+  --chart-5: #f59da8;
+  --sidebar: rgba(11, 15, 16, 0.55);
+  --sidebar-foreground: #c1c8c4;
+  --sidebar-primary: #ffb2bb;
+  --sidebar-primary-foreground: #571c27;
+  --sidebar-accent: rgba(167, 207, 192, 0.1);
+  --sidebar-accent-foreground: #a7cfc0;
+  --sidebar-border: rgba(167, 207, 192, 0.12);
+  --sidebar-ring: #ffb2bb;
+  --shadow-2xs: 0 1px 3px 0 rgba(0, 0, 0, 0.2);
+  --shadow-xs: 0 2px 8px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 4px 30px rgba(0, 0, 0, 0.1), inset 0 0 20px rgba(167, 207, 192, 0.05);
+  --shadow: 0 4px 30px rgba(0, 0, 0, 0.1), inset 0 0 20px rgba(167, 207, 192, 0.05);
+  --shadow-md: 0 4px 30px rgba(0, 0, 0, 0.3), 0 0 20px rgba(167, 207, 192, 0.08);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.4), 0 0 25px rgba(255, 178, 187, 0.2);
+  --shadow-xl: 0 0 30px rgba(2, 44, 34, 0.6);
+  --shadow-2xl: 0 0 20px -2px rgba(255, 178, 187, 0.6);
+}
+
+/* Luxe Tech mesh-glow foundation: mint and rose radial glows over the base canvas
+   (design/submissions_dashboard_*_ultra_glow_final_harmony). */
+:root[data-theme-preset="emerald-rose-glow"] body {
+  background-image:
+    radial-gradient(circle at 80% 15%, rgba(149, 211, 186, 0.22) 0%, transparent 45%),
+    radial-gradient(circle at 15% 85%, rgba(254, 116, 136, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(149, 211, 186, 0.07) 0%, transparent 60%);
+  background-attachment: fixed;
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] body {
+  background-image:
+    radial-gradient(circle at 80% 15%, rgba(78, 222, 163, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 15% 85%, rgba(255, 178, 187, 0.1) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(2, 44, 34, 0.4) 0%, transparent 60%);
+  background-attachment: fixed;
+}
+
+/* The main content pane paints bg-background over the body; keep it transparent
+   so the mesh glow shows through, as in the mocks. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="sidebar-inset"] {
+  background-color: transparent;
+}
+
+/* Glassmorphism: cards and the sidebar are translucent surfaces that blur the
+   mesh-glow behind them, per the "ultra-glow-card" / "glass-surface" mocks. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="card"],
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="sidebar-inner"],
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="sidebar"][data-mobile="true"] {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="card"] {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 8px 32px rgba(149, 211, 186, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="card"] {
+  border-color: rgba(167, 207, 192, 0.15);
+  box-shadow:
+    inset 0 0 20px rgba(167, 207, 192, 0.05),
+    0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Floating surfaces (menus, popovers, dialogs) share the glass language. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="popover-content"],
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="dropdown-menu-content"],
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="select-content"],
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="dialog-content"] {
+  background-color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(149, 211, 186, 0.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 53, 39, 0.12);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="popover-content"],
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="dropdown-menu-content"],
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="select-content"],
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="dialog-content"] {
+  background-color: rgba(18, 28, 25, 0.88);
+  border-color: rgba(167, 207, 192, 0.15);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(167, 207, 192, 0.06);
+}
+
+/* Glass top bar, matching the mocks' blurred translucent header. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="sidebar-inset"] > header {
+  background-color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(149, 211, 186, 0.3);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="sidebar-inset"] > header {
+  background-color: rgba(11, 15, 16, 0.6);
+  border-color: rgba(167, 207, 192, 0.12);
+}
+
+/* Primary actions carry the mocks' emerald-rose bloom: gradient fill with a
+   soft emerald/rose glow that intensifies on hover. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="default"] {
+  background-image: linear-gradient(135deg, #003527 0%, #0b513d 60%, #a93349 140%);
+  box-shadow:
+    0 4px 20px rgba(0, 53, 39, 0.3),
+    0 0 15px rgba(149, 211, 186, 0.3);
+  transition:
+    box-shadow 0.3s ease,
+    filter 0.3s ease;
+}
+
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="default"]:hover {
+  filter: brightness(1.1);
+  box-shadow:
+    0 6px 25px rgba(0, 53, 39, 0.4),
+    0 0 25px rgba(254, 116, 136, 0.5);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="default"] {
+  background-image: none;
+  box-shadow: 0 4px 24px -4px rgba(167, 207, 192, 0.5);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="button"][data-variant="default"]:hover {
+  filter: none;
+  box-shadow: 0 4px 28px -4px rgba(167, 207, 192, 0.7);
+}
+
+/* Sidebar brand mark: the emerald-to-rose signature gradient on the app tile. */
+:root[data-theme-preset="emerald-rose-glow"] [data-brand-mark] {
+  background-image: linear-gradient(135deg, #0b513d 0%, #003527 60%, #a93349 145%);
+  box-shadow:
+    0 2px 10px rgba(0, 53, 39, 0.25),
+    0 0 12px rgba(149, 211, 186, 0.25);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-brand-mark] {
+  background-image: linear-gradient(135deg, #a7cfc0 0%, #7db8a5 70%, #ffb2bb 145%);
+  color: #0f372c;
+  box-shadow: 0 0 16px rgba(167, 207, 192, 0.35);
+}
+
+/* Display typography: heavier, tighter headings per the mocks' type treatment. */
+:root[data-theme-preset="emerald-rose-glow"] h1 {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+:root[data-theme-preset="emerald-rose-glow"] h2,
+:root[data-theme-preset="emerald-rose-glow"] h3 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* Data tables: quiet uppercase column labels and a mint-tinted row hover. */
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="table-head"] {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+
+:root[data-theme-preset="emerald-rose-glow"] [data-slot="table-row"]:hover {
+  background-color: rgba(149, 211, 186, 0.12);
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] [data-slot="table-row"]:hover {
+  background-color: rgba(167, 207, 192, 0.07);
+}
+
+/* Text selection carries the brand. */
+:root[data-theme-preset="emerald-rose-glow"] ::selection {
+  background-color: rgba(149, 211, 186, 0.45);
+  color: #003527;
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] ::selection {
+  background-color: rgba(167, 207, 192, 0.3);
+  color: #e0e3e5;
+}
+
+/* Thin, theme-tinted scrollbars keep the glass surfaces uncluttered. */
+:root[data-theme-preset="emerald-rose-glow"] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(64, 73, 68, 0.35) transparent;
+}
+
+.dark:root[data-theme-preset="emerald-rose-glow"] * {
+  scrollbar-color: rgba(167, 207, 192, 0.25) transparent;
 }

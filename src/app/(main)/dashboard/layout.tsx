@@ -8,7 +8,6 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { cn } from "@/lib/utils";
 import { getPreference } from "@/server/server-actions";
 
-import { LayoutControls } from "./_components/header/layout-controls";
 import { SearchDialog } from "./_components/header/search-dialog";
 import { ThemeSwitcher } from "./_components/header/theme-switcher";
 import { getDashboardShellData } from "./_lib/dashboard-data";
@@ -66,7 +65,6 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
               <SearchDialog eventSlug={shell.activeEvent?.slug} />
             </div>
             <div className="flex items-center gap-2">
-              <LayoutControls />
               <ThemeSwitcher />
             </div>
           </div>

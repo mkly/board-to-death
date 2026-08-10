@@ -3,10 +3,7 @@
 @import "shadcn/tailwind.css";
 
 /* Theme preset styles: these override CSS variables based on the selected data-theme-preset */
-@import "../styles/presets/brutalist.css";
 @import "../styles/presets/emerald-rose-glow.css";
-@import "../styles/presets/soft-pop.css";
-@import "../styles/presets/tangerine.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -236,6 +233,27 @@ These serve as the fallback; there is no separate default.css file. */
 
 html {
   overscroll-behavior: none;
+}
+
+/* Delayed reveal for navigation pending spinners: stays invisible for fast
+   navigations, fades in only when the transition actually takes a moment. */
+@keyframes nav-pending-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+[data-nav-pending] {
+  opacity: 0;
+  animation:
+    spin 1s linear infinite,
+    nav-pending-reveal 150ms ease-out 150ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-nav-pending] {
+    animation: nav-pending-reveal 150ms ease-out 150ms forwards;
+  }
 }
 
 .disable-transitions * {

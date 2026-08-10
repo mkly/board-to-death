@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { Command } from "lucide-react";
+import { Dices } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -24,7 +24,6 @@ import { EventSwitcher } from "./event-switcher";
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
 import { OrganizationSwitcher } from "./organization-switcher";
-import { SupportCard } from "./support-card";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   readonly user: {
@@ -64,15 +63,18 @@ export function AppSidebar({
       variant={variant}
       collapsible={collapsible}
     >
-      <SidebarHeader className="gap-3 border-sidebar-border/60 border-b p-4">
+      <SidebarHeader className="gap-3 border-sidebar-border/60 border-b px-3 py-4">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
+            <SidebarMenuButton asChild className="h-auto py-1.5">
               <Link prefetch={false} href={activeEvent ? dashboardEventHref(activeEvent.slug) : "/dashboard"}>
-                <span className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground shadow-xs">
-                  <Command />
+                <span
+                  data-brand-mark
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-xs"
+                >
+                  <Dices className="size-4.5" />
                 </span>
-                <span className="font-heading font-semibold text-base">{APP_CONFIG.name}</span>
+                <span className="font-heading font-bold text-base tracking-tight">{APP_CONFIG.name}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -84,7 +86,6 @@ export function AppSidebar({
         <NavMain items={getSidebarItems(activeEvent?.slug)} />
       </SidebarContent>
       <SidebarFooter>
-        <SupportCard />
         <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
