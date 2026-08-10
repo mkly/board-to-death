@@ -87,9 +87,12 @@ test.describe
       await selectEvent(context, fixtures.largeEvent);
       await page.goto(`/dashboard/events/${fixtures.largeEvent.slug}/submissions`);
       await page.getByPlaceholder("Search submissions").fill("Lex");
-      await page.getByLabel("Status", { exact: true }).selectOption("ACCEPTED");
-      await page.getByLabel("Type", { exact: true }).selectOption("ABSTRACT");
-      await page.getByLabel("Category", { exact: true }).selectOption(fixtures.largeEvent.designCategoryId);
+      await page.getByLabel("Status", { exact: true }).click();
+      await page.getByRole("option", { name: "Accepted", exact: true }).click();
+      await page.getByLabel("Type", { exact: true }).click();
+      await page.getByRole("option", { name: "Abstract", exact: true }).click();
+      await page.getByLabel("Category", { exact: true }).click();
+      await page.getByRole("option", { name: "Game design", exact: true }).click();
       await page.getByRole("button", { name: "Apply" }).click();
       await expect(page).toHaveURL(/q=Lex/);
       await expect(page).toHaveURL(/status=ACCEPTED/);

@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { PrismaClient } from "../../../src/generated/prisma/client.ts";
+import { PrismaClient, ProgramSessionContentApprovalStatus } from "../../../src/generated/prisma/client.ts";
 import { AgendaPlacementRepository } from "../../../src/server/agenda/placements.ts";
 import { EventRepository, RoomRepository, TrackRepository } from "../../../src/server/events/repositories.ts";
 import { PublishedProgramRepository } from "../../../src/server/published-program/repositories.ts";
@@ -71,6 +71,7 @@ async function setup() {
   ]);
   const opening = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Opening strategy keynote",
     description: "A practical tour of asymmetric play.",
     durationMinutes: 45,
@@ -79,6 +80,7 @@ async function setup() {
   });
   const roundtable = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Community roundtable",
     description: "Building welcoming tables together.",
     durationMinutes: 60,
@@ -87,6 +89,7 @@ async function setup() {
   });
   const keynoteDemo = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Keynote mechanics demo",
     description: "A focused demonstration inside the keynote.",
     durationMinutes: 20,
@@ -96,6 +99,7 @@ async function setup() {
   });
   const dstLab = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Daylight saving design lab",
     description: "A second-day session across the DST boundary.",
     durationMinutes: 45,

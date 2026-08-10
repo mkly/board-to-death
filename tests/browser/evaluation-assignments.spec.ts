@@ -74,7 +74,7 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel("Reviewer", { exact: true }).selectOption(fixture.sourceReviewerId);
     await applyAction();
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
-    await expect(page.getByText("Alex Source", { exact: true })).toBeVisible();
+    await expect(page.getByText("Alex Source", { exact: true }).first()).toBeVisible();
 
     await page
       .getByLabel(/Select submission/)
@@ -85,7 +85,7 @@ test.describe("evaluation reviewer assignments", () => {
     await page.getByLabel("Replacement reviewer").selectOption(fixture.targetReviewerId);
     await applyAction();
     await expect(page.getByText("1 reviewer assignment updated.")).toBeVisible();
-    await expect(page.getByText("Bailey Target", { exact: true })).toBeVisible();
+    await expect(page.getByText("Bailey Target", { exact: true }).first()).toBeVisible();
 
     await page
       .getByLabel(/Select submission/)

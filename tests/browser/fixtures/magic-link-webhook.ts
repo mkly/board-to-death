@@ -266,7 +266,10 @@ export async function signInAsAdmin(page: Page, email = adminEmail): Promise<voi
   deliveryPromise.catch(() => undefined);
 
   try {
-    await page.goto("/auth/v1/login");
+    // Land back on a stable public route after verification. Returning to /dashboard lets its
+    // event-selection redirect race the caller's first navigation and intermittently abort it.
+    const callbackURL = "/auth/v1/login?signedIn=1";
+    await page.goto(`/auth/v1/login?callbackURL=${encodeURIComponent(callbackURL)}`);
     await page.getByRole("textbox", { name: "Email address" }).fill(email);
     await page.getByRole("button", { name: "Email me a sign-in link" }).click();
 

@@ -35,7 +35,7 @@ test("merges a duplicate, links the returning contact, and shows event history",
   await page.goto(`/dashboard/events/${fixture.eventSlug}/contacts`);
 
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Possible duplicates" })).toBeVisible();
+  await expect(page.getByText("Possible duplicates", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Compare and merge" }).click();
   const mergeDialog = page.getByRole("alertdialog", { name: "Merge these duplicate people?" });
   await expect(mergeDialog.getByText("dana.alt@example.test")).toBeVisible();
@@ -44,11 +44,11 @@ test("merges a duplicate, links the returning contact, and shows event history",
   await expect(mergeDialog.getByText("This merge cannot be undone")).toBeVisible();
   await mergeDialog.getByRole("button", { name: "Merge records" }).click();
   await expect(page.getByText("Duplicate people merged into one record.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Possible duplicates" })).toHaveCount(0);
+  await expect(page.getByText("Possible duplicates", { exact: true })).toHaveCount(0);
 
   await expect(page.getByText("No contacts in this event")).toBeVisible();
   await page.getByLabel("Search directory").fill("Reed Robotics");
-  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page.getByRole("button", { name: "Apply filters", exact: true }).click();
   await expect(page.getByRole("row", { name: /Dana Reed.*Reed Robotics/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Add to event" }).click();

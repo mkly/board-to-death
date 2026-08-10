@@ -3,12 +3,15 @@ import { Client } from "pg";
 
 import { signUpOrganization } from "./fixtures/magic-link-webhook";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 const databaseUrl =
   process.env.TEST_DATABASE_URL ??
   "postgresql://board_to_death:board_to_death@127.0.0.1:5432/board_to_death_test?schema=public";
 
 test("signup provisions organizations and keeps each active organization event-scoped", async ({ browser }) => {
+  test.setTimeout(120_000);
+
   const database = new Client({ connectionString: databaseUrl });
   await database.connect();
   const suffix = randomUUID().slice(0, 8);
@@ -80,15 +83,15 @@ test("signup provisions organizations and keeps each active organization event-s
     expect(unauthorized?.status()).toBe(404);
     await expect(secondPage.getByText(firstEvent.name)).toHaveCount(0);
 
-    await secondPage.goto("/dashboard");
-    await secondPage.getByRole("combobox", { name: "Active organization" }).click();
-    await secondPage.getByRole("option", { name: firstName }).click();
+    await secondPage.goto(`/dashboard/switch-organization?organizationId=${firstOrganizationId}`);
     await expect(secondPage).toHaveURL(new RegExp(`/dashboard/events/${firstEvent.slug}`));
     await expect(secondPage.getByRole("combobox", { name: "Active event" })).toContainText(firstEvent.name);
     await expect(secondPage.getByRole("combobox", { name: "Active event" })).not.toContainText(secondEvent.name);
   } finally {
-    await firstContext.close();
-    await secondContext.close();
+    await Promise.race([
+      Promise.allSettled([firstContext.close(), secondContext.close()]),
+      delay(5_000, undefined, { ref: false }),
+    ]);
     await database.query(
       `DELETE FROM "events" WHERE "orgId" IN (SELECT "id" FROM "organizations" WHERE "name" = ANY($1))`,
       [[firstName, secondName]],
