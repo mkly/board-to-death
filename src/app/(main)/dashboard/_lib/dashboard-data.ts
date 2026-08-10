@@ -5,6 +5,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { organizerEventIds } from "@/server/authorization/policy";
 import { getRequestAuthorization } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -31,14 +32,26 @@ export interface DashboardShellData {
 export const getDashboardShellData = cache(async (): Promise<DashboardShellData> => {
   const [authorization, cookieStore] = await Promise.all([getRequestAuthorization(), cookies()]);
 
-  if (!authorization?.activeOrganization) {
+  if (!authorization) {
     redirect("/auth/v1/login");
   }
 
-  const events = await getDatabaseClient().event.findMany({
-    where: { orgId: authorization.activeOrganization.id, archivedAt: null },
+  const authorizedEventIds = organizerEventIds(authorization.principal);
+
+  const authorizedEvents = await getDatabaseClient().event.findMany({
+    where: { id: { in: [...authorizedEventIds] }, archivedAt: null },
     orderBy: [{ startsAt: "asc" }, { name: "asc" }],
   });
+
+  // An invited event-only organizer reaches an event whose organization they are not a member of,
+  // so the active-organization filter applies only to organizations they can actually switch between.
+  const activeOrganizationId = authorization.activeOrganization?.id;
+  const memberOrganizationIds = new Set(authorization.organizations.map(({ id }) => id));
+  const events = activeOrganizationId
+    ? authorizedEvents.filter(
+        (event) => event.orgId === activeOrganizationId || !memberOrganizationIds.has(event.orgId),
+      )
+    : authorizedEvents;
 
   return {
     user: {
