@@ -281,3 +281,31 @@ export async function signInAsAdmin(page: Page, email = adminEmail): Promise<voi
     throw error;
   }
 }
+
+export async function signUpOrganization(page: Page, email: string, organizationName: string): Promise<void> {
+  const requestUrl = magicLinkRequestUrl(randomUUID());
+  const registration = await fetch(requestUrl, { method: "POST" });
+  if (!registration.ok) throw new Error(`Could not register an organization-signup request (${registration.status}).`);
+
+  const deliveryPromise = fetch(requestUrl);
+  deliveryPromise.catch(() => undefined);
+
+  try {
+    await page.goto("/auth/v1/register");
+    await page.getByRole("textbox", { name: "Organization name" }).fill(organizationName);
+    await page.getByRole("textbox", { name: "Email address" }).fill(email);
+    await page.getByRole("button", { name: "Email me a signup link" }).click();
+    await page.getByText("Check your inbox").waitFor();
+
+    const delivery = await deliveryPromise;
+    if (!delivery.ok) {
+      const detail = await delivery.text().catch(() => "");
+      throw new Error(`Could not receive the organization signup link (${delivery.status}). ${detail}`.trim());
+    }
+    const { url } = (await delivery.json()) as { url: string };
+    await page.goto(url);
+  } catch (error) {
+    await fetch(requestUrl, { method: "DELETE" }).catch(() => undefined);
+    throw error;
+  }
+}

@@ -36,6 +36,8 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
         user={shell.user}
         events={shell.events}
         activeEvent={shell.activeEvent}
+        organizations={shell.organizations}
+        activeOrganization={shell.activeOrganization}
       />
       <SidebarInset
         className={cn(

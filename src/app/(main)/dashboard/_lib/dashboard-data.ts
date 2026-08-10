@@ -8,7 +8,12 @@ import { redirect } from "next/navigation";
 import { getRequestAuthorization } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database/client";
 
-import { ACTIVE_EVENT_COOKIE, type DashboardEvent, resolveActiveEvent } from "./dashboard-shell";
+import {
+  ACTIVE_EVENT_COOKIE,
+  type DashboardEvent,
+  type DashboardOrganization,
+  resolveActiveEvent,
+} from "./dashboard-shell";
 
 export interface DashboardShellData {
   readonly user: {
@@ -19,6 +24,8 @@ export interface DashboardShellData {
   };
   readonly events: readonly DashboardEvent[];
   readonly activeEvent: DashboardEvent | null;
+  readonly organizations: readonly DashboardOrganization[];
+  readonly activeOrganization: DashboardOrganization | null;
 }
 
 export const getDashboardShellData = cache(async (): Promise<DashboardShellData> => {
@@ -42,5 +49,7 @@ export const getDashboardShellData = cache(async (): Promise<DashboardShellData>
     },
     events,
     activeEvent: resolveActiveEvent(events, cookieStore.get(ACTIVE_EVENT_COOKIE)?.value),
+    organizations: authorization.organizations,
+    activeOrganization: authorization.activeOrganization,
   };
 });

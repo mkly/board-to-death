@@ -1,14 +1,16 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { CalendarDays } from "lucide-react";
 
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 
 import { getDashboardShellData } from "./_lib/dashboard-data";
 
 export default async function Page() {
-  const { activeEvent } = await getDashboardShellData();
+  const { activeEvent, activeOrganization } = await getDashboardShellData();
 
   if (activeEvent) {
     redirect(dashboardEventHref(activeEvent.slug));
@@ -20,12 +22,20 @@ export default async function Page() {
         <EmptyMedia variant="icon">
           <CalendarDays />
         </EmptyMedia>
-        <EmptyTitle>No events available</EmptyTitle>
+        <EmptyTitle>No events yet</EmptyTitle>
         <EmptyDescription>
-          Your administrator account does not have an event workspace yet. Ask an owner to create or grant access to an
-          event.
+          {activeOrganization
+            ? `Create the first event for ${activeOrganization.name} to start building its workspace.`
+            : "Your administrator account does not have an event workspace yet."}
         </EmptyDescription>
       </EmptyHeader>
+      {activeOrganization && (
+        <EmptyContent>
+          <Button asChild>
+            <Link href="/dashboard/event-settings">Create your first event</Link>
+          </Button>
+        </EmptyContent>
+      )}
     </Empty>
   );
 }

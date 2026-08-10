@@ -1,5 +1,10 @@
 export const ACTIVE_EVENT_COOKIE = "board_to_death_active_event";
 
+export interface DashboardOrganization {
+  readonly id: string;
+  readonly name: string;
+}
+
 export interface DashboardEvent {
   readonly id: string;
   readonly name: string;

@@ -19,10 +19,11 @@ import { cn } from "@/lib/utils";
 import { dashboardEventHref, getSidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 
-import type { DashboardEvent } from "../../_lib/dashboard-shell";
+import type { DashboardEvent, DashboardOrganization } from "../../_lib/dashboard-shell";
 import { EventSwitcher } from "./event-switcher";
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
+import { OrganizationSwitcher } from "./organization-switcher";
 import { SupportCard } from "./support-card";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -33,9 +34,18 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   };
   readonly events: readonly DashboardEvent[];
   readonly activeEvent: DashboardEvent | null;
+  readonly organizations: readonly DashboardOrganization[];
+  readonly activeOrganization: DashboardOrganization | null;
 }
 
-export function AppSidebar({ user, events, activeEvent, ...props }: AppSidebarProps) {
+export function AppSidebar({
+  user,
+  events,
+  activeEvent,
+  organizations,
+  activeOrganization,
+  ...props
+}: AppSidebarProps) {
   const { sidebarVariant, sidebarCollapsible, isSynced } = usePreferencesStore(
     useShallow((s) => ({
       sidebarVariant: s.values.sidebar_variant,
@@ -67,6 +77,7 @@ export function AppSidebar({ user, events, activeEvent, ...props }: AppSidebarPr
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <OrganizationSwitcher organizations={organizations} activeOrganization={activeOrganization} />
         <EventSwitcher events={events} activeEvent={activeEvent} />
       </SidebarHeader>
       <SidebarContent className="py-2">
