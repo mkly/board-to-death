@@ -611,7 +611,8 @@ export function SessionWorkspace({
                 />
               ) : null}
             </>
-          ) : (
+          ) : null}
+          {!creating && !selectedSession && filteredSessions.length > 0 ? (
             <Empty className="min-h-80 border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -623,7 +624,7 @@ export function SessionWorkspace({
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
-          )}
+          ) : null}
 
           {selectedSession && !selectedSession.archived ? (
             <div className="flex items-center justify-between gap-3 rounded-lg border p-3">

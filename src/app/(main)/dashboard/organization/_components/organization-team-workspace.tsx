@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -169,7 +169,6 @@ export function OrganizationTeamWorkspace({
                     <NativeSelectOption value={OrganizationMemberRole.MEMBER}>Member</NativeSelectOption>
                     <NativeSelectOption value={OrganizationMemberRole.OWNER}>Owner</NativeSelectOption>
                   </NativeSelect>
-                  <FieldDescription>Owners can manage organization access.</FieldDescription>
                 </Field>
                 <Button type="submit">
                   <MailPlus data-icon="inline-start" />

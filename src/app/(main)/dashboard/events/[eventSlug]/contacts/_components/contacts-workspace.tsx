@@ -505,21 +505,23 @@ function DirectoryFilters({
           </div>
         </FieldGroup>
       </form>
-      <section aria-labelledby="active-directory-filters" className="flex flex-wrap items-center gap-2">
+      <section aria-labelledby="active-directory-filters" className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="sr-only" id="active-directory-filters">
           Active directory filters
         </h3>
-        {activeLabels.length > 0 ? (
-          activeLabels.map((label) => (
-            <Badge key={label} variant="outline">
-              {label}
-            </Badge>
-          ))
-        ) : (
-          <p className="text-muted-foreground text-sm">No filters applied.</p>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {activeLabels.length > 0 ? (
+            activeLabels.map((label) => (
+              <Badge key={label} variant="outline">
+                {label}
+              </Badge>
+            ))
+          ) : (
+            <p className="text-muted-foreground text-sm">No filters applied.</p>
+          )}
+        </div>
+        <SaveSegmentDialog disabled={!hasActiveFilters} eventSlug={event.slug} filters={filters} />
       </section>
-      <SaveSegmentDialog disabled={!hasActiveFilters} eventSlug={event.slug} filters={filters} />
     </div>
   );
 }

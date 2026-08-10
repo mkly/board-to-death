@@ -328,39 +328,43 @@ export function GroupWorkspace({
           <CardDescription>Filter and sort groups by their configured tier.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <form className="flex flex-wrap items-end gap-3" method="get">
-            <Field>
-              <FieldLabel htmlFor="group-kind-filter">Kind</FieldLabel>
-              <NativeSelect defaultValue={filters.kind ?? "all"} id="group-kind-filter" name="kind">
-                <NativeSelectOption value="all">All kinds</NativeSelectOption>
-                <NativeSelectOption value="SPONSOR">Sponsors</NativeSelectOption>
-                <NativeSelectOption value="EXHIBITOR">Exhibitors</NativeSelectOption>
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="group-tier-filter">Tier</FieldLabel>
-              <NativeSelect defaultValue={filters.tierId ?? "all"} id="group-tier-filter" name="tier">
-                <NativeSelectOption value="all">All tiers</NativeSelectOption>
-                {tiers.map((tier) => (
-                  <NativeSelectOption key={tier.id} value={tier.id}>
-                    {KIND_LABELS[tier.kind]} · {tier.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="group-sort">Sort</FieldLabel>
-              <NativeSelect defaultValue={filters.sortBy} id="group-sort" name="sort">
-                <NativeSelectOption value="name">Name</NativeSelectOption>
-                <NativeSelectOption value="tier">Tier order</NativeSelectOption>
-              </NativeSelect>
-            </Field>
-            <Button type="submit" variant="outline">
-              Apply
-            </Button>
-            <Button asChild type="button" variant="ghost">
-              <Link href={`/dashboard/events/${encodeURIComponent(event.slug)}/groups`}>Clear</Link>
-            </Button>
+          <form className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
+            <div className="grid flex-1 gap-3 sm:grid-cols-3">
+              <Field>
+                <FieldLabel htmlFor="group-kind-filter">Kind</FieldLabel>
+                <NativeSelect defaultValue={filters.kind ?? "all"} id="group-kind-filter" name="kind">
+                  <NativeSelectOption value="all">All kinds</NativeSelectOption>
+                  <NativeSelectOption value="SPONSOR">Sponsors</NativeSelectOption>
+                  <NativeSelectOption value="EXHIBITOR">Exhibitors</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="group-tier-filter">Tier</FieldLabel>
+                <NativeSelect defaultValue={filters.tierId ?? "all"} id="group-tier-filter" name="tier">
+                  <NativeSelectOption value="all">All tiers</NativeSelectOption>
+                  {tiers.map((tier) => (
+                    <NativeSelectOption key={tier.id} value={tier.id}>
+                      {KIND_LABELS[tier.kind]} · {tier.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="group-sort">Sort</FieldLabel>
+                <NativeSelect defaultValue={filters.sortBy} id="group-sort" name="sort">
+                  <NativeSelectOption value="name">Name</NativeSelectOption>
+                  <NativeSelectOption value="tier">Tier order</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" variant="outline">
+                Apply
+              </Button>
+              <Button asChild type="button" variant="ghost">
+                <Link href={`/dashboard/events/${encodeURIComponent(event.slug)}/groups`}>Clear</Link>
+              </Button>
+            </div>
           </form>
 
           {groups.length === 0 ? (

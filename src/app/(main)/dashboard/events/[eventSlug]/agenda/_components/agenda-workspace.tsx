@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 
+import Link from "next/link";
+
 import { CalendarPlus, Save, Trash2, TriangleAlert } from "lucide-react";
 
 import { DateTimePicker } from "@/components/date-time-picker";
@@ -392,10 +394,19 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
       </header>
 
       {rooms.length === 0 ? (
-        <Alert variant="destructive">
-          <TriangleAlert />
-          <AlertTitle>Add an event room before scheduling</AlertTitle>
-          <AlertDescription>Agenda placements require an event-owned room.</AlertDescription>
+        <Alert>
+          <CalendarPlus />
+          <AlertTitle>Add an event room to start scheduling</AlertTitle>
+          <AlertDescription>
+            Agenda placements need an event-owned room.{" "}
+            <Link
+              className="font-medium text-foreground underline underline-offset-4"
+              href={`/dashboard/events/${encodeURIComponent(event.slug)}/settings`}
+            >
+              Add one in event settings
+            </Link>
+            .
+          </AlertDescription>
         </Alert>
       ) : null}
 

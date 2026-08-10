@@ -2,7 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -84,7 +84,6 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
                   <NativeSelectOption value={EventMembershipRole.REVIEWER}>Reviewer</NativeSelectOption>
                   <NativeSelectOption value={EventMembershipRole.ORGANIZER_ADMIN}>Organizer staff</NativeSelectOption>
                 </NativeSelect>
-                <FieldDescription>Event access only.</FieldDescription>
               </Field>
               <Button type="submit">Send invitation</Button>
             </FieldGroup>

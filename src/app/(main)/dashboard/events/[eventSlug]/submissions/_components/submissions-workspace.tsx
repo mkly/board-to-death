@@ -153,13 +153,11 @@ function MetricCard({
   value,
   description,
   icon: Icon,
-  tone = "primary",
 }: {
   readonly label: string;
   readonly value: number;
   readonly description: string;
   readonly icon: LucideIcon;
-  readonly tone?: "primary" | "secondary";
 }) {
   return (
     <Card className="min-h-40 shadow-sm">
@@ -167,22 +165,8 @@ function MetricCard({
         <CardDescription className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
           {label}
         </CardDescription>
-        <CardTitle
-          className={cn(
-            "font-extrabold text-3xl tabular-nums tracking-tight",
-            tone === "secondary" ? "text-secondary" : "text-primary",
-          )}
-        >
-          {value}
-        </CardTitle>
-        <CardAction
-          className={cn(
-            "flex size-10 items-center justify-center rounded-lg ring-1",
-            tone === "secondary"
-              ? "bg-secondary/10 text-secondary ring-secondary/25"
-              : "bg-primary/10 text-primary ring-primary/20",
-          )}
-        >
+        <CardTitle className="font-extrabold text-3xl text-foreground tabular-nums tracking-tight">{value}</CardTitle>
+        <CardAction className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
           <Icon className="size-4.5" aria-hidden="true" />
         </CardAction>
       </CardHeader>
@@ -616,7 +600,6 @@ export function SubmissionsWorkspace({
           value={result.metrics.SUBMITTED}
           description="Submitted and not yet started"
           icon={Clock3Icon}
-          tone="secondary"
         />
         <MetricCard
           label="In review"
@@ -629,7 +612,6 @@ export function SubmissionsWorkspace({
           value={decided}
           description="Waitlisted, accepted, rejected, or confirmed"
           icon={CircleCheckIcon}
-          tone="secondary"
         />
       </section>
       <nav aria-label="Submission status" className="flex flex-wrap gap-2">
