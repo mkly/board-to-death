@@ -2,6 +2,11 @@
 
 import { type FormEvent, startTransition, useActionState, useEffect, useMemo, useState } from "react";
 
+import {
+  type CustomFieldInputDefinition,
+  CustomFieldInputs,
+  type CustomFieldInputValue,
+} from "@/components/custom-fields/custom-field-inputs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +39,8 @@ interface PublicCfpFormProps {
   readonly formVersionChanged?: boolean;
   readonly initialAnswers?: Readonly<Record<string, unknown>>;
   readonly initialParticipants?: readonly Record<string, string>[];
+  readonly customFieldDefinitions: readonly CustomFieldInputDefinition[];
+  readonly initialCustomFieldValues?: readonly CustomFieldInputValue[];
 }
 
 type ClientAnswer = boolean | string | readonly string[];
@@ -71,6 +78,8 @@ export function PublicCfpForm({
   formVersionChanged,
   initialAnswers,
   initialParticipants,
+  customFieldDefinitions,
+  initialCustomFieldValues,
 }: PublicCfpFormProps) {
   const action = submitPublicCfpForm.bind(null, publicId);
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
@@ -293,6 +302,23 @@ export function PublicCfpForm({
           </Card>
         );
       })}
+
+      {customFieldDefinitions.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Additional information</CardTitle>
+            <CardDescription>Event-specific details requested by the organizers.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CustomFieldInputs
+              definitions={customFieldDefinitions}
+              errors={state.errors}
+              idPrefix="cfp-"
+              values={initialCustomFieldValues}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {definition.consentRequired ? (
         <Card size="sm">

@@ -217,6 +217,18 @@ test("shows the populated speaker portal and keeps another speaker's submission 
   await expect(page.getByRole("heading", { name: "My submissions" })).toBeVisible();
   await page.goto(`/portal/${fixture.eventSlug}/submissions/${fixture.ownSubmissionId}`);
   await expect(page.getByRole("heading", { name: "Board to Death 2027 call for proposals" })).toBeVisible();
+  await expect(page.getByLabel("Room setup notes")).toHaveValue("Six tables in a circle");
+  await page.getByLabel("Room setup notes").fill("Eight tables with accessible aisles");
+  await page.getByRole("button", { name: "Save additional information" }).click();
+  await expect(page.getByText("Additional information updated.")).toBeVisible();
+  const savedCustomField = await database.query<{ value: string }>(
+    `SELECT v."value" #>> '{}' AS "value"
+     FROM "custom_field_values" v
+     JOIN "custom_field_definitions" d ON d."id" = v."definitionId"
+     WHERE v."submissionId" = $1 AND d."key" = 'room_setup'`,
+    [fixture.ownSubmissionId],
+  );
+  expect(savedCustomField.rows).toEqual([{ value: "Eight tables with accessible aisles" }]);
 
   const denied = await page.goto(`/portal/${fixture.eventSlug}/submissions/${fixture.outsiderSubmissionId}`);
   expect(denied?.status()).toBe(404);
