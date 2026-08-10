@@ -106,7 +106,9 @@ describe("SubmissionsWorkspace", () => {
       "/dashboard/events/board-to-death-2027/submissions/submission-1",
     );
     expect(screen.getByText("Lex")).toBeTruthy();
-    expect(screen.getAllByText("Casey Reviewer")).toHaveLength(2);
+    // The assignee name renders three times: the row cell, the Radix select trigger label, and the
+    // hidden native select option Radix keeps for form submission.
+    expect(screen.getAllByText("Casey Reviewer")).toHaveLength(3);
     const previous = screen.getByRole("link", { name: "Go to previous page" });
     expect(previous.getAttribute("href")).toContain("q=lex");
     expect(previous.getAttribute("href")).toContain("status=UNDER_REVIEW");
