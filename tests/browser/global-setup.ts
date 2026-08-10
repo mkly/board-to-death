@@ -2,6 +2,7 @@ import type { FullConfig } from "@playwright/test";
 import { Client } from "pg";
 
 import { adminEmail, startMagicLinkWebhook, stopMagicLinkWebhook } from "./fixtures/magic-link-webhook";
+import { grantSeededOrganizationAccess } from "./fixtures/organization-access";
 import { randomUUID } from "node:crypto";
 
 const databaseUrl =
@@ -30,6 +31,7 @@ async function ensureAdminUser(): Promise<void> {
   } finally {
     await database.end();
   }
+  await grantSeededOrganizationAccess(adminEmail);
 }
 
 /**

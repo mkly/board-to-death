@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { grantSeededOrganizationAccess } from "./organization-access";
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
@@ -276,6 +277,9 @@ export async function signInAsAdmin(page: Page, email = adminEmail): Promise<voi
     }
     const { url } = (await delivery.json()) as { url: string };
     await page.goto(url);
+    // Better Auth creates the account on first sign-in, and a fixture may have deleted the
+    // one global setup seeded, so re-grant the organizer membership the dashboard reads.
+    await grantSeededOrganizationAccess(email);
   } catch (error) {
     await fetch(requestUrl, { method: "DELETE" }).catch(() => undefined);
     throw error;

@@ -64,6 +64,7 @@ async function createAdministratorSession(): Promise<string> {
 }
 
 async function setup() {
+  await database.integrationSyncRecord.deleteMany();
   await database.event.deleteMany();
   await database.verification.deleteMany();
   await database.account.deleteMany();

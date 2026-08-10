@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../../../src/generated/prisma/client.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
+import { grantSeededOrganizationAccess } from "./organization-access.ts";
 
 const baseURL = process.env.BASE_URL ?? "http://127.0.0.1:3100";
 const databaseUrl = process.env.DATABASE_URL;
@@ -9,6 +10,7 @@ if (!databaseUrl?.includes("_test")) throw new Error("The groups fixture require
 const database = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const adminEmail = "admin@example.test";
 
+await database.integrationSyncRecord.deleteMany();
 await database.event.deleteMany();
 await database.verification.deleteMany();
 await database.account.deleteMany();
@@ -120,6 +122,7 @@ if (deliveredLink === "") throw new Error("Expected the groups fixture to receiv
 const verified = await browserAuth.handler(new Request(deliveredLink, { redirect: "manual" }));
 const sessionCookie = verified.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
 if (!sessionCookie) throw new Error("Expected Better Auth to issue a browser session cookie.");
+await grantSeededOrganizationAccess(adminEmail);
 
 process.stdout.write(JSON.stringify({ eventSlug: event.slug, sessionCookie }));
 await database.$disconnect();
