@@ -33,6 +33,19 @@ const SIGN_IN_WORDING: MagicLinkWording = {
   htmlExpiry: "This link expires in 10 minutes.",
 };
 
+async function deliverWithObservability(provider: "resend" | "webhook", email: string, deliver: () => Promise<void>) {
+  try {
+    await deliver();
+  } catch (error) {
+    console.error("[auth] Magic-link delivery failed", {
+      provider,
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 function emailContent(url: string, wording: MagicLinkWording) {
   const escapedUrl = url.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 
@@ -54,22 +67,24 @@ export function createConfiguredMagicLinkSender({
     const content = emailContent(url, wording);
 
     if (resendApiKey && resendFromEmail) {
-      const response = await fetch(RESEND_EMAILS_URL, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${resendApiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `Board to Death <${resendFromEmail}>`,
-          to: [email],
-          ...content,
-        }),
-      });
+      await deliverWithObservability("resend", email, async () => {
+        const response = await fetch(RESEND_EMAILS_URL, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${resendApiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            from: `Board to Death <${resendFromEmail}>`,
+            to: [email],
+            ...content,
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Resend rejected magic-link delivery with status ${response.status}`);
-      }
+        if (!response.ok) {
+          throw new Error(`Resend rejected magic-link delivery with status ${response.status}`);
+        }
+      });
       return;
     }
 
@@ -78,20 +93,22 @@ export function createConfiguredMagicLinkSender({
       return;
     }
 
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(webhookToken ? { authorization: `Bearer ${webhookToken}` } : {}),
-      },
-      body: JSON.stringify({
-        to: email,
-        ...content,
-      }),
-    });
+    await deliverWithObservability("webhook", email, async () => {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(webhookToken ? { authorization: `Bearer ${webhookToken}` } : {}),
+        },
+        body: JSON.stringify({
+          to: email,
+          ...content,
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Magic-link webhook rejected delivery with status ${response.status}`);
-    }
+      if (!response.ok) {
+        throw new Error(`Magic-link webhook rejected delivery with status ${response.status}`);
+      }
+    });
   };
 }

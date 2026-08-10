@@ -30,7 +30,7 @@ export default async function LoginV1({ searchParams }: LoginV1Props) {
           <div className="space-y-4 text-center">
             <div className="font-medium tracking-tight">Login</div>
             <div className="mx-auto max-w-xl text-muted-foreground">
-              Enter your authorized email address and we&apos;ll send you a secure, single-use sign-in link.
+              Enter your account email address and we&apos;ll send you a secure, single-use sign-in link.
             </div>
           </div>
           <div className="space-y-4">
