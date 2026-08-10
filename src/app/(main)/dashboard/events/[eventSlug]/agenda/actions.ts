@@ -9,9 +9,12 @@ import { z } from "zod";
 import { AgendaConflictError, type AgendaConflictPolicy, AgendaPlacementRepository } from "@/server/agenda";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { AuthorizationError } from "@/server/authorization/policy";
+import { getRequestPrincipal } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database/client";
 import { emitWebhookEvent } from "@/server/developer-api/webhooks";
 import { RepositoryError } from "@/server/events/repositories";
+import { PublishedProgramOperations, PublishedProgramRepository } from "@/server/published-program";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
 
 export interface AgendaConflictState {
@@ -232,6 +235,65 @@ export async function removeAgendaPlacement(
     return { status: "success", message: "Session removed from the agenda." };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: repositoryMessage(error) };
+    throw error;
+  }
+}
+
+export interface ProgramPublicationMutationState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+const publicationSchema = z.object({
+  eventSlug: z.string().trim().min(1),
+  intent: z.enum(["publish", "republish", "unpublish"]),
+  expectedVersion: z.coerce.number().int().min(0),
+});
+
+export async function mutateProgramPublication(
+  _previousState: ProgramPublicationMutationState,
+  formData: FormData,
+): Promise<ProgramPublicationMutationState> {
+  const parsed = publicationSchema.safeParse({
+    eventSlug: stringValue(formData, "eventSlug"),
+    intent: stringValue(formData, "intent"),
+    expectedVersion: stringValue(formData, "expectedVersion"),
+  });
+  if (!parsed.success) return { status: "error", message: "Reload this agenda and try again." };
+
+  const event = await getDatabaseClient().event.findUnique({
+    where: { slug: parsed.data.eventSlug },
+    select: { id: true, slug: true },
+  });
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  const operations = new PublishedProgramOperations(
+    new PublishedProgramRepository(getDatabaseClient()),
+    getRequestPrincipal,
+  );
+  try {
+    const { intent, expectedVersion } = parsed.data;
+    let published: Awaited<ReturnType<typeof operations.publish>>;
+    if (intent === "publish") published = await operations.publish(event.id, expectedVersion);
+    else if (intent === "republish") published = await operations.republish(event.id, expectedVersion);
+    else published = await operations.unpublish(event.id, expectedVersion);
+    revalidatePath(`/dashboard/events/${event.slug}/agenda`);
+    revalidatePath(`/dashboard/events/${event.slug}/integrations`);
+    return {
+      status: "success",
+      message:
+        intent === "unpublish"
+          ? `Program version ${published.versionNumber} unpublished. Public program views are offline.`
+          : `Program version ${published.versionNumber} published.`,
+    };
+  } catch (error) {
+    if (error instanceof AuthorizationError) return { status: "error", message: "This event is not available." };
+    if (error instanceof RepositoryError) {
+      if (error.code === "conflict") {
+        return { status: "error", message: "The published program changed. Reload this agenda and try again." };
+      }
+      return { status: "error", message: error.message };
+    }
     throw error;
   }
 }

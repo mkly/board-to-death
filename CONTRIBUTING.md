@@ -1,110 +1,74 @@
-# Contributing to Studio Admin
+# Contributing to Board to Death
 
-Thanks for showing interest in improving **Studio Admin** (repo: `next-shadcn-admin-dashboard`).  
-This guide will help you set up your environment and understand how to contribute.
-
----
-
-## Overview
-
-This project is built with **Next.js 16**, **TypeScript**, **Tailwind CSS v4**, and **Shadcn UI**.  
-The goal is to keep the codebase modular, scalable, and easy to extend.
+Board to Death is an event-program management application: CFP intake, review, scheduling, program
+publication, public embeds and APIs, and an Accelevents integration. It is built with **Next.js 16**,
+**React 19**, **TypeScript**, **Tailwind CSS v4**, **shadcn/ui**, and a **Prisma/PostgreSQL**
+persistence layer. This guide covers environment setup and the contribution workflow.
 
 ---
 
 ## Project Layout
 
-We use a **colocation-based file system**. Each feature keeps its own pages, components, and logic.
+Feature code is co-located with the route that owns it.
 
 ```
 src
 ├── app               # Next.js routes (App Router)
-│   ├── (auth)        # Auth layouts & screens
-│   ├── (main)        # Main dashboard routes
-│   │   └── (dashboard)
-│   │       ├── crm
-│   │       ├── finance
-│   │       ├── default
-│   │       └── ...
-│   └── layout.tsx
-├── components        # Shared UI components
+│   ├── (main)        # Dashboard and auth routes
+│   │   └── dashboard/events/[eventSlug]/   # Event screens (agenda, integrations, ...)
+│   └── (external)    # Public pages, embeds, CFP, portals
+├── components        # Shared UI components (src/components/ui is vendored shadcn)
 ├── hooks             # Reusable hooks
 ├── lib               # Config & utilities
-├── styles            # Tailwind / theme setup
-└── types             # TypeScript definitions
+├── server            # Repositories, operations, auth, integrations
+├── navigation        # Sidebar configuration
+└── styles            # Tailwind / theme setup
 ```
 
-If you’d like a more detailed example of this setup, check out the [Next Colocation Template](https://github.com/arhamkhnz/next-colocation-template), where the full structure is explained with examples.
+See `CLAUDE.md` for the full co-location conventions.
 
 ---
 
 ## Getting Started
 
-### Fork and Clone the Repository
+```bash
+nvm use                # Node 24.19.0 with bundled npm 11.17.0 (see .nvmrc)
+cp .env.example .env   # DATABASE_URL and TEST_DATABASE_URL; .env is gitignored
+npm install
+npm run dev
+```
 
-1. Fork the Repository
-   
-   Click [here](https://github.com/arhamkhnz/next-shadcn-admin-dashboard/fork) to fork the repository.
-
-2. Clone the Repository  
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/next-shadcn-admin-dashboard.git
-   ```
-   
-3. Navigate into the Project  
-   ```bash
-   cd next-shadcn-admin-dashboard
-   ```
-
-4. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-5. **Run the dev server**
-   ```bash
-   npm run dev
-   ```
-   App will be available at [http://localhost:3000](http://localhost:3000).
+The app will be available at [http://localhost:3000](http://localhost:3000). Database-backed work
+needs a local PostgreSQL matching `.env.example`; apply migrations with `npx prisma migrate deploy`.
 
 ---
 
 ## Contribution Flow
 
-- Always create a new branch before working on changes:
+- Create a new branch before working on changes:
   ```bash
   git checkout -b feature/my-update
   ```
-
-- Use clear commit messages:
+- Use clear commit messages with conventional prefixes:
   ```bash
-  git commit -m "feat: add finance dashboard screen"
+  git commit -m "feat: add program publication card"
   ```
-
 - Open a Pull Request once ready.
-- If your change adds a new UI screen or component, include a screenshot in your PR description.
-
----
-
-## Where to Contribute
-
-- **External Pages**: Landing pages or other non-dashboard routes → `src/app/(external)/`  
-- **Auth Screens**: Login, register, and authentication layouts → `src/app/(main)/auth/`  
-- **Dashboard Screens**: Feature dashboards like CRM, Finance, Analytics → `src/app/(main)/dashboard/`
-- **Components**: Reusable UI goes in `src/components/`  
-- **Hooks**: Custom logic goes in `src/hooks/`  
-- **Themes**: New presets under `src/styles/presets/`  
+- If your change adds a new UI screen or a material visual change, include a screenshot in your PR
+  description (mobile and dark-theme states when relevant).
 
 ---
 
 ## Guidelines
 
-- Prefer **TypeScript types** over `any`
-- Husky pre-commit hooks are enabled - linting and formatting run automatically when you commit, and if there are errors the commit will be blocked until they are fixed. 
-- Follow **Shadcn UI** style & Tailwind v4 conventions
-- Keep accessibility in mind (ARIA, keyboard nav)
-- Use clear commit messages with conventional prefixes (`feat:`, `fix:`, `chore:`, etc.)
-- Avoid unnecessary dependencies — prefer existing utilities where possible
+- Prefer **TypeScript types** over `any`; strict mode is enabled.
+- Biome is the only formatter and linter; run `npm run check:fix` after editing. Husky pre-commit
+  hooks apply it to staged files, so a commit can change files after you stage them.
+- Follow **shadcn/ui** style and Tailwind v4 conventions; do not modify `src/components/ui/` or
+  `src/components/calendar/`.
+- Keep accessibility in mind (semantic HTML, ARIA, keyboard navigation).
+- Avoid unnecessary dependencies — prefer existing utilities, and follow the lockfile rules in
+  `CLAUDE.md` when a dependency change is warranted.
 
 ## Quality and release gate
 
@@ -164,18 +128,7 @@ rebuilding or changing aliases, run `./scripts/smoke-incus-image.sh <image-alias
 
 ## Submitting PRs
 
-- Open a Pull Request once your changes are ready.  
-- Ensure your branch is up to date with `main` before submitting.  
-- Reference any related issue in your PR for context.
-
----
-
-## Questions & Support
-
-- Report bugs, suggestions, or issues via [GitHub Issues](https://github.com/arhamkhnz/next-shadcn-admin-dashboard/issues)
-
----
-
-Your contributions keep this project growing. 🚀
-
-**Happy Vibe Coding!**
+- Open a Pull Request once your changes are ready.
+- Ensure your branch is up to date with `main` before submitting.
+- Reference any related issue in your PR for context, and explain any new reusable patterns or
+  dependencies in the description.

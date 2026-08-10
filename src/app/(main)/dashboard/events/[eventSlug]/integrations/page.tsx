@@ -6,6 +6,7 @@ import { loadAcceleventsSyncHistory, loadSessionPreview, SpeakerMappingRepositor
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 import { DeveloperAccessWorkspace } from "./_components/developer-access-workspace";
+import { ProgramPushCard } from "./_components/program-push-card";
 import { SessionMappingPreview } from "./_components/session-mapping-preview";
 import { SpeakerMappingWorkspace } from "./_components/speaker-mapping-workspace";
 import { SyncStatusWorkspace } from "./_components/sync-status-workspace";
@@ -91,6 +92,11 @@ export default async function IntegrationsPage({ params, searchParams }: Integra
         mappingVersion={sessions.mappingVersion}
         publishedVersion={sessions.publishedVersion}
         preview={sessions.preview}
+      />
+      <ProgramPushCard
+        eventSlug={event.slug}
+        connected={Boolean(sessions.configuration)}
+        publishedVersion={sessions.publishedVersion}
       />
       <SyncStatusWorkspace event={{ name: event.name, slug: event.slug }} runs={syncRuns} />
     </div>

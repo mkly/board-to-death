@@ -142,7 +142,9 @@ instant.
 
 ### 7. Publish the program and embeds
 
-Publish from the agenda workspace after the schedule and speaker consent are ready. Publication creates an immutable
+Publish from the **Program publication** card on the agenda workspace after the schedule and speaker consent are
+ready. The card shows the latest version and state, and offers **Publish program**, **Republish program**, and
+**Unpublish** actions. Publication creates an immutable
 snapshot of the event, rooms, tracks, consented speaker profiles, scheduled sessions, and placements. Later admin edits
 do not alter the public view until an organizer republishes. Unpublish to take all public program views offline while
 retaining version history.
@@ -187,7 +189,9 @@ Session mapping reads the latest published program snapshot. Map title, descript
 references, then inspect the session preview or download its CSV. Publish or republish the program when the preview
 reports that no snapshot exists.
 
-Start a push after the preview has no unexplained invalid records. The sync log records run and per-record status,
+Start a push from the **Push program to Accelevents** card after the preview has no unexplained invalid records. The
+card requires a connected configuration and a published program; confirm the review checkbox, then **Push program**
+sends the published speakers and sessions in one idempotent run. The sync log records run and per-record status,
 remote IDs, explanations, attempts, and retry eligibility. A run can finish as `Succeeded`, `Partially failed`,
 `Failed`, or `Cancelled`. Cancel a pending or running batch to stop records that have not started. Retry only the rows
 marked eligible and wait until their retry window opens.

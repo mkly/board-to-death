@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { type AgendaConflict, AgendaPlacementRepository, validateAgendaConflicts } from "@/server/agenda";
 import { getDatabaseClient } from "@/server/database/client";
+import { PublishedProgramRepository } from "@/server/published-program";
 import { ProgramSessionRepository } from "@/server/sessions/repositories";
 import { SpeakerRepository } from "@/server/speakers/repositories";
 
@@ -13,6 +14,7 @@ import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 import { AgendaConflictWorkspace } from "./_components/agenda-conflict-workspace";
 import { AgendaWorkspace, type AgendaWorkspaceSession } from "./_components/agenda-workspace";
+import { ProgramPublicationCard } from "./_components/program-publication-card";
 
 interface AgendaPageProps {
   readonly params: Promise<{ eventSlug: string }>;
@@ -62,12 +64,13 @@ export default async function AgendaPage({ params }: AgendaPageProps) {
   // costs the same at ten sessions and at ten thousand. The caps sit above the
   // benchmarked profile in performance/budgets.json; past them the page says so
   // instead of silently dropping rows.
-  const [sessionPage, placementPage, rooms, tracks, speakerPage] = await Promise.all([
+  const [sessionPage, placementPage, rooms, tracks, speakerPage, latestPublication] = await Promise.all([
     new ProgramSessionRepository(client).listPage(event.id),
     new AgendaPlacementRepository(client).listPage(event.id),
     client.room.findMany({ where: { eventId: event.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     client.track.findMany({ where: { eventId: event.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     new SpeakerRepository(client).listPage(event.id),
+    new PublishedProgramRepository(client).latest(event.id),
   ]);
   const sessions = sessionPage.items;
   const placements = placementPage.items;
@@ -158,6 +161,19 @@ export default async function AgendaPage({ params }: AgendaPageProps) {
         rooms={rooms.map((room) => ({ id: room.id, name: room.name }))}
         tracks={tracks.map((track) => ({ id: track.id, name: track.name }))}
         sessions={agendaSessions}
+      />
+      <Separator />
+      <ProgramPublicationCard
+        eventSlug={event.slug}
+        publication={
+          latestPublication
+            ? {
+                versionNumber: latestPublication.versionNumber,
+                state: latestPublication.state,
+                createdAtLabel: timeFormatter.format(latestPublication.createdAt),
+              }
+            : null
+        }
       />
       <Separator />
       <AgendaConflictWorkspace

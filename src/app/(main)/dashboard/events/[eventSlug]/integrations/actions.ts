@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { IntegrationRemoteRecordStatus } from "@/generated/prisma/client";
+import { IntegrationProvider, IntegrationRemoteRecordStatus } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
@@ -24,6 +24,7 @@ import {
 } from "@/server/developer-api/webhooks";
 import { RepositoryError } from "@/server/events/repositories";
 import {
+  AcceleventsProgramPushService,
   AcceleventsSessionMappingRepository,
   AcceleventsSessionPushService,
   AcceleventsSpeakerPushService,
@@ -236,6 +237,74 @@ export async function requestSyncRunCancellation(
     if (!requested) return { status: "error", message: "This Accelevents sync run is no longer active." };
     revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
     return { status: "success", message: "Cancellation requested." };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+export async function pushAcceleventsProgram(
+  _previousState: SyncRunMutationState,
+  formData: FormData,
+): Promise<SyncRunMutationState> {
+  const eventSlug = value(formData, "eventSlug");
+  if (!eventSlug) return { status: "error", message: "This event is not available." };
+  if (value(formData, "confirmed") !== "true") {
+    return { status: "error", message: "Confirm the push before sending the program to Accelevents." };
+  }
+
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+
+  const client = getDatabaseClient();
+  const configuration = await client.integrationConfiguration.findFirst({
+    where: { eventId: event.id, provider: IntegrationProvider.ACCELEVENTS },
+    select: {
+      versions: { orderBy: { versionNumber: "desc" }, take: 1, select: { remoteEventId: true } },
+      remoteRecords: {
+        where: { status: IntegrationRemoteRecordStatus.ACTIVE },
+        select: { remoteId: true, resourceType: true },
+      },
+    },
+  });
+  const remoteEventId = configuration?.versions[0]?.remoteEventId;
+  if (!remoteEventId) return { status: "error", message: "This event is not connected to Accelevents." };
+
+  const connection = { remoteEventId, apiKey: "runtime-preview-key" };
+  const adapter = new DeterministicAcceleventsAdapter({
+    remoteEventId,
+    apiKey: "runtime-preview-key",
+    speakers: configuration.remoteRecords
+      .filter((record) => record.resourceType === "speaker")
+      .map((record, index) => ({
+        remoteId: record.remoteId,
+        email: `linked-${index}@preview.invalid`,
+        firstName: "Linked",
+        lastName: "Speaker",
+      })),
+    sessions: configuration.remoteRecords
+      .filter((record) => record.resourceType === "session")
+      .map((record) => ({
+        remoteId: record.remoteId,
+        title: "Remote session awaiting comparison",
+        description: "",
+        speakerRemoteIds: [],
+      })),
+  });
+
+  try {
+    const result = await new AcceleventsProgramPushService(client).push({
+      eventId: event.id,
+      idempotencyKey: randomUUID(),
+      confirmed: true,
+      adapter,
+      connection,
+    });
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+    return {
+      status: "success",
+      message: `Program push complete: ${result.speakers.records.length} speaker and ${result.sessions.records.length} session actions recorded.`,
+    };
   } catch (error) {
     if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;
