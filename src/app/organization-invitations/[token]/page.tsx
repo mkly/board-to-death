@@ -35,10 +35,7 @@ const terminalMessages = {
   },
 } as const;
 
-export default async function OrganizationInvitationPage({
-  params,
-  searchParams,
-}: OrganizationInvitationPageProps) {
+export default async function OrganizationInvitationPage({ params, searchParams }: OrganizationInvitationPageProps) {
   const [{ token }, query] = await Promise.all([params, searchParams]);
   const invitation = await new OrganizationInvitationService(getDatabaseClient()).preview(token);
 

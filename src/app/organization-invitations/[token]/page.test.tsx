@@ -1,5 +1,4 @@
 import { renderToStaticMarkup } from "react-dom/server";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import OrganizationInvitationPage from "./page";
@@ -58,8 +57,6 @@ describe("organization invitation page", () => {
         params: Promise.resolve({ token: "token/with spaces" }),
         searchParams: Promise.resolve({}),
       }),
-    ).rejects.toThrow(
-      "redirect:/auth/v1/login?callbackURL=%2Forganization-invitations%2Ftoken%252Fwith%2520spaces",
-    );
+    ).rejects.toThrow("redirect:/auth/v1/login?callbackURL=%2Forganization-invitations%2Ftoken%252Fwith%2520spaces");
   });
 });
