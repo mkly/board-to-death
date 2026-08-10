@@ -54,11 +54,11 @@ test("previews, validates, saves, disables, and reloads CFP message settings", a
   await page.getByLabel("Days before close").fill("0");
   await page.getByLabel("Days before close").evaluate((element) => element.removeAttribute("min"));
   await page.getByLabel("Submission confirmation").fill("<script>alert('no')</script>");
-  await page.getByLabel("Thank-you message").fill("Your session is {{session.title}}.");
+  await page.getByLabel("Thank-you message").fill("Your session is {{proposal.title}}.");
   await page.getByRole("button", { name: "Save messages" }).click();
   await expect(page.getByText("Choose a whole number from 1 to 90 days.")).toBeVisible();
   await expect(page.locator("form").getByText(/Raw HTML is not allowed/)).toBeVisible();
-  await expect(page.locator("form").getByText(/Unknown variables: session.title/)).toBeVisible();
+  await expect(page.locator("form").getByText(/Unknown variables: proposal.title/)).toBeVisible();
 
   await page.getByRole("switch", { name: "Draft reminders" }).click();
   await page.getByLabel("Days before close").fill("5");

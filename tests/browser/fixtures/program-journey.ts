@@ -1,6 +1,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { IntegrationProvider, PrismaClient } from "../../../src/generated/prisma/client.ts";
+import {
+  IntegrationProvider,
+  PrismaClient,
+  ProgramSessionContentApprovalStatus,
+} from "../../../src/generated/prisma/client.ts";
 import { AgendaPlacementRepository } from "../../../src/server/agenda/placements.ts";
 import { createAuth } from "../../../src/server/auth/auth-factory.ts";
 import { provisionMagicLinkUser } from "../../../src/server/auth/magic-link-user.ts";
@@ -92,6 +96,7 @@ async function setup() {
   const sessions = new ProgramSessionRepository(database);
   const keynote = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Journey keynote",
     description: "Opening the program journey.",
     durationMinutes: 45,
@@ -100,6 +105,7 @@ async function setup() {
   });
   const roundtable = await sessions.createManual({
     eventId: event.id,
+    contentApprovalStatus: ProgramSessionContentApprovalStatus.APPROVED,
     title: "Journey roundtable",
     description: "Closing discussion of the journey.",
     durationMinutes: 60,

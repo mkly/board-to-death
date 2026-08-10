@@ -7,9 +7,10 @@ import { cookies, headers } from "next/headers";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
 
+import { ACTIVE_ORGANIZATION_COOKIE } from "./cookies";
 import { resolveMembershipPrincipal } from "./membership-principal";
 
-export const ACTIVE_ORGANIZATION_COOKIE = "board_to_death_active_org";
+export { ACTIVE_ORGANIZATION_COOKIE } from "./cookies";
 
 export const getRequestAuthorization = cache(async () => {
   const [session, cookieStore] = await Promise.all([auth.api.getSession({ headers: await headers() }), cookies()]);
