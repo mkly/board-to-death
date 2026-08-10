@@ -12,6 +12,7 @@ import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database";
 import { EventRepository, RepositoryError, RoomRepository, TrackRepository } from "@/server/events";
 
+import { getDashboardShellData } from "../_lib/dashboard-data";
 import type { EventSettingsSnapshot, MutationResult } from "./types";
 
 const eventSchema = z
@@ -205,7 +206,11 @@ export async function createEvent(formData: FormData): Promise<MutationResult> {
   const parsed = parseEventForm(formData);
   if (!parsed.success) return invalidResult(parsed.error);
   try {
-    const event = await repositories().events.create(eventInput(parsed.data));
+    const shell = await getDashboardShellData();
+    const event = await repositories().events.create({
+      ...eventInput(parsed.data),
+      ...(shell.activeOrganization ? { orgId: shell.activeOrganization.id } : {}),
+    });
     return success(event.id, "Event created.");
   } catch (error) {
     return failureResult(error);

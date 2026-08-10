@@ -7,13 +7,15 @@ import { getDatabaseClient } from "@/server/database/client";
 import { getAllowedAdminEmails, isAllowedAdminEmail } from "./admin-access";
 import { createAuth } from "./auth-factory";
 import { createConfiguredMagicLinkSender } from "./magic-link-email";
+import { isOrganizationSignupMagicLink } from "./signup-intent";
 
 const runtimeConfig = getRuntimeConfig().server;
 const allowedAdminEmails = getAllowedAdminEmails(runtimeConfig.AUTH_ALLOWED_EMAILS);
 const database = getDatabaseClient();
 
-async function isAllowedWorkspaceEmail(email: string): Promise<boolean> {
+async function isAllowedWorkspaceMagicLink({ email, url }: { readonly email: string; readonly url: string }) {
   if (isAllowedAdminEmail(email, allowedAdminEmails)) return true;
+  if (await isOrganizationSignupMagicLink(database, { email, url })) return true;
   const reviewer = await database.evaluationReviewer.findFirst({
     where: { email: { equals: email.trim(), mode: "insensitive" }, status: EvaluationReviewerStatus.ACTIVE },
     select: { id: true },
@@ -24,7 +26,7 @@ async function isAllowedWorkspaceEmail(email: string): Promise<boolean> {
 export const auth = createAuth({
   baseURL: runtimeConfig.BETTER_AUTH_URL,
   database,
-  isAllowedEmail: isAllowedWorkspaceEmail,
+  isAllowedMagicLink: isAllowedWorkspaceMagicLink,
   secret: runtimeConfig.BETTER_AUTH_SECRET,
   sendMagicLink: createConfiguredMagicLinkSender({
     resendApiKey: runtimeConfig.RESEND_API_KEY,

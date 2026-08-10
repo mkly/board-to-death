@@ -4,6 +4,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { getDatabaseClient } from "@/server/database";
 import { EventRepository, RoomRepository, TrackRepository } from "@/server/events";
 
+import { getDashboardShellData } from "../_lib/dashboard-data";
 import { EventSettingsWorkspace } from "./_components/event-settings-workspace";
 import type { EventSettingsSnapshot } from "./types";
 
@@ -13,9 +14,11 @@ interface PageProps {
 
 export default async function Page({ searchParams }: PageProps) {
   const database = getDatabaseClient();
+  const shell = await getDashboardShellData();
   const events = new EventRepository(database);
   const eventOptions = (
     await database.event.findMany({
+      where: shell.activeOrganization ? { orgId: shell.activeOrganization.id } : undefined,
       orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { startsAt: "asc" }],
       select: { id: true, name: true, archivedAt: true },
     })

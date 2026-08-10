@@ -1,4 +1,10 @@
 export const ACTIVE_EVENT_COOKIE = "board_to_death_active_event";
+export const ACTIVE_ORGANIZATION_COOKIE = "board_to_death_active_organization";
+
+export interface DashboardOrganization {
+  readonly id: string;
+  readonly name: string;
+}
 
 export interface DashboardEvent {
   readonly id: string;
@@ -7,6 +13,13 @@ export interface DashboardEvent {
   readonly timezone: string;
   readonly startsAt: Date;
   readonly endsAt: Date;
+}
+
+export function resolveActiveOrganization(
+  organizations: readonly DashboardOrganization[],
+  selectedOrganizationId: string | undefined,
+): DashboardOrganization | null {
+  return organizations.find(({ id }) => id === selectedOrganizationId) ?? organizations[0] ?? null;
 }
 
 export function resolveActiveEvent(
