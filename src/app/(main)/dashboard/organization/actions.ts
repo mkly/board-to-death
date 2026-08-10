@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/client";
 import { auth } from "@/server/auth/auth";
+import { provisionMagicLinkUser } from "@/server/auth/magic-link-user";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 import {
@@ -58,6 +59,7 @@ async function requireOrganizationOwner(organizationId: string) {
 async function magicLinkDelivery(): Promise<OrganizationInvitationDelivery> {
   const requestHeaders = new Headers(await headers());
   return async ({ email, callbackURL }) => {
+    await provisionMagicLinkUser(getDatabaseClient(), { email });
     await auth.api.signInMagicLink({
       headers: requestHeaders,
       body: { email, callbackURL, newUserCallbackURL: callbackURL, errorCallbackURL: callbackURL },
