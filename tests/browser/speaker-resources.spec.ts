@@ -59,6 +59,9 @@ test("administers speaker resource lifecycle, ordering, sanitization, and event 
   context,
   page,
 }) => {
+  // Roughly a dozen dashboard and public navigations, each compiled on demand by the dev web server,
+  // do not fit Playwright's 30s default.
+  test.setTimeout(120_000);
   await context.addCookies([
     { name: "better-auth.session_token", value: sessionCookie, url: baseURL, httpOnly: true, sameSite: "Lax" },
   ]);
