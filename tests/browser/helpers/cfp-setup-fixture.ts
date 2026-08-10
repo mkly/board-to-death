@@ -132,14 +132,23 @@ async function signIn(): Promise<string> {
   return sessionToken;
 }
 
+// The setup workspace grants administrator management to the CFP owner by matching
+// `cfp_administrators.externalId` against the signed-in Better Auth user id, not the account email,
+// so the seeded owner is rebound to that id once the session exists.
+async function bindOwnerToSignedInUser(ownerId: string): Promise<void> {
+  const account = await client.user.findUniqueOrThrow({ where: { email: adminEmail }, select: { id: true } });
+  await client.cfpAdministrator.update({ where: { id: ownerId }, data: { externalId: account.id } });
+}
+
 async function setup() {
-  const { eventSlug, event, form, editor } = await createEventFormAndPolicy();
+  const { eventSlug, event, form, editor, owner } = await createEventFormAndPolicy();
   const sessionToken = await signIn();
+  await bindOwnerToSignedInUser(owner.id);
   console.log(JSON.stringify({ editorId: editor.id, eventId: event.id, eventSlug, formId: form.formId, sessionToken }));
 }
 
 async function categoryRouting() {
-  const { eventSlug, event, form, editor, categories } = await createEventFormAndPolicy({
+  const { eventSlug, event, form, editor, owner, categories } = await createEventFormAndPolicy({
     questions: [
       {
         id: "topic",
@@ -160,6 +169,7 @@ async function categoryRouting() {
     ],
   });
   const sessionToken = await signIn();
+  await bindOwnerToSignedInUser(owner.id);
   console.log(
     JSON.stringify({
       editorId: editor.id,

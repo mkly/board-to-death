@@ -288,6 +288,18 @@ async function setup() {
     }),
   ]);
 
+  // The assignment workspace only lists submissions that were advanced into a round which has a
+  // predecessor, so without this row the anonymized round renders "No eligible submissions" and the
+  // admin reopen control never appears.
+  await database.evaluationRoundAdvancement.create({
+    data: {
+      sourceRoundId: blindRound.id,
+      targetRoundId: anonymizedRound.id,
+      submissionId: anonymizedSubmission.id,
+      actorId: "browser-fixture",
+    },
+  });
+
   return {
     eventId: event.id,
     eventSlug: event.slug,
