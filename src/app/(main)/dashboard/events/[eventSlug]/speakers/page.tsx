@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import { getDatabaseClient } from "@/server/database/client";
-import { parseSpeakerTaskMatrixFilters, SpeakerTaskMatrixRepository } from "@/server/speakers";
+import { parseSpeakerTaskMatrixFilters, SpeakerRepository, SpeakerTaskMatrixRepository } from "@/server/speakers";
 
 import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
@@ -32,7 +32,11 @@ export default async function SpeakersPage({ params, searchParams }: SpeakersPag
     }
   }
   const filters = parseSpeakerTaskMatrixFilters(urlSearchParams);
-  const result = await new SpeakerTaskMatrixRepository(getDatabaseClient()).list(event.id, event.timezone, filters);
+  const client = getDatabaseClient();
+  const [result, speakers] = await Promise.all([
+    new SpeakerTaskMatrixRepository(client).list(event.id, event.timezone, filters),
+    new SpeakerRepository(client).list(event.id),
+  ]);
 
-  return <SpeakerTaskMatrix event={event} filters={filters} result={result} />;
+  return <SpeakerTaskMatrix event={event} filters={filters} result={result} roster={speakers} />;
 }
