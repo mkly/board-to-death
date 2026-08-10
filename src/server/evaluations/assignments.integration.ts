@@ -310,6 +310,49 @@ describe("reviewer and committee assignments", () => {
     assert.equal(active, 0);
   });
 
+  test("flags a recusal in the organizer workspace and preserves it when assigning a replacement", async () => {
+    const fixture = await createFixture();
+    await repository.assign({
+      eventId: fixture.eventId,
+      roundId: fixture.openRoundId,
+      reviewerId: fixture.sourceReviewerId,
+      submissionIds: [fixture.firstSubmissionId],
+    });
+    const source = await client.evaluationAssignment.findFirstOrThrow({
+      where: {
+        roundId: fixture.openRoundId,
+        submissionId: fixture.firstSubmissionId,
+        reviewerId: fixture.sourceReviewerId,
+      },
+    });
+    await client.evaluationAssignment.update({
+      where: { id: source.id },
+      data: { status: EvaluationAssignmentStatus.RECUSED, recusedAt: new Date("2027-01-18T18:00:00.000Z") },
+    });
+
+    const workspace = await repository.getWorkspace(fixture.eventId, fixture.openRoundId);
+    const submission = workspace.submissions.find(({ id }) => id === fixture.firstSubmissionId);
+    assert.equal(submission?.coverageStatus, "UNDER_ASSIGNED");
+    assert.equal(submission?.assignments[0]?.status, EvaluationAssignmentStatus.RECUSED);
+
+    assert.equal(
+      await repository.reassign({
+        eventId: fixture.eventId,
+        roundId: fixture.openRoundId,
+        fromReviewerId: fixture.sourceReviewerId,
+        reviewerId: fixture.targetReviewerId,
+        submissionIds: [fixture.firstSubmissionId],
+      }),
+      1,
+    );
+    const assignments = await client.evaluationAssignment.findMany({
+      where: { roundId: fixture.openRoundId, submissionId: fixture.firstSubmissionId },
+      orderBy: { assignedAt: "asc" },
+    });
+    assert.equal(assignments.find(({ reviewerId }) => reviewerId === fixture.sourceReviewerId)?.status, "RECUSED");
+    assert.equal(assignments.find(({ reviewerId }) => reviewerId === fixture.targetReviewerId)?.status, "ASSIGNED");
+  });
+
   test("bulk assigns current committee members and deduplicates overlapping individual and committee coverage", async () => {
     const fixture = await createFixture();
     await repository.assign({

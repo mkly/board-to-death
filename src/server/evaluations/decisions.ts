@@ -98,7 +98,10 @@ export class EvaluationDecisionRepository {
             id: true,
             status: true,
             evaluationAssignments: {
-              where: { roundId: round.id, status: { not: EvaluationAssignmentStatus.REVOKED } },
+              where: {
+                roundId: round.id,
+                status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
+              },
               select: { status: true, evaluation: { select: { status: true } } },
             },
             evaluationDecisions: { orderBy: { decisionNumber: "desc" }, take: 1 },

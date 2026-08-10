@@ -206,7 +206,8 @@ export class EvaluationResultsRepository {
 
     const mapped = submissions.map((submission): EvaluationSubmissionResult => {
       const activeAssignments = submission.evaluationAssignments.filter(
-        ({ status }) => status !== EvaluationAssignmentStatus.REVOKED,
+        ({ status }) =>
+          status === EvaluationAssignmentStatus.ASSIGNED || status === EvaluationAssignmentStatus.COMPLETED,
       );
       const completedReviewerCount = activeAssignments.filter(
         ({ evaluation, status }) =>

@@ -338,6 +338,30 @@ describe("reviewer workspace authorization", () => {
     });
     assert.equal(await repository.get(fixture.identityId, fixture.blindAssignmentId), null);
   });
+
+  test("recuses an assignment, removes it from the active queue, and retains its excluded draft", async () => {
+    const fixture = await createFixture();
+    await repository.saveDraft(fixture.identityId, fixture.identifiedAssignmentId, {
+      expectedVersion: 0,
+      overallNote: "Potential conflict discovered after scoring.",
+      recommendation: EvaluationRecommendation.ACCEPT,
+      criteria: [{ criterionId: fixture.identifiedCriterionId, score: 5, note: null }],
+    });
+
+    assert.deepEqual(await repository.recuse(fixture.identityId, fixture.identifiedAssignmentId), {
+      eventSlug: "reviewer-summit",
+    });
+    assert.ok(!(await repository.list(fixture.identityId)).some(({ id }) => id === fixture.identifiedAssignmentId));
+    assert.equal(await repository.get(fixture.identityId, fixture.identifiedAssignmentId), null);
+
+    const recused = await client.evaluationAssignment.findUniqueOrThrow({
+      where: { id: fixture.identifiedAssignmentId },
+      include: { evaluation: { include: { results: true } } },
+    });
+    assert.equal(recused.status, EvaluationAssignmentStatus.RECUSED);
+    assert.ok(recused.recusedAt);
+    assert.equal(recused.evaluation?.results[0]?.score?.toNumber(), 5);
+  });
 });
 
 describe("reviewer workspace evaluation drafts and submission", () => {

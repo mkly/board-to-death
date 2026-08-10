@@ -84,7 +84,10 @@ export class EvaluationProgressionRepository {
           select: {
             id: true,
             evaluationAssignments: {
-              where: { roundId: round.id, status: { not: EvaluationAssignmentStatus.REVOKED } },
+              where: {
+                roundId: round.id,
+                status: { in: [EvaluationAssignmentStatus.ASSIGNED, EvaluationAssignmentStatus.COMPLETED] },
+              },
               select: { status: true, evaluation: { select: { status: true } } },
             },
           },
