@@ -42,6 +42,10 @@ export { contentDisposition, safeFileName } from "./file-names.ts";
 export type { FileStorageOptions, LocalFileStorageOptions } from "./file-storage.ts";
 export { createFileStorage, LocalFileStorage } from "./file-storage.ts";
 export { isSafeObjectKey } from "./object-key.ts";
+// ./resend-email.ts is intentionally absent from this barrel: it is "server-only",
+// and re-exporting it here makes every barrel consumer — including the Vitest
+// suites that import the deterministic fakes — throw on import. Import it by path,
+// as ./configured-file-storage.ts is imported.
 export {
   captureInfrastructureResult,
   infrastructureFailure,

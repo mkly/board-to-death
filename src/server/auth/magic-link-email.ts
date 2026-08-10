@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resendSenderAddress } from "@/server/infrastructure/resend-email";
+
 export interface MagicLinkMessage {
   readonly email: string;
   readonly url: string;
@@ -75,7 +77,7 @@ export function createConfiguredMagicLinkSender({
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            from: `GatherPulse <${resendFromEmail}>`,
+            from: resendSenderAddress(resendFromEmail),
             to: [email],
             ...content,
           }),
