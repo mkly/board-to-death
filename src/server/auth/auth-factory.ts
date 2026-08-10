@@ -30,7 +30,7 @@ export function createAuth({
   twoFactorPeriod,
 }: CreateAuthOptions) {
   return betterAuth({
-    appName: "Board to Death",
+    appName: "GatherPulse",
     baseURL,
     database: prismaAdapter(database, { provider: "postgresql" }),
     secret,
@@ -48,7 +48,7 @@ export function createAuth({
       }),
       twoFactor({
         allowPasswordless: true,
-        issuer: "Board to Death",
+        issuer: "GatherPulse",
         accountLockout: {
           maxFailedAttempts: twoFactorMaxFailedAttempts ?? 10,
           durationSeconds: twoFactorLockoutDuration ?? 15 * 60,

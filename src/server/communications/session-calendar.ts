@@ -3,7 +3,7 @@ import ical, { ICalAttendeeRole, ICalAttendeeStatus, ICalCalendarMethod, ICalEve
 import type { EmailAttachment, EmailMessage } from "../infrastructure/index.ts";
 
 const calendarProductId = {
-  company: "Board to Death",
+  company: "GatherPulse",
   product: "Session Communications",
   language: "EN",
 } as const;

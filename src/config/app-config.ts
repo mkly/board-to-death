@@ -3,12 +3,12 @@ import packageJson from "../../package.json";
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: "Board to Death",
+  name: "GatherPulse",
   version: packageJson.version,
-  copyright: `© ${currentYear}, Board to Death.`,
+  copyright: `© ${currentYear}, GatherPulse.`,
   meta: {
-    title: "Board to Death - Event Program Dashboard",
+    title: "GatherPulse - Event Program Dashboard",
     description:
-      "Board to Death is the program dashboard for board game events: collect session proposals, run reviews, and publish your schedule.",
+      "GatherPulse is the program dashboard for board game events: collect session proposals, run reviews, and publish your schedule.",
   },
 };

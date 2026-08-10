@@ -26,10 +26,10 @@ interface MagicLinkDeliveryConfig {
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 
 const SIGN_IN_WORDING: MagicLinkWording = {
-  subject: "Sign in to Board to Death",
+  subject: "Sign in to GatherPulse",
   textIntro: "Use this single-use link to sign in. It expires in 10 minutes:",
   htmlIntro: "Use this single-use link to sign in:",
-  linkLabel: "Sign in to Board to Death",
+  linkLabel: "Sign in to GatherPulse",
   htmlExpiry: "This link expires in 10 minutes.",
 };
 
@@ -75,7 +75,7 @@ export function createConfiguredMagicLinkSender({
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            from: `Board to Death <${resendFromEmail}>`,
+            from: `GatherPulse <${resendFromEmail}>`,
             to: [email],
             ...content,
           }),

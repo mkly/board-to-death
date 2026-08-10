@@ -30,11 +30,11 @@ describe("configured magic-link delivery", () => {
       "content-type": "application/json",
     });
     expect(JSON.parse(String(request?.body))).toEqual({
-      from: "Board to Death <noreply@updates.example.com>",
+      from: "GatherPulse <noreply@updates.example.com>",
       to: ["admin@example.com"],
-      subject: "Sign in to Board to Death",
+      subject: "Sign in to GatherPulse",
       text: "Use this single-use link to sign in. It expires in 10 minutes: https://events.example.com/sign-in?token=a&next=%2Fdashboard",
-      html: '<p>Use this single-use link to sign in:</p><p><a href="https://events.example.com/sign-in?token=a&amp;next=%2Fdashboard">Sign in to Board to Death</a></p><p>This link expires in 10 minutes.</p>',
+      html: '<p>Use this single-use link to sign in:</p><p><a href="https://events.example.com/sign-in?token=a&amp;next=%2Fdashboard">Sign in to GatherPulse</a></p><p>This link expires in 10 minutes.</p>',
     });
   });
 
@@ -59,7 +59,7 @@ describe("configured magic-link delivery", () => {
 
     const [, request] = fetchMock.mock.calls[0] ?? [];
     expect(JSON.parse(String(request?.body))).toEqual({
-      from: "Board to Death <noreply@updates.example.com>",
+      from: "GatherPulse <noreply@updates.example.com>",
       to: ["speaker@example.com"],
       subject: "Confirm your speaking participation",
       text: "Use this single-use link to confirm your speaking participation. This link expires in 7 days: https://events.example.com/portal/summit/confirm?token=a",
