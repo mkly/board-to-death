@@ -1,7 +1,9 @@
 import { type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
 import { Pool } from "pg";
 
+import { magicLinkRequestUrl } from "./fixtures/magic-link-webhook";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
 const runFile = promisify(execFile);
@@ -12,6 +14,8 @@ const databaseUrl =
 
 interface SpeakerPortalFixture {
   readonly eventSlug: string;
+  readonly speakerId: string;
+  readonly speakerEmail: string;
   readonly populatedAuthHref: string;
   readonly emptyAuthHref: string;
   readonly emptyResourceAuthHref: string;
@@ -42,7 +46,18 @@ async function preparePortal(): Promise<SpeakerPortalFixture> {
 }
 
 async function addSpeakerCookie(context: BrowserContext, value: string): Promise<void> {
-  await context.addCookies([{ name: "board-to-death.speaker-session", value, url: `${baseURL}/portal` }]);
+  const portalUrl = new URL(baseURL);
+  await context.addCookies([
+    {
+      name: "board-to-death.speaker-session",
+      value,
+      domain: portalUrl.hostname,
+      path: "/portal",
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: portalUrl.protocol === "https:",
+    },
+  ]);
 }
 
 // The innermost card that wraps one file input, so "Upload"/"Remove"/"Download"
@@ -423,6 +438,45 @@ test("redirects an expired speaker session to the event sign-in screen", async (
 
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/sign-in?expired=1`);
   await expect(page.getByText("Your speaker session has expired.")).toBeVisible();
+});
+
+test("requests a fresh link after session expiry and lets an organizer resend it", async ({ context, page }) => {
+  const fixture = await preparePortal();
+  await addSpeakerCookie(context, fixture.expiredSessionToken);
+  await page.goto(`/portal/${fixture.eventSlug}`);
+
+  const speakerRequestUrl = magicLinkRequestUrl(randomUUID());
+  expect((await fetch(speakerRequestUrl, { method: "POST" })).ok).toBe(true);
+  const speakerDelivery = fetch(speakerRequestUrl);
+  speakerDelivery.catch(() => undefined);
+
+  await page.getByLabel("Email address").fill(fixture.speakerEmail);
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await expect(
+    page.getByText("If that address belongs to a speaker for this event, a sign-in link is on its way."),
+  ).toBeVisible();
+  const deliveredSpeakerLink = await speakerDelivery;
+  expect(deliveredSpeakerLink.ok).toBe(true);
+  await page.goto(((await deliveredSpeakerLink.json()) as { url: string }).url);
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}`);
+  await expect(page.getByRole("heading", { name: "Welcome, Ada" })).toBeVisible();
+
+  await page.goto(`/portal/${fixture.eventSlug}/sign-in`);
+  await page.getByLabel("Email address").fill("unknown@example.test");
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await expect(
+    page.getByText("If that address belongs to a speaker for this event, a sign-in link is on its way."),
+  ).toBeVisible();
+
+  const organizerRequestUrl = magicLinkRequestUrl(randomUUID());
+  expect((await fetch(organizerRequestUrl, { method: "POST" })).ok).toBe(true);
+  const organizerDelivery = fetch(organizerRequestUrl);
+  organizerDelivery.catch(() => undefined);
+  await context.addCookies([{ name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL }]);
+  await page.goto(`/dashboard/events/${fixture.eventSlug}/speakers/${fixture.speakerId}`);
+  await page.getByRole("button", { name: "Send sign-in link" }).click();
+  await expect(page.getByText("A fresh speaker portal sign-in link was sent.")).toBeVisible();
+  expect((await organizerDelivery).ok).toBe(true);
 });
 
 test("submits text and file tasks, preserves revisions, and enforces speaker ownership", async ({ context, page }) => {

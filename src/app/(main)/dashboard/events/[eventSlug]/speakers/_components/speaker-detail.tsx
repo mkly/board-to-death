@@ -9,6 +9,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { PersistedSpeaker } from "@/server/speakers";
 
+import { ResendSpeakerLinkForm } from "./resend-speaker-link-form";
+
 interface SpeakerDetailProps {
   readonly event: { readonly name: string; readonly slug: string; readonly timezone: string };
   readonly speaker: PersistedSpeaker;
@@ -40,7 +42,7 @@ export function SpeakerDetail({ event, speaker, assignments }: SpeakerDetailProp
           <p className="text-muted-foreground text-sm">{profile.email}</p>
         </div>
       </header>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Speaker profile</CardTitle>
@@ -57,6 +59,15 @@ export function SpeakerDetail({ event, speaker, assignments }: SpeakerDetailProp
             <CardDescription>Authoritative assignments for this event</CardDescription>
           </CardHeader>
           <CardContent className="font-semibold text-2xl tabular-nums">{assignments.length}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Portal access</CardTitle>
+            <CardDescription>Send a new single-use link to {profile.email}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResendSpeakerLinkForm eventSlug={event.slug} speakerId={speaker.id} />
+          </CardContent>
         </Card>
       </div>
       <Card>

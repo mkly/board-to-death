@@ -379,9 +379,19 @@ const verifiedAdmin = await adminAuth.handler(new Request(deliveredAdminLink, { 
 const adminSessionCookie = verifiedAdmin.headers.get("set-cookie")?.match(/better-auth\.session_token=([^;]+)/)?.[1];
 if (!adminSessionCookie) throw new Error("Expected Better Auth to issue an admin session cookie.");
 
+const adminUser = await database.user.findFirst({ where: { email: "admin@example.test" }, select: { id: true } });
+if (!adminUser) throw new Error("Expected the speaker portal fixture to create an admin user.");
+await database.organizationMember.upsert({
+  where: { orgId_userId: { orgId: fixture.organizationId, userId: adminUser.id } },
+  update: { role: "OWNER", status: "ACTIVE", revokedAt: null },
+  create: { orgId: fixture.organizationId, userId: adminUser.id, role: "OWNER", status: "ACTIVE" },
+});
+
 process.stdout.write(
   JSON.stringify({
     eventSlug: fixture.eventSlug,
+    speakerId: fixture.speakerId,
+    speakerEmail: "ada@example.test",
     populatedAuthHref: await authHref(fixture.eventId, fixture.eventSlug, fixture.speakerId),
     emptyAuthHref: await authHref(fixture.eventId, fixture.eventSlug, emptySpeaker.id),
     emptyResourceAuthHref: await authHref(emptyResourceEvent.id, emptyResourceEvent.slug, emptyResourceSpeaker.id),
