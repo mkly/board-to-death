@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: BrandingRouteContext): Pro
     context.params,
     auth.api.getSession({ headers: await headers() }),
   ]);
-  if (!isAuthorizedAdminSession(session, { id: eventId })) return notFound();
+  if (!(await isAuthorizedAdminSession(session, { id: eventId }))) return notFound();
 
   const event = await getDatabaseClient().event.findUnique({
     where: { id: eventId },

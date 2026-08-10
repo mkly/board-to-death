@@ -107,7 +107,7 @@ export function BrandingImagePicker({
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
-          <ImageUp aria-hidden="true" />
+          <ImageUp className="size-4" aria-hidden="true" />
           Choose image
         </button>
       )}
