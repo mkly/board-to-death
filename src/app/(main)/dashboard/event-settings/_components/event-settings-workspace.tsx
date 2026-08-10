@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -63,6 +63,7 @@ import {
   updateTrack,
 } from "../actions";
 import type { EventOption, EventSettingsEvent, EventSettingsSnapshot, MutationResult } from "../types";
+import { type BrandingImagePick, BrandingImagePicker, brandingImageError } from "./branding-image-picker";
 import { CreateEventWizard } from "./create-event-wizard";
 import { EventLifecycleActions } from "./event-lifecycle-actions";
 
@@ -108,16 +109,83 @@ function EventForm({
   readonly event?: EventSettingsEvent;
   readonly errors?: FieldErrors;
   readonly pending: boolean;
-  readonly onSubmit: (formData: FormData) => Promise<void>;
+  readonly onSubmit: (formData: FormData) => Promise<boolean>;
   readonly submitLabel: string;
 }) {
   const timezone = event?.timezone ?? browserTimezone();
+  const [logo, setLogo] = useState<BrandingImagePick | null>(null);
+  const [background, setBackground] = useState<BrandingImagePick | null>(null);
+  const [logoRemoved, setLogoRemoved] = useState(false);
+  const [backgroundRemoved, setBackgroundRemoved] = useState(false);
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  const picksRef = useRef({ logo, background });
+  picksRef.current = { logo, background };
+
+  useEffect(() => {
+    return () => {
+      for (const pick of [picksRef.current.logo, picksRef.current.background]) {
+        if (pick) URL.revokeObjectURL(pick.previewUrl);
+      }
+    };
+  }, []);
+
+  const selectImage =
+    (
+      target: "logo" | "background",
+      label: string,
+      maxMegabytes: number,
+      setPick: (pick: BrandingImagePick | null) => void,
+      setRemoved: (removed: boolean) => void,
+    ) =>
+    (file: File) => {
+      const error = brandingImageError(file, label, maxMegabytes);
+      if (error) {
+        setClientErrors((current) => ({ ...current, [`${target}File`]: error }));
+        return;
+      }
+      setClientErrors(({ [`${target}File`]: _removed, ...rest }) => rest);
+      const previous = picksRef.current[target];
+      if (previous) URL.revokeObjectURL(previous.previewUrl);
+      setPick({ file, previewUrl: URL.createObjectURL(file) });
+      setRemoved(false);
+    };
+
+  const clearImage = (
+    target: "logo" | "background",
+    setPick: (pick: BrandingImagePick | null) => void,
+    setRemoved: (removed: boolean) => void,
+  ) => {
+    setClientErrors(({ [`${target}File`]: _removed, ...rest }) => rest);
+    const previous = picksRef.current[target];
+    if (previous) URL.revokeObjectURL(previous.previewUrl);
+    setPick(null);
+    setRemoved(true);
+  };
+
+  const resetBrandingPicks = () => {
+    for (const pick of [picksRef.current.logo, picksRef.current.background]) {
+      if (pick) URL.revokeObjectURL(pick.previewUrl);
+    }
+    setLogo(null);
+    setBackground(null);
+    setLogoRemoved(false);
+    setBackgroundRemoved(false);
+    setClientErrors({});
+  };
+
   return (
     <form
       className="flex flex-col gap-6"
       onSubmit={(formEvent) => {
         formEvent.preventDefault();
-        void onSubmit(new FormData(formEvent.currentTarget));
+        const data = new FormData(formEvent.currentTarget);
+        if (logo) data.set("logoFile", logo.file);
+        if (background) data.set("backgroundFile", background.file);
+        if (logoRemoved) data.set("removeLogo", "true");
+        if (backgroundRemoved) data.set("removeBackground", "true");
+        void onSubmit(data).then((saved) => {
+          if (saved) resetBrandingPicks();
+        });
       }}
     >
       <FieldGroup>
@@ -223,24 +291,38 @@ function EventForm({
               placeholder="Playful strategy and design"
             />
           </Field>
-          <Field>
-            <FieldLabel htmlFor="event-logo">Logo asset key</FieldLabel>
-            <Input
-              id="event-logo"
-              name="logoObjectKey"
-              defaultValue={event?.logoObjectKey ?? ""}
-              placeholder="events/logo.svg"
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="event-background">Background image asset key</FieldLabel>
-            <Input
-              id="event-background"
-              name="backgroundObjectKey"
-              defaultValue={event?.backgroundObjectKey ?? ""}
-              placeholder="events/background.webp"
-            />
-          </Field>
+          <BrandingImagePicker
+            id="event-logo"
+            label="Logo"
+            description="Shown next to your event name. PNG, JPEG, or WebP, up to 5 MB."
+            pick={logo}
+            currentImageUrl={
+              event?.logoObjectKey && !logoRemoved
+                ? `/dashboard/event-settings/branding/${encodeURIComponent(event.id)}/logo`
+                : undefined
+            }
+            error={clientErrors.logoFile ?? firstError(errors, "logoFile")}
+            previewClassName="size-12 object-contain p-1"
+            disabled={pending}
+            onSelect={selectImage("logo", "logo", 5, setLogo, setLogoRemoved)}
+            onClear={() => clearImage("logo", setLogo, setLogoRemoved)}
+          />
+          <BrandingImagePicker
+            id="event-background"
+            label="Background image"
+            description="Used as a subtle backdrop behind your event pages. PNG, JPEG, or WebP, up to 10 MB."
+            pick={background}
+            currentImageUrl={
+              event?.backgroundObjectKey && !backgroundRemoved
+                ? `/dashboard/event-settings/branding/${encodeURIComponent(event.id)}/background`
+                : undefined
+            }
+            error={clientErrors.backgroundFile ?? firstError(errors, "backgroundFile")}
+            previewClassName="h-12 w-20 object-cover"
+            disabled={pending}
+            onSelect={selectImage("background", "background image", 10, setBackground, setBackgroundRemoved)}
+            onClear={() => clearImage("background", setBackground, setBackgroundRemoved)}
+          />
         </div>
         <FieldSet>
           <FieldLegend variant="label">Program features</FieldLegend>
@@ -513,7 +595,8 @@ export function EventSettingsWorkspace({
                   errors={fieldErrors}
                   pending={pending === "event"}
                   onSubmit={async (data) => {
-                    await mutate("event", () => updateEvent(eventId, data));
+                    const result = await mutate("event", () => updateEvent(eventId, data));
+                    return result.ok;
                   }}
                   submitLabel="Save changes"
                 />

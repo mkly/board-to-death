@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { ArrowLeft, ArrowRight, Check, ImageUp, PencilLine, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, PencilLine, Sparkles } from "lucide-react";
 
 import { DateTimePicker } from "@/components/date-time-picker";
 import { browserTimezone, TimezoneSelect } from "@/components/timezone-select";
@@ -23,12 +23,12 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 import type { MutationResult } from "../types";
+import { type BrandingImagePick, BrandingImagePicker, brandingImageError } from "./branding-image-picker";
 
 type FieldErrors = MutationResult["fieldErrors"];
 
 const EVENT_TYPES = ["CONFERENCE", "MEETUP", "WORKSHOP", "OTHER"] as const;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 
 const STEPS = [
   { key: "basics", label: "Basics", description: "Name your event" },
@@ -46,11 +46,6 @@ const STEP_FIELDS: Record<StepKey, readonly string[]> = {
   review: ["exhibitorsEnabled", "sponsorsEnabled"],
 };
 
-interface ImagePick {
-  readonly file: File;
-  readonly previewUrl: string;
-}
-
 interface WizardState {
   readonly name: string;
   readonly slug: string;
@@ -64,8 +59,8 @@ interface WizardState {
   readonly theme: string;
   readonly exhibitorsEnabled: boolean;
   readonly sponsorsEnabled: boolean;
-  readonly logo: ImagePick | null;
-  readonly background: ImagePick | null;
+  readonly logo: BrandingImagePick | null;
+  readonly background: BrandingImagePick | null;
 }
 
 const INITIAL_STATE: WizardState = {
@@ -128,90 +123,10 @@ function stepWithServerError(errors: FieldErrors): number {
   return STEPS.findIndex(({ key }) => STEP_FIELDS[key].some((field) => errors[field]?.length));
 }
 
-function imagePickError(file: File, label: string, maxMegabytes: number): string | null {
-  if (!ACCEPTED_IMAGE_TYPES.includes(file.type as (typeof ACCEPTED_IMAGE_TYPES)[number])) {
-    return `Upload the ${label} as a PNG, JPEG, or WebP image.`;
-  }
-  if (file.size > maxMegabytes * 1024 * 1024) {
-    return `The ${label} must be ${maxMegabytes} MB or smaller.`;
-  }
-  return null;
-}
-
 function stepStatus(index: number, currentIndex: number): "done" | "current" | "upcoming" {
   if (index < currentIndex) return "done";
   if (index === currentIndex) return "current";
   return "upcoming";
-}
-
-function formatBytes(size: number): string {
-  return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`;
-}
-
-function ImagePicker({
-  id,
-  label,
-  description,
-  pick,
-  error,
-  previewClassName,
-  onSelect,
-  onClear,
-}: {
-  readonly id: string;
-  readonly label: string;
-  readonly description: string;
-  readonly pick: ImagePick | null;
-  readonly error?: string;
-  readonly previewClassName: string;
-  readonly onSelect: (file: File) => void;
-  readonly onClear: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  return (
-    <Field data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <input
-        ref={inputRef}
-        id={id}
-        type="file"
-        accept={ACCEPTED_IMAGE_TYPES.join(",")}
-        className="sr-only"
-        onChange={(changeEvent) => {
-          const file = changeEvent.target.files?.[0];
-          if (file) onSelect(file);
-          changeEvent.target.value = "";
-        }}
-      />
-      {pick ? (
-        <div className="flex items-center gap-3 rounded-lg border p-2">
-          {/* biome-ignore lint/performance/noImgElement: object URLs preview local picks before upload */}
-          <img src={pick.previewUrl} alt="" className={cn("shrink-0 rounded-md border bg-muted", previewClassName)} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-sm">{pick.file.name}</p>
-            <p className="text-muted-foreground text-xs">{formatBytes(pick.file.size)}</p>
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-            Replace
-          </Button>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${label}`} onClick={onClear}>
-            <Trash2 />
-          </Button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-6 text-muted-foreground text-sm transition-colors hover:border-primary/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          onClick={() => inputRef.current?.click()}
-        >
-          <ImageUp className="size-4" aria-hidden="true" />
-          Choose image
-        </button>
-      )}
-      <FieldDescription>{description}</FieldDescription>
-      <FieldError>{error}</FieldError>
-    </Field>
-  );
 }
 
 function PortalPreview({ state }: { readonly state: WizardState }) {
@@ -268,7 +183,10 @@ export function CreateEventWizard({
     if (errored >= 0) setStepIndex(errored);
   }, [errors]);
 
-  const picksRef = useRef<{ logo: ImagePick | null; background: ImagePick | null }>({ logo: null, background: null });
+  const picksRef = useRef<{ logo: BrandingImagePick | null; background: BrandingImagePick | null }>({
+    logo: null,
+    background: null,
+  });
   picksRef.current = { logo: state.logo, background: state.background };
 
   useEffect(() => {
@@ -282,7 +200,7 @@ export function CreateEventWizard({
   const update = (patch: Partial<WizardState>) => setState((current) => ({ ...current, ...patch }));
 
   const selectImage = (target: "logo" | "background", label: string, maxMegabytes: number) => (file: File) => {
-    const error = imagePickError(file, label, maxMegabytes);
+    const error = brandingImageError(file, label, maxMegabytes);
     if (error) {
       setClientErrors((current) => ({ ...current, [`${target}File`]: error }));
       return;
@@ -505,7 +423,7 @@ export function CreateEventWizard({
       {step.key === "branding" ? (
         <FieldGroup>
           <PortalPreview state={state} />
-          <ImagePicker
+          <BrandingImagePicker
             id="wizard-logo"
             label="Logo"
             description="Shown next to your event name. PNG, JPEG, or WebP, up to 5 MB."
@@ -515,7 +433,7 @@ export function CreateEventWizard({
             onSelect={selectImage("logo", "logo", 5)}
             onClear={clearImage("logo")}
           />
-          <ImagePicker
+          <BrandingImagePicker
             id="wizard-background"
             label="Background image"
             description="Used as a subtle backdrop behind your event pages. PNG, JPEG, or WebP, up to 10 MB."
