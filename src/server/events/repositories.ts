@@ -351,6 +351,10 @@ export class EventRepository {
     return this.client.event.findMany({ where: { id: { in: [...ids] } }, orderBy: { startsAt: "asc" } });
   }
 
+  async countForOrg(orgId: string): Promise<number> {
+    return this.client.event.count({ where: { orgId } });
+  }
+
   async update(id: string, input: UpdateEventInput): Promise<Event> {
     const current = await this.get(id);
     if (!current) {

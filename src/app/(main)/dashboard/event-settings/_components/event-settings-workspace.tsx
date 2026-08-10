@@ -8,6 +8,7 @@ import { ArrowDown, ArrowUp, CalendarCog, DoorOpen, MapPinned, Plus, Save, Swatc
 import { toast } from "sonner";
 import { Temporal } from "temporal-polyfill";
 
+import { fireConfetti } from "@/components/confetti";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { browserTimezone, TimezoneSelect } from "@/components/timezone-select";
 import {
@@ -394,6 +395,7 @@ export function EventSettingsWorkspace({
     const result = await mutate("create-event", () => createEvent(formData));
     if (result.ok && result.snapshot) {
       setCreateOpen(false);
+      if (result.firstEvent) fireConfetti();
       router.push(settingsHref(result.snapshot.event.id));
     }
   }

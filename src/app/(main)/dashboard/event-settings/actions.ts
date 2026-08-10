@@ -303,7 +303,8 @@ export async function createEvent(formData: FormData): Promise<MutationResult> {
       failures.length > 0
         ? `Event created, but the ${failures.join(" and ")} could not be stored. Upload it again from event settings.`
         : "Event created.";
-    return success(event.id, message);
+    const firstEvent = (await repositories().events.countForOrg(authorization.activeOrganization.id)) === 1;
+    return { ...(await success(event.id, message)), firstEvent };
   } catch (error) {
     return failureResult(error);
   }

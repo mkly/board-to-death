@@ -45,4 +45,6 @@ export interface MutationResult {
   readonly message: string;
   readonly fieldErrors?: Readonly<Record<string, readonly string[]>>;
   readonly snapshot?: EventSettingsSnapshot;
+  /** True when the created event is the organization's very first event. */
+  readonly firstEvent?: boolean;
 }
