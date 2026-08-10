@@ -1,5 +1,6 @@
 import {
   type CfpCategory,
+  CfpPolicyStatus,
   type CfpSubmissionKind,
   CfpSubmissionRevisionKind,
   CfpSubmissionStatus,
@@ -53,6 +54,10 @@ export interface CreateFinalizedCfpSubmissionInput extends CreateCfpSubmissionDr
 export interface SaveCfpSubmissionDraftInput {
   readonly answers: readonly CfpSubmissionAnswerInput[];
   readonly categoryIds?: readonly string[];
+}
+
+export interface UpdateCfpSubmissionByApplicantInput extends SaveCfpSubmissionDraftInput {
+  readonly speakerId: string;
 }
 
 export interface CfpSubmissionRevisionSnapshot {
@@ -844,6 +849,80 @@ export class CfpSubmissionRepository {
             answers: { create: answerData(input.answers, definition) },
           },
         });
+      });
+      return await this.require(eventId, submissionId);
+    } catch (error) {
+      return mapDatabaseError(error);
+    }
+  }
+
+  async updateByApplicant(
+    eventId: string,
+    submissionId: string,
+    input: UpdateCfpSubmissionByApplicantInput,
+  ): Promise<PersistedCfpSubmission> {
+    try {
+      await this.client.$transaction(async (transaction) => {
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${submissionId}))`;
+        const submission = await transaction.cfpSubmission.findFirst({
+          where: {
+            eventId,
+            id: submissionId,
+            participants: { some: { speakerId: input.speakerId } },
+          },
+          include: {
+            revisions: { orderBy: { versionNumber: "desc" }, take: 1 },
+            formVersion: { select: { form: { select: { key: true } } } },
+          },
+        });
+        if (!submission) throw new RepositoryError("not-found", "The applicant submission was not found.");
+        if (submission.submittedAt === null || submission.status === CfpSubmissionStatus.DRAFT) {
+          invalid("Only submitted proposals can be edited from the applicant portal.");
+        }
+
+        const policy = await transaction.cfpPolicy.findUnique({
+          where: { eventId_key: { eventId, key: submission.formVersion.form.key } },
+          select: {
+            status: true,
+            versions: {
+              orderBy: { versionNumber: "desc" },
+              take: 1,
+              select: { submissionOpensAt: true, submissionClosesAt: true },
+            },
+          },
+        });
+        const window = policy?.versions[0];
+        const now = new Date();
+        if (
+          policy?.status !== CfpPolicyStatus.PUBLISHED ||
+          !window ||
+          now < window.submissionOpensAt ||
+          now > window.submissionClosesAt
+        ) {
+          invalid("This call for proposals is closed. Submitted proposals can no longer be edited.");
+        }
+
+        const revision = submission.revisions[0];
+        if (!revision) invalid("The submitted proposal does not have a response revision to edit.");
+        const definition = definitionFromSnapshot(revision.definitionSnapshot);
+        if (input.categoryIds !== undefined) {
+          await requireCategories(transaction, eventId, input.categoryIds);
+          await transaction.cfpSubmissionCategory.deleteMany({ where: { submissionId } });
+          await transaction.cfpSubmissionCategory.createMany({
+            data: input.categoryIds.map((categoryId, sortOrder) => ({ eventId, submissionId, categoryId, sortOrder })),
+          });
+        }
+        await transaction.cfpSubmissionRevision.create({
+          data: {
+            submissionId,
+            versionNumber: revision.versionNumber + 1,
+            kind: CfpSubmissionRevisionKind.FINAL,
+            formVersionId: revision.formVersionId,
+            definitionSnapshot: inputJson(revision.definitionSnapshot),
+            answers: { create: answerData(input.answers, definition) },
+          },
+        });
+        await transaction.cfpSubmission.update({ where: { id: submissionId }, data: { updatedAt: now } });
       });
       return await this.require(eventId, submissionId);
     } catch (error) {
