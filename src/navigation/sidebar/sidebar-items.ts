@@ -162,6 +162,12 @@ export function getSidebarItems(eventSlug?: string): NavGroup[] {
                 url: eventSlug ? `${url}/custom-fields` : "/dashboard",
                 disabled,
               },
+              {
+                id: "event-team",
+                title: "Team & reviewers",
+                url: eventSlug ? `${url}/team` : "/dashboard",
+                disabled,
+              },
             ],
           };
         }

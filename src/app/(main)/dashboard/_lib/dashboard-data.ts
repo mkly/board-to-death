@@ -5,6 +5,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { organizerEventIds } from "@/server/authorization/policy";
 import { getRequestAuthorization } from "@/server/authorization/request-context";
 import { getDatabaseClient } from "@/server/database/client";
 
@@ -24,12 +25,18 @@ export interface DashboardShellData {
 export const getDashboardShellData = cache(async (): Promise<DashboardShellData> => {
   const [authorization, cookieStore] = await Promise.all([getRequestAuthorization(), cookies()]);
 
-  if (!authorization?.activeOrganization) {
+  if (!authorization) {
     redirect("/auth/v1/login");
   }
 
+  const authorizedEventIds = organizerEventIds(authorization.principal);
+
   const events = await getDatabaseClient().event.findMany({
-    where: { orgId: authorization.activeOrganization.id, archivedAt: null },
+    where: {
+      id: { in: [...authorizedEventIds] },
+      archivedAt: null,
+      ...(authorization.activeOrganization ? { orgId: authorization.activeOrganization.id } : {}),
+    },
     orderBy: [{ startsAt: "asc" }, { name: "asc" }],
   });
 
