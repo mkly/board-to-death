@@ -53,10 +53,8 @@ them.
 ## Retained individual routes
 
 These routes are application entry points, authentication/authorization surfaces, active product workspaces, or the
-functional dashboard catch-all. The v2 authentication variants have no literal inbound links, but both were changed
-after the baseline to use the real passwordless login and organization-registration forms and remain valid direct
-entry points. `/unauthorized` is retained as the dedicated authorization terminal route. The catch-all is retained
-because Next.js dispatches unmatched dashboard paths to it; it does not need an inbound literal.
+functional dashboard catch-all. `/unauthorized` is retained as the dedicated authorization terminal route. The
+catch-all is retained because Next.js dispatches unmatched dashboard paths to it; it does not need an inbound literal.
 
 | Route directory | Commits | Inbound source files | Keep evidence |
 | --- | ---: | ---: | --- |
@@ -64,8 +62,6 @@ because Next.js dispatches unmatched dashboard paths to it; it does not need an 
 | `src/app/(main)/auth/v1/login` | 3 | 8 | Active magic-link login |
 | `src/app/(main)/auth/v1/register` | 2 | 3 | Active organization signup |
 | `src/app/(main)/auth/v1/two-factor` | 1 | 2 | Added for administrator 2FA |
-| `src/app/(main)/auth/v2/login` | 1 | 0 | Post-baseline real login variant |
-| `src/app/(main)/auth/v2/register` | 1 | 0 | Post-baseline real signup variant |
 | `src/app/(main)/dashboard/[...not-found]` | 0 | framework dispatch | Functional dashboard catch-all |
 | `src/app/(main)/dashboard/account/security` | 1 | 1 | Added for administrator 2FA |
 | `src/app/(main)/dashboard/event-settings` | 7 | 7 | Active event creation/settings workspace |
