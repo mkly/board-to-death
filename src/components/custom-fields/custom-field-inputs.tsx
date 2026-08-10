@@ -78,21 +78,19 @@ export function CustomFieldInputs({
             );
           }
           if (definition.type === CustomFieldType.SINGLE_SELECT) {
+            let defaultValue: string | undefined;
+            if (typeof stored === "string" && stored) defaultValue = stored;
+            else if (!definition.required) defaultValue = "__empty__";
             return (
               <Field key={definition.id} data-disabled={disabled || undefined}>
                 <FieldLabel htmlFor={id}>{definition.label}</FieldLabel>
-                <Select
-                  name={name}
-                  defaultValue={typeof stored === "string" && stored ? stored : "__empty__"}
-                  required={definition.required}
-                  disabled={disabled}
-                >
+                <Select name={name} defaultValue={defaultValue} required={definition.required} disabled={disabled}>
                   <SelectTrigger id={id} className="w-full">
                     <SelectValue placeholder="Select an option" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="__empty__">No selection</SelectItem>
+                      {definition.required ? null : <SelectItem value="__empty__">No selection</SelectItem>}
                       {definition.options.map((option) => (
                         <SelectItem key={option} value={option}>
                           {option}
