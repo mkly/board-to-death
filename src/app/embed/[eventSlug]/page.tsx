@@ -78,7 +78,7 @@ async function publishedSpeakerProfiles(
     kind: "session-list",
     theme: configuration.theme,
     density: configuration.density,
-    filters: ["search", "track"],
+    filters: ["search", "track", "format", "room"],
   });
   for (const session of snapshot.sessions) {
     const linkedSession = {
@@ -126,6 +126,8 @@ async function publishedSessionList(
 
   const { snapshot } = publication.version;
   const tracksById = new Map(snapshot.tracks.map((track) => [track.id, track]));
+  const roomsById = new Map(snapshot.rooms.map((room) => [room.id, room]));
+  const placementsBySessionId = new Map(snapshot.placements.map((placement) => [placement.sessionId, placement]));
   const speakersById = new Map(snapshot.speakers.map((speaker) => [speaker.id, speaker]));
 
   return {
@@ -134,11 +136,15 @@ async function publishedSessionList(
     sessions: snapshot.sessions
       .map((session) => {
         const track = session.trackId ? tracksById.get(session.trackId) : undefined;
+        const placement = placementsBySessionId.get(session.id);
+        const room = placement ? roomsById.get(placement.roomId) : undefined;
         return {
           id: session.id,
           title: session.title,
           description: session.description,
           durationMinutes: session.durationMinutes,
+          format: session.format ?? null,
+          location: room ? { id: room.id, name: room.name } : null,
           track: track ? { id: track.id, name: track.name } : null,
           speakers: session.speakerIds.flatMap((speakerId) => {
             const speaker = speakersById.get(speakerId);

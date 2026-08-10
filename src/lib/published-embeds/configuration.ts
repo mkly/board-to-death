@@ -1,7 +1,7 @@
 export const EMBED_KINDS = ["agenda", "session-list", "itinerary", "speaker-list", "speaker-gallery"] as const;
 export const EMBED_THEMES = ["system", "light", "dark"] as const;
 export const EMBED_DENSITIES = ["comfortable", "compact"] as const;
-export const EMBED_FILTERS = ["search", "track", "room", "day", "organization"] as const;
+export const EMBED_FILTERS = ["search", "track", "format", "room", "day", "organization"] as const;
 
 export type EmbedKind = (typeof EMBED_KINDS)[number];
 export type EmbedTheme = (typeof EMBED_THEMES)[number];
@@ -33,14 +33,15 @@ export const EMBED_KIND_LABELS: Readonly<Record<EmbedKind, string>> = {
 export const EMBED_FILTER_LABELS: Readonly<Record<EmbedFilter, string>> = {
   search: "Search",
   track: "Track",
-  room: "Room",
+  format: "Format",
+  room: "Location",
   day: "Day",
   organization: "Organization",
 };
 
 export const EMBED_FILTERS_BY_KIND: Readonly<Record<EmbedKind, readonly EmbedFilter[]>> = {
   agenda: ["search", "track", "room", "day"],
-  "session-list": ["search", "track"],
+  "session-list": ["search", "track", "format", "room"],
   itinerary: ["search", "track", "day"],
   "speaker-list": ["search", "organization"],
   "speaker-gallery": ["search", "organization"],
