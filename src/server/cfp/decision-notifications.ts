@@ -14,19 +14,37 @@ function isUniqueConflict(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && String(error.code) === "P2002";
 }
 
-function outcomeCopy(outcome: EvaluationDecisionOutcome): { subject: string; body: string; label: string } {
+interface DecisionCopy {
+  readonly subject: string;
+  readonly body: string;
+  readonly label: string;
+  readonly canonicalSubject: string;
+}
+
+// A form need not carry a recognizable proposal title, so every outcome also has copy that reads
+// correctly without one. The canonical subject is what the stored template version keeps, so that
+// row stays the same for an event whichever submission is decided first.
+function outcomeCopy(outcome: EvaluationDecisionOutcome, proposalTitle: string | null): DecisionCopy {
   if (outcome === EvaluationDecisionOutcome.ACCEPTED) {
+    const canonicalSubject = "Proposal accepted: {{session.title}} — {{event.name}}";
     return {
-      subject: "Proposal accepted: {{session.title}} — {{event.name}}",
-      body: "Congratulations, {{recipient.name}}. Your proposal **{{session.title}}** has been accepted for {{event.name}}.",
+      subject: proposalTitle ? canonicalSubject : "Proposal accepted — {{event.name}}",
+      body: proposalTitle
+        ? "Congratulations, {{recipient.name}}. Your proposal **{{session.title}}** has been accepted for {{event.name}}."
+        : "Congratulations, {{recipient.name}}. Your proposal has been accepted for {{event.name}}.",
       label: "acceptance",
+      canonicalSubject,
     };
   }
   if (outcome === EvaluationDecisionOutcome.REJECTED) {
+    const canonicalSubject = "Proposal decision: {{session.title}} — {{event.name}}";
     return {
-      subject: "Proposal decision: {{session.title}} — {{event.name}}",
-      body: "Hello {{recipient.name}}. Your proposal **{{session.title}}** was not selected for {{event.name}}.",
+      subject: proposalTitle ? canonicalSubject : "Proposal decision — {{event.name}}",
+      body: proposalTitle
+        ? "Hello {{recipient.name}}. Your proposal **{{session.title}}** was not selected for {{event.name}}."
+        : "Hello {{recipient.name}}. Your proposal was not selected for {{event.name}}.",
       label: "rejection",
+      canonicalSubject,
     };
   }
   throw new RepositoryError("invalid-input", "Only accepted or rejected decisions notify the applicant.");
@@ -83,7 +101,6 @@ export class CfpDecisionNotificationRepository {
     });
     if (!decision) throw new RepositoryError("not-found", "The event-owned decision was not found.");
 
-    const copy = outcomeCopy(decision.outcome);
     const revision = decision.submission.revisions[0];
     if (!revision) throw new RepositoryError("invalid-input", "The decided submission has no proposal revision.");
     const parsedDefinition = parseCfpDefinition(revision.definitionSnapshot);
@@ -91,7 +108,7 @@ export class CfpDecisionNotificationRepository {
       throw new RepositoryError("invalid-input", "The decided submission has an invalid form snapshot.");
     }
     const proposalTitle = proposalTitleFromAnswers(parsedDefinition.definition, revision.answers);
-    if (!proposalTitle) throw new RepositoryError("invalid-input", "The decided submission has no proposal title.");
+    const copy = outcomeCopy(decision.outcome, proposalTitle);
 
     const leadProfile = decision.submission.participants[0]?.speaker.profileVersions[0];
     const emailQuestionIds = new Set(
@@ -124,7 +141,7 @@ export class CfpDecisionNotificationRepository {
         "event.location": decision.submission.event.location ?? "Online",
         "recipient.name": displayName,
         "recipient.email": email,
-        "session.title": proposalTitle,
+        "session.title": proposalTitle ?? "",
       },
       { allowedVariables: CFP_MESSAGE_VARIABLE_KEYS },
     );
@@ -149,7 +166,7 @@ export class CfpDecisionNotificationRepository {
             eventId,
             templateId: template.id,
             version: 1,
-            subjectTemplate: copy.subject,
+            subjectTemplate: copy.canonicalSubject,
             htmlTemplate: copy.body,
           },
           update: {},

@@ -259,9 +259,6 @@ export async function submitPublicCfpForm(
       return { status: "error", message: "This CFP has no applicant email field. Contact the organizer." };
     }
     const proposalTitle = proposalTitleFromAnswers(lookup.form.definition, validation.answers);
-    if (!proposalTitle) {
-      return { status: "error", message: "This CFP has no proposal title field. Contact the organizer." };
-    }
     const messageContext = { event: lookup.event, recipient, proposalTitle };
     const confirmation = renderCfpApplicantMessage(lookup.policy.messages.submissionConfirmation, messageContext);
     const submission = await new CfpSubmissionRepository(client).createFinalized({

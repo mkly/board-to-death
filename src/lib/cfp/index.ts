@@ -1,6 +1,9 @@
 export {
+  answerByQuestionMatch,
   type CfpAnswerValidationResult,
   type CfpNormalizedAnswer,
+  PROPOSAL_TITLE_QUESTION_IDS,
+  PROPOSAL_TITLE_QUESTION_LABELS,
   proposalTitleFromAnswers,
   validateCfpAnswers,
   visibleCfpQuestionIds,

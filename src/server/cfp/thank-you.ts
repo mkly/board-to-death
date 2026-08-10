@@ -17,7 +17,7 @@ export interface CfpApplicantMessageContext {
     readonly location: string | null;
   };
   readonly recipient: CfpApplicantRecipient;
-  readonly proposalTitle: string;
+  readonly proposalTitle: string | null;
 }
 
 export interface QueueCfpThankYouInput extends CfpApplicantMessageContext {
@@ -45,8 +45,16 @@ function messageValues({ event, recipient, proposalTitle }: CfpApplicantMessageC
     "event.location": event.location ?? "Online",
     "recipient.name": recipient.name,
     "recipient.email": recipient.email,
-    "session.title": proposalTitle,
+    "session.title": proposalTitle ?? "",
   } as const;
+}
+
+// Question ids and labels are organizer-authored, so a form can carry no recognizable proposal
+// title. That must not block a public submission: fall back to the title-free subject instead.
+function applicantSubjectTemplate(proposalTitle: string | null): string {
+  return proposalTitle
+    ? "Submission received: {{session.title}} — {{event.name}}"
+    : "Thank you for submitting to {{event.name}}";
 }
 
 export function renderCfpApplicantMessage(
@@ -57,7 +65,7 @@ export function renderCfpApplicantMessage(
     {
       key: "cfp-thank-you",
       name: "CFP thank-you",
-      subjectTemplate: "Submission received: {{session.title}} — {{event.name}}",
+      subjectTemplate: applicantSubjectTemplate(context.proposalTitle),
       bodyTemplate,
     },
     messageValues(context),
@@ -104,7 +112,7 @@ export class CfpThankYouRepository {
             eventId: input.event.id,
             templateId: template.id,
             version: input.policyVersionNumber,
-            subjectTemplate: "Submission received: {{session.title}} — {{event.name}}",
+            subjectTemplate: applicantSubjectTemplate(input.proposalTitle),
             htmlTemplate: bodyTemplate,
           },
           update: {},

@@ -107,6 +107,7 @@ export async function recordEvaluationDecision(
 ): Promise<never> {
   const parsed = decisionSchema.safeParse({ eventSlug, roundId, submissionId, outcome, expectedDecisionNumber });
   if (!parsed.success) redirect(destination(eventSlug, roundId, { error: "The decision request was invalid." }));
+  let notificationQueued = true;
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
     const client = getDatabaseClient();
@@ -122,7 +123,12 @@ export async function recordEvaluationDecision(
       decision.outcome === EvaluationDecisionOutcome.ACCEPTED ||
       decision.outcome === EvaluationDecisionOutcome.REJECTED
     ) {
-      await new CfpDecisionNotificationRepository(client).queue(event.id, decision.id);
+      // The decision is already recorded and cannot be rolled back here, so a notification that
+      // cannot be queued must not present the whole action as failed.
+      notificationQueued = await new CfpDecisionNotificationRepository(client)
+        .queue(event.id, decision.id)
+        .then(() => true)
+        .catch(() => false);
     }
     await emitWebhookEvent(client, {
       eventId: event.id,
@@ -133,7 +139,13 @@ export async function recordEvaluationDecision(
   } catch (error) {
     redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
   }
-  redirect(destination(eventSlug, roundId, { notice: decisionNotices[outcome] }));
+  redirect(
+    destination(eventSlug, roundId, {
+      notice: notificationQueued
+        ? decisionNotices[outcome]
+        : `${decisionNotices[outcome]} The applicant notification could not be queued.`,
+    }),
+  );
 }
 
 export async function inviteAcceptedSpeakers(eventSlug: string, roundId: string, submissionId: string): Promise<never> {

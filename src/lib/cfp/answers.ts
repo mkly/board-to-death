@@ -5,28 +5,45 @@ export interface CfpNormalizedAnswer {
   readonly value: boolean | number | string | readonly string[];
 }
 
-const proposalTitleQuestionIds = new Set(["title", "proposal-title", "session-title", "talk-title"]);
-const proposalTitleQuestionLabels = new Set(["title", "proposal title", "session title", "talk title"]);
+export const PROPOSAL_TITLE_QUESTION_IDS: ReadonlySet<string> = new Set([
+  "title",
+  "proposal-title",
+  "session-title",
+  "talk-title",
+]);
+export const PROPOSAL_TITLE_QUESTION_LABELS: ReadonlySet<string> = new Set([
+  "title",
+  "proposal title",
+  "session title",
+  "talk title",
+]);
 
 function normalizedQuestionLabel(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, " ");
+    .replaceAll(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function answerByQuestionMatch(
+  definition: CfpFormDefinition,
+  answers: readonly { readonly questionId: string; readonly value: unknown }[],
+  questionIds: ReadonlySet<string>,
+  questionLabels: ReadonlySet<string>,
+): string | null {
+  const matchingQuestion = definition.sections
+    .flatMap(({ questions }) => questions)
+    .find(({ id, label }) => questionIds.has(id) || questionLabels.has(normalizedQuestionLabel(label)));
+  const answer = answers.find(({ questionId }) => questionId === matchingQuestion?.id)?.value;
+  return typeof answer === "string" && answer.trim() !== "" ? answer.trim() : null;
 }
 
 export function proposalTitleFromAnswers(
   definition: CfpFormDefinition,
   answers: readonly { readonly questionId: string; readonly value: unknown }[],
 ): string | null {
-  const titleQuestion = definition.sections
-    .flatMap(({ questions }) => questions)
-    .find(
-      ({ id, label }) =>
-        proposalTitleQuestionIds.has(id) || proposalTitleQuestionLabels.has(normalizedQuestionLabel(label)),
-    );
-  const title = answers.find(({ questionId }) => questionId === titleQuestion?.id)?.value;
-  return typeof title === "string" && title.trim() !== "" ? title.trim() : null;
+  return answerByQuestionMatch(definition, answers, PROPOSAL_TITLE_QUESTION_IDS, PROPOSAL_TITLE_QUESTION_LABELS);
 }
 
 export type CfpAnswerValidationResult =

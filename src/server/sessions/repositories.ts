@@ -6,7 +6,12 @@ import {
   ProgramSessionKind,
   ProgramSessionParticipantRole,
 } from "../../generated/prisma/client.ts";
-import { parseCfpDefinition } from "../../lib/cfp/index.ts";
+import {
+  answerByQuestionMatch,
+  PROPOSAL_TITLE_QUESTION_IDS,
+  PROPOSAL_TITLE_QUESTION_LABELS,
+  parseCfpDefinition,
+} from "../../lib/cfp/index.ts";
 import { boundedLimit, collectPages, LIST_BOUNDS, type ListPage, toListPage } from "../database/list-bounds.ts";
 import { RepositoryError } from "../events/repositories.ts";
 
@@ -210,17 +215,10 @@ function fromStored(stored: StoredProgramSession): PersistedProgramSession {
   };
 }
 
-const titleQuestionIds = new Set(["title", "proposal-title", "session-title", "talk-title"]);
-const titleQuestionLabels = new Set(["title", "proposal title", "session title", "talk title"]);
+const titleQuestionIds = PROPOSAL_TITLE_QUESTION_IDS;
+const titleQuestionLabels = PROPOSAL_TITLE_QUESTION_LABELS;
 const descriptionQuestionIds = new Set(["abstract", "description", "proposal-description", "session-description"]);
 const descriptionQuestionLabels = new Set(["abstract", "description", "proposal description", "session description"]);
-
-function normalizedLabel(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, " ");
-}
 
 function snapshotAnswer(
   revision: {
@@ -232,11 +230,7 @@ function snapshotAnswer(
 ): string | null {
   const definition = parseCfpDefinition(revision.definitionSnapshot);
   if (!definition.ok) invalid("The stored submission definition snapshot is invalid.");
-  const matchingQuestion = definition.definition.sections
-    .flatMap(({ questions }) => questions)
-    .find(({ id, label }) => questionIds.has(id) || labels.has(normalizedLabel(label)));
-  const answer = revision.answers.find(({ questionId }) => questionId === matchingQuestion?.id)?.value;
-  return typeof answer === "string" && answer.trim() !== "" ? answer.trim() : null;
+  return answerByQuestionMatch(definition.definition, revision.answers, questionIds, labels);
 }
 
 async function createVersion(
