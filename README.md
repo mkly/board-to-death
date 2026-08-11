@@ -1,6 +1,6 @@
-# Board to Death
+# GatherPulse
 
-Board to Death is a self-hosted conference program workspace. Program teams can open a call for proposals, review
+GatherPulse is a self-hosted conference program workspace. Program teams can open a call for proposals, review
 submissions, onboard accepted speakers, build an agenda, publish attendee-facing program views, and preview an
 Accelevents sync from one event-scoped dashboard.
 

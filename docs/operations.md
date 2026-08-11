@@ -1,6 +1,6 @@
 # Production operations
 
-Board to Death runs as a self-hosted Next.js Node server with PostgreSQL and a persistent local file volume. Put a
+GatherPulse runs as a self-hosted Next.js Node server with PostgreSQL and a persistent local file volume. Put a
 reverse proxy in front of the application and keep both the database and file volume on durable, backed-up storage.
 
 ## Install and configure
@@ -254,7 +254,7 @@ To bring up a real instance from an image built or promoted by `./scripts/bootst
    ```sh
    incus exec my-app-instance -- sh -c 'cat > /etc/systemd/system/board-to-death.service' <<'EOF'
    [Unit]
-   Description=Board to Death application
+   Description=GatherPulse application
    After=network-online.target
    Wants=network-online.target
 

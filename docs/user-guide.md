@@ -1,6 +1,6 @@
-# Board to Death user guide
+# GatherPulse user guide
 
-Board to Death manages a conference program from CFP setup through publication. Each event owns its forms, contacts,
+GatherPulse manages a conference program from CFP setup through publication. Each event owns its forms, contacts,
 reviews, sessions, files, communications, and integration history. Select the correct event in the dashboard before
 you edit records or send messages.
 
@@ -298,4 +298,4 @@ flow described above.
 | CRM and marketing | Excluded. Contacts and bulk messages support program operations, not sales pipelines, campaigns, or marketing automation. |
 
 Do not use the legacy template dashboards as evidence of a supported payment, CRM, marketing, finance, or commerce
-workflow. They remain starter-template screens outside the Board to Death program product.
+workflow. They remain starter-template screens outside the GatherPulse program product.

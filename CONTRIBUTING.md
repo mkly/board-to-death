@@ -1,6 +1,6 @@
-# Contributing to Board to Death
+# Contributing to GatherPulse
 
-Board to Death is an event-program management application: CFP intake, review, scheduling, program
+GatherPulse is an event-program management application: CFP intake, review, scheduling, program
 publication, public embeds and APIs, and an Accelevents integration. It is built with **Next.js 16**,
 **React 19**, **TypeScript**, **Tailwind CSS v4**, **shadcn/ui**, and a **Prisma/PostgreSQL**
 persistence layer. This guide covers environment setup and the contribution workflow.
