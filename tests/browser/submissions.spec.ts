@@ -29,7 +29,7 @@ async function signIn(context: import("@playwright/test").BrowserContext) {
 }
 
 async function selectEvent(context: import("@playwright/test").BrowserContext, event: { readonly id: string }) {
-  await context.addCookies([{ name: "board_to_death_active_event", value: event.id, url: baseURL }]);
+  await context.addCookies([{ name: "gatherpulse_active_event", value: event.id, url: baseURL }]);
 }
 
 test.describe

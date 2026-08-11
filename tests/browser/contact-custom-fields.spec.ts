@@ -39,7 +39,7 @@ async function prepareFixture(context: BrowserContext): Promise<ContactCustomFie
   const fixture = JSON.parse(stdout) as ContactCustomFieldFixture;
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL },
-    { name: "board_to_death_active_event", value: fixture.eventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL },
   ]);
   return fixture;
 }
@@ -120,7 +120,7 @@ test("manages custom field definitions and event-scoped record values", async ({
   ).toHaveValue("Hall B");
   await expect(page.getByText("Hall B", { exact: true })).toBeVisible();
 
-  await context.addCookies([{ name: "board_to_death_active_event", value: fixture.otherEventId, url: baseURL }]);
+  await context.addCookies([{ name: "gatherpulse_active_event", value: fixture.otherEventId, url: baseURL }]);
   await page.goto(`/dashboard/events/${fixture.otherEventSlug}/contacts`);
   await expect(page.getByText("Private Person", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Private notes")).toHaveValue("Never render this");

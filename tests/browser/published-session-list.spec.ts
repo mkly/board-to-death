@@ -192,7 +192,7 @@ test("renders and filters an isolated responsive session list across publication
               const frame = document.getElementById("session-list-host");
               window.addEventListener("message", (event) => {
                 if (event.origin !== new URL(frame.src).origin || event.source !== frame.contentWindow) return;
-                if (event.data?.type !== "board-to-death:resize" || event.data.instance !== "session-list-test") return;
+                if (event.data?.type !== "gatherpulse:resize" || event.data.instance !== "session-list-test") return;
                 frame.style.height = Math.ceil(event.data.height) + "px";
               });
             </script>

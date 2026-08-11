@@ -169,13 +169,13 @@ function icalFeed(feed: PublishedScheduleFeed): string {
   // the display hint clients read instead.
   const calendar = ical({
     name: `${feed.event.name} schedule`,
-    prodId: { company: "Board to Death", product: "Published Program", language: "EN" },
+    prodId: { company: "GatherPulse", product: "Published Program", language: "EN" },
     x: [["X-WR-TIMEZONE", feed.event.timezone]],
   });
 
   for (const placement of feed.schedule) {
     calendar.createEvent({
-      id: `${placement.id}.${feed.event.id}@board-to-death`,
+      id: `${placement.id}.${feed.event.id}@gatherpulse`,
       start: new Date(placement.startsAt),
       end: new Date(placement.endsAt),
       stamp: publishedAt,
@@ -186,7 +186,7 @@ function icalFeed(feed: PublishedScheduleFeed): string {
       categories: placement.tracks.map((track) => ({ name: track.name })),
       x:
         placement.speakers.length > 0
-          ? [["X-BOARD-TO-DEATH-SPEAKERS", placement.speakers.map(speakerName).join(", ")]]
+          ? [["X-GATHERPULSE-SPEAKERS", placement.speakers.map(speakerName).join(", ")]]
           : [],
     });
   }

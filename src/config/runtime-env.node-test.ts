@@ -269,7 +269,7 @@ test("a Vercel production deployment resolves its origin and storage without ext
 
   assert.equal(config.server.BETTER_AUTH_URL, "https://events.example.com");
   assert.equal(config.public.NEXT_PUBLIC_APP_URL, "https://events.example.com");
-  assert.equal(config.server.FILE_STORAGE_PATH, "/tmp/board-to-death/files");
+  assert.equal(config.server.FILE_STORAGE_PATH, "/tmp/gatherpulse/files");
 });
 
 test("a Vercel preview deployment resolves its own per-deployment origin", () => {

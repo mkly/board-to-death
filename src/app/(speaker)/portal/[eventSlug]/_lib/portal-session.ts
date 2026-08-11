@@ -10,7 +10,7 @@ import { getDatabaseClient } from "@/server/database/client";
 import { type PortalContentKey, resolveParticipantPortal } from "@/server/participant-portals";
 import { SpeakerAuthService } from "@/server/speaker-auth";
 
-export const SPEAKER_SESSION_COOKIE = "board-to-death.speaker-session";
+export const SPEAKER_SESSION_COOKIE = "gatherpulse.speaker-session";
 
 export function portalHref(eventSlug: string, suffix = ""): string {
   return `/portal/${encodeURIComponent(eventSlug)}${suffix}`;

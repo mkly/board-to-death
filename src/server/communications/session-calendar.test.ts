@@ -55,7 +55,7 @@ describe("session calendar invitations", () => {
     expect(attachment.filename).toBe(`session-${baseInput.event.sessionId}.ics`);
     expect(attachment.contentType).toBe("text/calendar; charset=utf-8; method=REQUEST");
     expect(calendar.getFirstPropertyValue("method")).toBe("REQUEST");
-    expect(event.uid).toBe(`${baseInput.event.sessionId}.${baseInput.event.eventId}@board-to-death`);
+    expect(event.uid).toBe(`${baseInput.event.sessionId}.${baseInput.event.eventId}@gatherpulse`);
     expect(event.sequence).toBe(0);
     expect(component.getFirstPropertyValue("status")).toBe("CONFIRMED");
     expect(event.summary).toBe(baseInput.event.title);

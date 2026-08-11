@@ -49,7 +49,7 @@ test.describe
 
       await context.addCookies([
         { name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL },
-        { name: "board_to_death_active_event", value: fixture.activeEventId, url: baseURL },
+        { name: "gatherpulse_active_event", value: fixture.activeEventId, url: baseURL },
       ]);
       await page.goto(`/dashboard/events/${fixture.eventSlug}/speaker-sourcing`);
       await expect(page.getByRole("heading", { name: "Speaker sourcing" })).toBeVisible();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { Trash2Icon, TriangleAlertIcon, UploadIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -23,9 +23,15 @@ function AvatarCard({ name, avatarUrl }: { readonly name: string; readonly avata
   const [uploadState, uploadFormAction, uploadPending] = useActionState(uploadAvatar, INITIAL_AVATAR_STATE);
   const [removeState, removeFormAction, removePending] = useActionState(removeAvatar, INITIAL_AVATAR_STATE);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const uploadFormRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (uploadState.status === "success" && uploadState.message) toast.success(uploadState.message);
+    if (uploadState.status !== "success") return;
+    if (uploadState.message) toast.success(uploadState.message);
+    // The upload succeeded, so the stale selection must not linger next to the new avatar.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setSelectedFileName(null);
   }, [uploadState]);
   useEffect(() => {
     if (removeState.status === "success" && removeState.message) toast.success(removeState.message);
@@ -52,7 +58,7 @@ function AvatarCard({ name, avatarUrl }: { readonly name: string; readonly avata
             <AlertDescription>{removeState.message}</AlertDescription>
           </Alert>
         )}
-        <form action={uploadFormAction} className="flex flex-wrap items-center gap-4">
+        <form ref={uploadFormRef} action={uploadFormAction} className="flex flex-wrap items-center gap-4">
           <Avatar className="size-16 rounded-lg">
             <AvatarImage src={avatarUrl ?? undefined} alt={name} />
             <AvatarFallback className="rounded-lg text-lg">{getInitials(name)}</AvatarFallback>
@@ -62,12 +68,20 @@ function AvatarCard({ name, avatarUrl }: { readonly name: string; readonly avata
               Avatar image
             </FieldLabel>
             <Input
+              ref={fileInputRef}
               id="avatar-file"
               name="file"
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              onChange={(event) => setSelectedFileName(event.target.files?.[0]?.name ?? null)}
+              disabled={uploadPending}
+              onChange={(event) => {
+                setSelectedFileName(event.target.files?.[0]?.name ?? null);
+                // Uploading is the only thing this input can do, and "Save changes" below does not
+                // pick it up, so choosing a file has to submit rather than wait for a second click.
+                if (event.target.files?.length) uploadFormRef.current?.requestSubmit();
+              }}
             />
+            <FieldDescription>Choosing a file uploads it right away.</FieldDescription>
           </Field>
           <div className="flex gap-2">
             <Button type="submit" variant="outline" disabled={uploadPending || !selectedFileName}>

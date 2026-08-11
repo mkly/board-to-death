@@ -111,13 +111,13 @@ export function iframeEmbedSnippet(urlValue: string, instance: string): string {
   if (safeUrl.protocol !== "http:" && safeUrl.protocol !== "https:")
     throw new Error("Embed URLs must use HTTP or HTTPS.");
   const url = escapeHtmlAttribute(safeUrl.toString());
-  const id = escapeHtmlAttribute(`board-to-death-${instance}`);
+  const id = escapeHtmlAttribute(`gatherpulse-${instance}`);
   const encodedInstance = JSON.stringify(instance);
 
   return `<iframe id="${id}" src="${url}" title="Published event program" loading="lazy" style="width:100%;height:480px;border:0" sandbox="allow-scripts allow-same-origin"></iframe>
 <script>
 (() => {
-  const frame = document.getElementById(${JSON.stringify(`board-to-death-${instance}`)});
+  const frame = document.getElementById(${JSON.stringify(`gatherpulse-${instance}`)});
   if (!(frame instanceof HTMLIFrameElement)) return;
   const expectedOrigin = new URL(frame.src).origin;
   const controller = new AbortController();
@@ -130,7 +130,7 @@ export function iframeEmbedSnippet(urlValue: string, instance: string): string {
   window.addEventListener("message", (event) => {
     const data = event.data;
     if (event.origin !== expectedOrigin || event.source !== frame.contentWindow) return;
-    if (!data || data.type !== "board-to-death:resize" || data.instance !== ${encodedInstance}) return;
+    if (!data || data.type !== "gatherpulse:resize" || data.instance !== ${encodedInstance}) return;
     if (!Number.isFinite(data.height) || data.height < 120 || data.height > 4000) return;
     frame.style.height = Math.ceil(data.height) + "px";
   }, { signal: controller.signal });
@@ -145,6 +145,6 @@ export function webComponentEmbedSnippet(urlValue: string, instance: string): st
   const safeUrl = new URL(urlValue);
   if (safeUrl.protocol !== "http:" && safeUrl.protocol !== "https:")
     throw new Error("Embed URLs must use HTTP or HTTPS.");
-  return `<script type="module" src="${escapeHtmlAttribute(new URL("/embed/board-to-death.js", safeUrl.origin).toString())}"></script>
-<board-to-death-embed src="${escapeHtmlAttribute(safeUrl.toString())}" instance="${escapeHtmlAttribute(instance)}"></board-to-death-embed>`;
+  return `<script type="module" src="${escapeHtmlAttribute(new URL("/embed/gatherpulse.js", safeUrl.origin).toString())}"></script>
+<gatherpulse-embed src="${escapeHtmlAttribute(safeUrl.toString())}" instance="${escapeHtmlAttribute(instance)}"></gatherpulse-embed>`;
 }

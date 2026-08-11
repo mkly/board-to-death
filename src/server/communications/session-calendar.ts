@@ -74,7 +74,7 @@ function normalizeEmail(value: string, field: string): string {
 }
 
 function calendarUid(event: SessionCalendarEvent): string {
-  return `${requireText(event.sessionId, "sessionId")}.${requireText(event.eventId, "eventId")}@board-to-death`;
+  return `${requireText(event.sessionId, "sessionId")}.${requireText(event.eventId, "eventId")}@gatherpulse`;
 }
 
 function calendarSequence(input: SessionCalendarInput): number {

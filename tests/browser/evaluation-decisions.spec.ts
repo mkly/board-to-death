@@ -44,7 +44,7 @@ test("records and refreshes audited final submission decisions", async ({ contex
 
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.sessionToken, url: baseURL },
-    { name: "board_to_death_active_event", value: fixture.eventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/evaluations/results?round=${fixture.roundId}`);
   await expect(page.getByRole("heading", { name: "Evaluation results" })).toBeVisible();
@@ -97,7 +97,7 @@ test("invites every accepted speaker and confirms the submission only after all 
 
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.sessionToken, url: baseURL },
-    { name: "board_to_death_active_event", value: fixture.eventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/evaluations/results?round=${fixture.roundId}`);
   let acceptedRow = page.getByRole("row").filter({ hasText: reference(acceptedId) });

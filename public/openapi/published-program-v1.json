@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Board to Death Published Program API",
+    "title": "GatherPulse Published Program API",
     "version": "1.0.0",
     "description": "Credential-free, read-only access to the current immutable published program. An X-API-Key may be supplied for gateway metering, but it never expands fields or access. Responses never use cookies."
   },

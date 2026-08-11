@@ -1,5 +1,5 @@
 const WEB_COMPONENT_SOURCE = `
-class BoardToDeathEmbed extends HTMLElement {
+class GatherPulseEmbed extends HTMLElement {
   connectedCallback() {
     if (this.controller) return;
     const source = this.getAttribute("src");
@@ -21,7 +21,7 @@ class BoardToDeathEmbed extends HTMLElement {
     window.addEventListener("message", (event) => {
       const data = event.data;
       if (event.origin !== url.origin || event.source !== frame.contentWindow) return;
-      if (!data || data.type !== "board-to-death:resize" || data.instance !== instance) return;
+      if (!data || data.type !== "gatherpulse:resize" || data.instance !== instance) return;
       if (!Number.isFinite(data.height) || data.height < 120 || data.height > 4000) return;
       frame.style.height = Math.ceil(data.height) + "px";
     }, { signal: this.controller.signal });
@@ -33,8 +33,8 @@ class BoardToDeathEmbed extends HTMLElement {
   }
 }
 
-if (!customElements.get("board-to-death-embed")) {
-  customElements.define("board-to-death-embed", BoardToDeathEmbed);
+if (!customElements.get("gatherpulse-embed")) {
+  customElements.define("gatherpulse-embed", GatherPulseEmbed);
 }
 `;
 

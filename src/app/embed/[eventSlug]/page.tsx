@@ -411,7 +411,7 @@ export default async function PublishedEmbedPreview({
         eventSlug={eventSlug}
         eventName={itinerary.eventName}
         sessions={itinerary.sessions}
-        storageKey={`board-to-death:itinerary:${itinerary.eventId}`}
+        storageKey={`gatherpulse:itinerary:${itinerary.eventId}`}
         timezone={itinerary.timezone}
       />
     );

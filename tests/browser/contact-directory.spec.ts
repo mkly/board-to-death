@@ -25,7 +25,7 @@ async function prepareContactDirectory(context: BrowserContext): Promise<Contact
   const fixture = JSON.parse(stdout) as ContactDirectoryFixture;
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL },
-    { name: "board_to_death_active_event", value: fixture.activeEventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: fixture.activeEventId, url: baseURL },
   ]);
   return fixture;
 }

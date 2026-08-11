@@ -50,7 +50,7 @@ async function addSpeakerCookie(context: BrowserContext, value: string): Promise
   const portalUrl = new URL(baseURL);
   await context.addCookies([
     {
-      name: "board-to-death.speaker-session",
+      name: "gatherpulse.speaker-session",
       value,
       domain: portalUrl.hostname,
       path: "/portal",
@@ -275,10 +275,10 @@ test("creates an audience portal, previews its match, and enforces participant v
 
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
-    { name: "board_to_death_active_event", value: eventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: eventId, url: baseURL },
     // This fixture seeds its own organization, and the shell only lists events from the active
     // one, so the dashboard 404s unless the fixture's organization is selected explicitly.
-    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+    { name: "gatherpulse_active_org", value: fixture.organizationId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/portals`);
   await expect(page.getByRole("heading", { name: "Participant portals" })).toBeVisible();
@@ -480,7 +480,7 @@ test("requests a fresh link after session expiry and lets an organizer resend it
   organizerDelivery.catch(() => undefined);
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
-    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+    { name: "gatherpulse_active_org", value: fixture.organizationId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/speakers/${fixture.speakerId}`);
   await page.getByRole("button", { name: "Send sign-in link" }).click();
@@ -502,7 +502,7 @@ test("submits text and file tasks, preserves revisions, and enforces speaker own
 
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
-    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+    { name: "gatherpulse_active_org", value: fixture.organizationId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/onboarding`);
   const textRow = page.getByRole("row", { name: /Ada Lovelace Share your arrival details/ });
@@ -540,7 +540,7 @@ test("submits text and file tasks, preserves revisions, and enforces speaker own
 
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.adminSessionCookie, url: baseURL },
-    { name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL },
+    { name: "gatherpulse_active_org", value: fixture.organizationId, url: baseURL },
   ]);
   await page.goto(`/dashboard/events/${fixture.eventSlug}/onboarding`);
   const fileRow = page.getByRole("row", { name: /Ada Lovelace Upload your slides/ });

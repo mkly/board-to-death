@@ -319,7 +319,7 @@ export function CreateEventWizard({
               value={state.name}
               autoFocus
               aria-invalid={Boolean(errorFor("name"))}
-              placeholder="Board to Death 2027"
+              placeholder="GatherPulse 2027"
               onChange={({ target }) =>
                 update({ name: target.value, slug: state.slugEdited ? state.slug : slugify(target.value) })
               }
@@ -332,7 +332,7 @@ export function CreateEventWizard({
               id="wizard-slug"
               value={state.slug}
               aria-invalid={Boolean(errorFor("slug"))}
-              placeholder="board-to-death-2027"
+              placeholder="gatherpulse-2027"
               onChange={({ target }) => update({ slug: target.value, slugEdited: true })}
             />
             <FieldDescription>Used in links. Lowercase letters, numbers, and single hyphens.</FieldDescription>

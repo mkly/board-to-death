@@ -166,7 +166,7 @@ Environment Variables" setting on — the client bundle reads the `NEXT_PUBLIC_V
 
 File storage on Vercel defaults to the S3 driver like any other production deployment, so also set
 `FILE_STORAGE_S3_BUCKET`, `FILE_STORAGE_S3_REGION`, and AWS credentials (`AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY`). Setting `FILE_STORAGE_DRIVER=local` instead falls back to `/tmp/board-to-death/files`,
+`AWS_SECRET_ACCESS_KEY`). Setting `FILE_STORAGE_DRIVER=local` instead falls back to `/tmp/gatherpulse/files`,
 the only writable location in a Vercel function — per-instance scratch space that disappears between invocations,
 so it satisfies the readiness probe but is **not** durable storage.
 

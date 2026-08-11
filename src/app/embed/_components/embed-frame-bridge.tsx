@@ -11,7 +11,7 @@ export function EmbedFrameBridge({ instance }: { readonly instance: string }) {
     const notify = () => {
       window.parent.postMessage(
         {
-          type: "board-to-death:resize",
+          type: "gatherpulse:resize",
           instance,
           height: Math.ceil(document.documentElement.getBoundingClientRect().height),
         },

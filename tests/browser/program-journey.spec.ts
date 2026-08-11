@@ -38,7 +38,7 @@ test.describe("Program journey", () => {
   test.beforeEach(async ({ context }) => {
     await context.addCookies([
       { name: "better-auth.session_token", value: fixture.sessionToken, url: baseURL },
-      { name: "board_to_death_active_event", value: fixture.eventId, url: baseURL },
+      { name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL },
     ]);
   });
 

@@ -63,7 +63,7 @@ test("configures, previews, persists, copies, validates, and adapts the embed bu
   expect(clipboard).toContain("controller.abort()");
 
   await page.getByRole("tab", { name: "Web component" }).click();
-  await expect(page.getByLabel("Web component snippet")).toContainText("/embed/board-to-death.js");
+  await expect(page.getByLabel("Web component snippet")).toContainText("/embed/gatherpulse.js");
 
   for (const [tab, format] of [
     ["Basic HTML", "html"],

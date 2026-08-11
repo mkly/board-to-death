@@ -91,8 +91,7 @@ export function DeveloperAccessWorkspace({ event, tokens, endpoints, deliveries 
           <CardHeader>
             <CardTitle>Register a webhook</CardTitle>
             <CardDescription>
-              Payloads include a stable delivery ID and an HMAC-SHA256 signature in the x-board-to-death-signature
-              header.
+              Payloads include a stable delivery ID and an HMAC-SHA256 signature in the x-gatherpulse-signature header.
             </CardDescription>
           </CardHeader>
           <CardContent>

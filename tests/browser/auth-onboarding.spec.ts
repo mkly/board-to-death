@@ -123,7 +123,7 @@ test.describe
       page,
     }) => {
       await signInAsAdmin(page);
-      await page.context().addCookies([{ name: "board_to_death_active_org", value: organizationId, url: baseURL }]);
+      await page.context().addCookies([{ name: "gatherpulse_active_org", value: organizationId, url: baseURL }]);
       await page.goto("/dashboard/organization");
       await expect(page.getByRole("heading", { name: "Organization team" })).toBeVisible();
       await page.getByLabel("Email").fill(organizationInviteEmail);
@@ -158,7 +158,7 @@ test.describe
 
     test("accepts a brand-new event invite without granting organization membership", async ({ browser, page }) => {
       await signInAsAdmin(page);
-      await page.context().addCookies([{ name: "board_to_death_active_org", value: organizationId, url: baseURL }]);
+      await page.context().addCookies([{ name: "gatherpulse_active_org", value: organizationId, url: baseURL }]);
       await page.goto(`/dashboard/events/${eventSlug}/settings/team`);
       await page.getByLabel("Email").fill(eventInviteEmail);
       await page.getByLabel("Display name").fill("Event Invitee");

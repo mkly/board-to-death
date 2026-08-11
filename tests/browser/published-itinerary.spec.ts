@@ -274,7 +274,7 @@ test("renders inside a hostile host page without inheriting its styles", async (
         const expectedOrigin = new URL(frame.src, location.href).origin;
         window.addEventListener("message", (event) => {
           if (event.origin !== expectedOrigin || event.source !== frame.contentWindow) return;
-          if (event.data?.type !== "board-to-death:resize" || event.data.instance !== "browser-test") return;
+          if (event.data?.type !== "gatherpulse:resize" || event.data.instance !== "browser-test") return;
           frame.style.height = Math.ceil(event.data.height) + "px";
         });
       </script>

@@ -35,7 +35,7 @@ test.describe("event overview dashboard", () => {
   test("summarizes the active event with actionable, event-scoped metrics", async ({ context, page }) => {
     test.setTimeout(60_000);
     const fixture = await prepareOverview(context);
-    await context.addCookies([{ name: "board_to_death_active_event", value: fixture.eventId, url: baseURL }]);
+    await context.addCookies([{ name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL }]);
     await page.goto(`/dashboard/events/${fixture.eventSlug}/overview`);
 
     await expect(page.getByRole("heading", { name: "Overview Summit" })).toBeVisible();
@@ -88,7 +88,7 @@ test.describe("event overview dashboard", () => {
   test("renders empty states for an event with no program data", async ({ context, page }) => {
     test.setTimeout(60_000);
     const fixture = await prepareOverview(context);
-    await context.addCookies([{ name: "board_to_death_active_event", value: fixture.emptyEventId, url: baseURL }]);
+    await context.addCookies([{ name: "gatherpulse_active_event", value: fixture.emptyEventId, url: baseURL }]);
     await page.goto(`/dashboard/events/${fixture.emptyEventSlug}/overview`);
 
     await expect(page.getByRole("heading", { name: "Empty Overview Event" })).toBeVisible();

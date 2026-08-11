@@ -91,7 +91,7 @@ if (browserStatePath) {
           sameSite: "Lax",
         },
         {
-          name: "board_to_death_active_event",
+          name: "gatherpulse_active_event",
           value: event.id,
           domain,
           path: "/dashboard",

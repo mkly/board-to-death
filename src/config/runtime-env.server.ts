@@ -115,7 +115,7 @@ export type ServerRuntimeConfig = z.infer<typeof serverSchema>;
 // location, and no stable per-deployment URL to hardcode. Supply both rather
 // than failing the production check on values the platform cannot be told.
 // /tmp is per-instance and ephemeral, so this is scratch space only.
-export const VERCEL_FILE_STORAGE_PATH = "/tmp/board-to-death/files";
+export const VERCEL_FILE_STORAGE_PATH = "/tmp/gatherpulse/files";
 
 function getVercelDefaults(environment: Environment): ServerRuntimeValues {
   if (!environment.VERCEL) {

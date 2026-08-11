@@ -61,7 +61,7 @@ test("builds, filters, duplicates, exports, deletes, and isolates saved reports"
     await signInAsAdmin(page);
     await context.addCookies([
       {
-        name: "board_to_death_active_event",
+        name: "gatherpulse_active_event",
         value: event.id,
         domain: "127.0.0.1",
         path: "/dashboard",

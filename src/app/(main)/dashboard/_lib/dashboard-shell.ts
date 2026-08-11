@@ -1,4 +1,4 @@
-export const ACTIVE_EVENT_COOKIE = "board_to_death_active_event";
+export const ACTIVE_EVENT_COOKIE = "gatherpulse_active_event";
 
 export interface DashboardOrganization {
   readonly id: string;

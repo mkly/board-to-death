@@ -93,7 +93,7 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await signInAsAdmin(page);
   await context.addCookies([
     {
-      name: "board_to_death_active_event",
+      name: "gatherpulse_active_event",
       value: eventId,
       domain: new URL(baseURL ?? "http://127.0.0.1:3100").hostname,
       path: "/dashboard",

@@ -272,7 +272,7 @@ test("finalizes one published submission and shows it in the correct event dashb
     expect(thankYou.rows[0].idempotencyKey).toBe(`cfp-thank-you:${submission.rows[0].id}`);
 
     await signInAsAdmin(page);
-    await context.addCookies([{ name: "board_to_death_active_event", value: eventId, url: baseURL }]);
+    await context.addCookies([{ name: "gatherpulse_active_event", value: eventId, url: baseURL }]);
     await page.goto(`/dashboard/events/${eventSlug}/submissions`);
     await expect(page.getByText("Showing 1–1 of 1")).toBeVisible();
     await expect(page.getByText("Share your session")).toBeVisible();

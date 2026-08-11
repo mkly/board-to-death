@@ -68,7 +68,7 @@ describe("published embed configuration", () => {
     expect(iframe).toContain('data.instance !== "instance-1"');
     expect(iframe).toContain("controller.abort()");
     expect(component).toContain(`src="${url.replaceAll("&", "&amp;")}"`);
-    expect(component).toContain("https://events.example/embed/board-to-death.js");
+    expect(component).toContain("https://events.example/embed/gatherpulse.js");
   });
 
   it("rejects executable URL protocols", () => {

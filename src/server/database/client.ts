@@ -6,7 +6,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 import { withQueryInstrumentation } from "@/server/observability/prisma-instrumentation";
 
 type PrismaGlobal = typeof globalThis & {
-  boardToDeathPrisma?: PrismaClient;
+  gatherPulsePrisma?: PrismaClient;
 };
 
 function requireDatabaseUrl(): string {
@@ -47,9 +47,9 @@ export function createDatabaseClient(databaseUrl = requireDatabaseUrl()): Prisma
 export function getDatabaseClient(): PrismaClient {
   const prismaGlobal = globalThis as PrismaGlobal;
 
-  if (!prismaGlobal.boardToDeathPrisma) {
-    prismaGlobal.boardToDeathPrisma = createDatabaseClient();
+  if (!prismaGlobal.gatherPulsePrisma) {
+    prismaGlobal.gatherPulsePrisma = createDatabaseClient();
   }
 
-  return prismaGlobal.boardToDeathPrisma;
+  return prismaGlobal.gatherPulsePrisma;
 }

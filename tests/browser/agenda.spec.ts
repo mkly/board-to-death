@@ -129,7 +129,7 @@ test("creates, filters, edits, confirms conflicts, persists, and removes agenda 
     await signInAsAdmin(page);
     await context.addCookies([
       {
-        name: "board_to_death_active_event",
+        name: "gatherpulse_active_event",
         value: event.id,
         domain: "127.0.0.1",
         path: "/dashboard",

@@ -113,7 +113,7 @@ test("selects records, confirms the count, reports a partial failure, audits cha
     await signInAsAdmin(page);
     await context.addCookies([
       {
-        name: "board_to_death_active_event",
+        name: "gatherpulse_active_event",
         value: eventId,
         domain: "127.0.0.1",
         path: "/dashboard",

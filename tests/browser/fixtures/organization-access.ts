@@ -25,7 +25,7 @@ const databaseUrl =
  * and a leftover representative organization from an earlier spec (…000000000050) sorts ahead
  * of the seeded legacy organization (…000000000100), silently hiding every legacy-org event
  * behind a 404. The legacy membership is therefore backdated so it always wins the fallback;
- * a fixture that wants its own organization active sets the `board_to_death_active_org` cookie.
+ * a fixture that wants its own organization active sets the `gatherpulse_active_org` cookie.
  */
 const legacyOrganizationId = "00000000-0000-4000-8000-000000000100";
 export async function grantSeededOrganizationAccess(email: string): Promise<void> {

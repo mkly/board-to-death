@@ -93,7 +93,7 @@ describe("developer API tokens and webhooks", () => {
         now: firstAttemptAt,
         fetcher: async (_input, init) => {
           requestBody = String(init?.body);
-          signature = new Headers(init?.headers).get("x-board-to-death-signature") ?? "";
+          signature = new Headers(init?.headers).get("x-gatherpulse-signature") ?? "";
           return new Response(null, { status: 503 });
         },
       },

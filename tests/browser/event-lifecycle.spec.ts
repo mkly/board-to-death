@@ -26,7 +26,7 @@ async function prepareLifecycle(context: BrowserContext): Promise<LifecycleFixtu
   const fixture = JSON.parse(stdout) as LifecycleFixture;
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL },
-    { name: "board_to_death_active_event", value: fixture.eventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL },
   ]);
   return fixture;
 }

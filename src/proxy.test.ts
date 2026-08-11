@@ -51,7 +51,7 @@ describe("dashboard proxy", () => {
     const response = await proxy(
       new NextRequest("http://localhost:3000/dashboard/events/private-event/overview", {
         headers: {
-          cookie: "better-auth.session_token=session-1; board_to_death_active_org=organization-2",
+          cookie: "better-auth.session_token=session-1; gatherpulse_active_org=organization-2",
         },
       }),
     );
@@ -70,7 +70,7 @@ describe("dashboard proxy", () => {
     const response = await proxy(
       new NextRequest("http://localhost:3000/dashboard/events/invited-event/overview", {
         headers: {
-          cookie: "better-auth.session_token=session-1; board_to_death_active_org=organization-1",
+          cookie: "better-auth.session_token=session-1; gatherpulse_active_org=organization-1",
         },
       }),
     );

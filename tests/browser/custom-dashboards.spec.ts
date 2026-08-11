@@ -25,7 +25,7 @@ async function prepareDashboard(context: BrowserContext): Promise<DashboardFixtu
   const fixture = JSON.parse(stdout) as DashboardFixture;
   await context.addCookies([
     { name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL },
-    { name: "board_to_death_active_event", value: fixture.eventId, url: baseURL },
+    { name: "gatherpulse_active_event", value: fixture.eventId, url: baseURL },
   ]);
   return fixture;
 }

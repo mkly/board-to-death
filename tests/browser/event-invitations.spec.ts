@@ -60,9 +60,7 @@ test("invites, accepts, isolates, resends, and revokes event memberships", async
     await signInAsAdmin(page);
     // The admin owns every seeded organization, and the dashboard shell only shows events from the
     // active one, so the fixture's organization has to be selected before its event is reachable.
-    await page
-      .context()
-      .addCookies([{ name: "board_to_death_active_org", value: fixture.organizationId, url: baseURL }]);
+    await page.context().addCookies([{ name: "gatherpulse_active_org", value: fixture.organizationId, url: baseURL }]);
     await page.goto(`/dashboard/events/${fixture.eventSlug}/settings/team`);
     await expect(page.getByRole("heading", { name: "Team & reviewers" })).toBeVisible();
 

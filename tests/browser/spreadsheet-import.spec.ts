@@ -37,7 +37,7 @@ test.describe
       await context.addCookies([
         { name: "better-auth.session_token", value: fixture.sessionCookie, url: baseURL },
         {
-          name: "board_to_death_active_event",
+          name: "gatherpulse_active_event",
           value: fixture.eventId,
           domain: "127.0.0.1",
           path: "/dashboard",

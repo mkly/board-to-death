@@ -53,7 +53,7 @@ test.describe("CFP setup", () => {
         sameSite: "Lax",
       },
       {
-        name: "board_to_death_active_event",
+        name: "gatherpulse_active_event",
         value: eventId,
         url: baseURL,
         sameSite: "Lax",

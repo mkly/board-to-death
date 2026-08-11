@@ -87,7 +87,7 @@ describe("published itinerary calendar", () => {
     assert.equal(result.eventCount, 1);
     assert.equal(components.length, 1);
     const event = new ICAL.Event(components[0]);
-    assert.equal(event.uid, "placement-2.event-1@board-to-death");
+    assert.equal(event.uid, "placement-2.event-1@gatherpulse");
     assert.equal(event.summary, "Designing better boards");
     assert.equal(event.location, "Garden Room");
     assert.equal(event.startDate.toJSDate().toISOString(), "2027-03-14T18:00:00.000Z");

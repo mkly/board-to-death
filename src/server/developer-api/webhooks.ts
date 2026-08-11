@@ -68,8 +68,8 @@ async function attemptDelivery(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-board-to-death-event": delivery.eventType,
-        "x-board-to-death-signature": webhookSignature(delivery.endpoint.signingSecret, body),
+        "x-gatherpulse-event": delivery.eventType,
+        "x-gatherpulse-signature": webhookSignature(delivery.endpoint.signingSecret, body),
       },
       body,
       signal: AbortSignal.timeout(5_000),

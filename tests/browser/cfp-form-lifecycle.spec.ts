@@ -129,7 +129,7 @@ test("duplicates, closes, reopens, and archives an event-scoped CFP form with co
     ]);
     await context.addCookies([
       {
-        name: "board_to_death_active_event",
+        name: "gatherpulse_active_event",
         value: eventId,
         domain: "127.0.0.1",
         path: "/dashboard",

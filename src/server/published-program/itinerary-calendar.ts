@@ -4,7 +4,7 @@ import type { PublicPublishedProgramLookup, PublishedProgramSnapshot } from "./r
 
 const MAX_SELECTED_PLACEMENTS = 500;
 const calendarProductId = {
-  company: "Board to Death",
+  company: "GatherPulse",
   product: "Personal Itinerary",
   language: "EN",
 } as const;
@@ -43,7 +43,7 @@ export function createPublishedItineraryCalendar(
     if (!session) continue;
 
     calendar.createEvent({
-      id: `${placement.id}.${snapshot.event.id}@board-to-death`,
+      id: `${placement.id}.${snapshot.event.id}@gatherpulse`,
       start: new Date(placement.startsAt),
       end: new Date(placement.endsAt),
       stamp,

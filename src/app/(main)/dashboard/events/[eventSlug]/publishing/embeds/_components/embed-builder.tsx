@@ -97,7 +97,7 @@ function isFeedOutput(type: OutputType): type is PublishedScheduleFeedFormat {
 export function EmbedBuilder({ event }: { readonly event: { readonly name: string; readonly slug: string } }) {
   const reactId = useId();
   const instance = useMemo(() => `preview-${reactId.replaceAll(":", "")}`, [reactId]);
-  const storageKey = `board-to-death:embed-builder:${event.slug}`;
+  const storageKey = `gatherpulse:embed-builder:${event.slug}`;
   const [configuration, setConfiguration] = useState<EmbedConfiguration>(DEFAULT_EMBED_CONFIGURATION);
   const [outputType, setOutputType] = useState<OutputType>("iframe");
   const [copyFeedback, setCopyFeedback] = useState("");
