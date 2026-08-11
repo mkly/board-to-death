@@ -1,10 +1,7 @@
 # GatherPulse
 
 GatherPulse is a self-hosted conference program workspace. Program teams can open a call for proposals, review
-submissions, onboard accepted speakers, build an agenda, publish attendee-facing program views, and preview an
-Accelevents sync from one event-scoped dashboard.
-
-![Published agenda with day, room, and track filters](media/published-agenda.png)
+submissions, onboard accepted speakers, build an agenda, and publish attendee-facing program views.
 
 The application uses Next.js 16, React 19, TypeScript, PostgreSQL, Prisma, Tailwind CSS, and shadcn/ui. It supports an
 English-language workflow for organizers, applicants, reviewers, and speakers.
