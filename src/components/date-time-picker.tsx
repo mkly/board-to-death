@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { format, parse } from "date-fns";
+import { addYears, format, parse, subYears } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,8 @@ export function DateTimePicker({
   const selected = parseValue(currentValue);
   const time = currentValue.split("T")[1] ?? "";
   const minDate = parseValue(min);
+  const [month, setMonth] = useState(() => selected ?? minDate ?? new Date());
+  const today = new Date();
 
   const setValue = (next: string) => {
     setInternalValue(next);
@@ -69,7 +71,13 @@ export function DateTimePicker({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setMonth(selected ?? minDate ?? new Date());
+        setOpen(nextOpen);
+      }}
+    >
       {name ? <input type="hidden" name={name} value={currentValue} /> : null}
       <PopoverTrigger asChild>
         <Button
@@ -88,7 +96,10 @@ export function DateTimePicker({
         <Calendar
           mode="single"
           selected={selected ?? undefined}
-          defaultMonth={selected ?? minDate ?? undefined}
+          month={month}
+          onMonthChange={setMonth}
+          startMonth={minDate ?? subYears(today, 100)}
+          endMonth={addYears(today, 100)}
           disabled={minDate ? { before: minDate } : undefined}
           captionLayout="dropdown"
           onSelect={handleSelect}

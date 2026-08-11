@@ -1,9 +1,10 @@
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 
+import type { NextConfig } from "next";
+
 import { parsePublicRuntimeConfig } from "./src/config/public-env.ts";
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+const nextConfig: NextConfig = {
   reactCompiler: true,
   experimental: {
     serverActions: {
@@ -23,7 +24,7 @@ const nextConfig = {
   },
 };
 
-export default (phase) => {
+export default (phase: string): NextConfig => {
   // Only the public config is checked here, and only NEXT_PUBLIC_APP_URL is
   // inlined into client code at build time. Server secrets (AUTH_SECRET,
   // DATABASE_URL) are validated fail-fast at process start in
