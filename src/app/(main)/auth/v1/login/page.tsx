@@ -29,8 +29,8 @@ export default async function LoginV1({ searchParams }: LoginV1Props) {
               className="mx-auto size-12 object-contain"
             />
             <div className="space-y-2">
-              <h1 className="font-light! text-5xl text-white tracking-normal!">Hello again</h1>
-              <p className="text-white/80 text-xl">Login to continue</p>
+              <p className="font-light text-5xl text-white">Hello again</p>
+              <p className="text-white/80 text-xl">Log in to continue</p>
             </div>
           </div>
         </div>
@@ -39,7 +39,7 @@ export default async function LoginV1({ searchParams }: LoginV1Props) {
       <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3 dark:bg-[#010706]">
         <div className="w-full max-w-md space-y-10 py-24 lg:py-32">
           <div className="space-y-4 text-center">
-            <div className="font-medium tracking-tight">Login</div>
+            <h1 className="font-medium tracking-tight">Log in</h1>
             <div className="mx-auto max-w-xl text-muted-foreground">
               Enter your account email address and we&apos;ll send you a secure, single-use sign-in link.
             </div>
@@ -49,7 +49,7 @@ export default async function LoginV1({ searchParams }: LoginV1Props) {
             <p className="text-center text-muted-foreground text-xs">
               Don&apos;t have an account?{" "}
               <Link prefetch={false} href="/auth/v1/register" className="text-primary">
-                Create your organization
+                Create your workspace
               </Link>
             </p>
           </div>

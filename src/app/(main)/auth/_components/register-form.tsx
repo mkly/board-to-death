@@ -14,7 +14,7 @@ const formSchema = z.object({
   organizationName: z
     .string()
     .trim()
-    .min(2, "Enter your organization name.")
+    .min(2, "Enter your workspace name.")
     .max(120, "Keep the name under 120 characters."),
 });
 
@@ -66,7 +66,7 @@ export function RegisterForm({ defaultEmail }: { readonly defaultEmail?: string 
       <div className="flex flex-col gap-2 text-center" role="status">
         <p className="font-medium">Check your inbox</p>
         <p className="text-muted-foreground text-sm">
-          A single-use link to finish creating your organization is on its way. It expires in 10 minutes.
+          A single-use link to finish creating your workspace is on its way. It expires in 10 minutes.
         </p>
       </div>
     );
@@ -76,7 +76,7 @@ export function RegisterForm({ defaultEmail }: { readonly defaultEmail?: string 
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
       <FieldGroup className="gap-4">
         <Field className="gap-1.5" data-invalid={Boolean(errors.organizationName)}>
-          <FieldLabel htmlFor="register-organization">Organization name</FieldLabel>
+          <FieldLabel htmlFor="register-organization">Workspace name</FieldLabel>
           <Input
             id="register-organization"
             name="organizationName"
@@ -104,7 +104,7 @@ export function RegisterForm({ defaultEmail }: { readonly defaultEmail?: string 
             disabled={isPending}
             required
           />
-          <FieldDescription>You will become this organization&apos;s owner.</FieldDescription>
+          <FieldDescription>You will become this workspace&apos;s owner.</FieldDescription>
           {errors.email && <FieldError>{errors.email}</FieldError>}
         </Field>
       </FieldGroup>

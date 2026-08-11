@@ -42,12 +42,12 @@ export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL
           <AlertTitle>We couldn&apos;t find that account</AlertTitle>
           <AlertDescription className="flex flex-col items-start gap-2">
             <span>
-              No GatherPulse account is registered to {state.email}. Check the address for typos, or create an
-              organization to get started.
+              No GatherPulse account is registered to {state.email}. Check the address for typos, or create a workspace
+              to get started.
             </span>
             <Button asChild size="sm" variant="outline">
               <Link prefetch={false} href={`/auth/v1/register?email=${encodeURIComponent(state.email)}`}>
-                Create your organization
+                Create your workspace
               </Link>
             </Button>
           </AlertDescription>
@@ -67,7 +67,7 @@ export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL
             disabled={isPending}
             required
           />
-          <FieldDescription>Use the email address linked to your organization or event membership.</FieldDescription>
+          <FieldDescription>Use the email address linked to your workspace or event membership.</FieldDescription>
           {fieldError && <FieldError>{fieldError}</FieldError>}
         </Field>
       </FieldGroup>

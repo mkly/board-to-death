@@ -30,7 +30,7 @@ export default async function RegisterV1({ searchParams }: RegisterV1Props) {
             />
             <div className="flex flex-col gap-2">
               <p className="font-light text-5xl text-white">Your event workspace</p>
-              <p className="text-white/80 text-xl">One link away.</p>
+              <p className="text-white/80 text-xl">Let&apos;s set it up</p>
             </div>
           </div>
         </div>
@@ -39,9 +39,11 @@ export default async function RegisterV1({ searchParams }: RegisterV1Props) {
       <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3 dark:bg-[#010706]">
         <div className="flex w-full max-w-md flex-col gap-10 py-24 lg:py-32">
           <div className="flex flex-col gap-4 text-center">
-            <h1 className="font-medium tracking-tight">Create your organization</h1>
+            <h1 className="font-medium tracking-tight">Create your workspace</h1>
             <div className="mx-auto max-w-xl text-muted-foreground">
-              Start a private workspace for your events with a secure, passwordless signup link.
+              {defaultEmail
+                ? "We didn't find an account for that email — create your workspace to get started."
+                : "Start a private workspace for your events with a secure, passwordless signup link."}
             </div>
           </div>
           <div className="flex flex-col gap-4">
@@ -49,7 +51,7 @@ export default async function RegisterV1({ searchParams }: RegisterV1Props) {
             <p className="text-center text-muted-foreground text-xs">
               Already have an account?{" "}
               <Link prefetch={false} href="login" className="text-primary">
-                Login
+                Log in
               </Link>
             </p>
           </div>
