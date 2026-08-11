@@ -51,6 +51,7 @@ interface PlainTaskResponseFormProps {
 
 function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseFormProps) {
   const [state, formAction, pending] = useActionState(action, initialTaskSubmissionState);
+  const inputInvalid = state.status === "error" && state.inputError === true;
   let submitIcon = <SendIcon data-icon="inline-start" />;
   if (pending) submitIcon = <Spinner data-icon="inline-start" />;
   else if (kind === "FILE") submitIcon = <UploadIcon data-icon="inline-start" />;
@@ -59,7 +60,7 @@ function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseF
     <form action={formAction} className="flex flex-col gap-5">
       <FieldGroup>
         {kind === "TEXT" ? (
-          <Field data-invalid={state.status === "error"}>
+          <Field data-invalid={inputInvalid}>
             <FieldLabel htmlFor="task-response">Your response</FieldLabel>
             <Textarea
               id="task-response"
@@ -68,13 +69,13 @@ function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseF
               rows={6}
               maxLength={10_000}
               required
-              aria-invalid={state.status === "error"}
+              aria-invalid={inputInvalid}
             />
             <FieldDescription>Provide the information requested by the event team.</FieldDescription>
           </Field>
         ) : null}
         {kind === "FILE" ? (
-          <Field data-invalid={state.status === "error"}>
+          <Field data-invalid={inputInvalid}>
             <FieldLabel htmlFor="task-file">Response file</FieldLabel>
             <Input
               id="task-file"
@@ -82,14 +83,14 @@ function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseF
               type="file"
               accept=".pdf,.txt,.jpg,.jpeg,.png,.webp"
               required
-              aria-invalid={state.status === "error"}
+              aria-invalid={inputInvalid}
             />
             <FieldDescription>PDF, text, JPEG, PNG, or WebP; 5 MB maximum.</FieldDescription>
           </Field>
         ) : null}
         {kind === "CONFIRMATION" ? (
-          <Field orientation="horizontal" data-invalid={state.status === "error"}>
-            <Checkbox id="task-approved" name="approved" required aria-invalid={state.status === "error"} />
+          <Field orientation="horizontal" data-invalid={inputInvalid}>
+            <Checkbox id="task-approved" name="approved" required aria-invalid={inputInvalid} />
             <FieldLabel htmlFor="task-approved" className="font-normal">
               I have reviewed the instructions and confirm this task is complete.
             </FieldLabel>

@@ -39,6 +39,9 @@ const STEPS = [
 
 type StepKey = (typeof STEPS)[number]["key"];
 
+// Keys stepClientErrors can produce; other clientErrors keys (branding file picks) are managed elsewhere.
+const VALIDATED_FIELDS = new Set(["name", "slug", "timezone", "startsAt", "endsAt"]);
+
 const STEP_FIELDS: Record<StepKey, readonly string[]> = {
   basics: ["name", "slug", "type"],
   schedule: ["websiteUrl", "location", "timezone", "startsAt", "endsAt"],
@@ -197,7 +200,20 @@ export function CreateEventWizard({
     };
   }, []);
 
-  const update = (patch: Partial<WizardState>) => setState((current) => ({ ...current, ...patch }));
+  const update = (patch: Partial<WizardState>) => {
+    setState((current) => ({ ...current, ...patch }));
+    const next = { ...state, ...patch };
+    setClientErrors((current) => {
+      if (!Object.keys(current).some((key) => VALIDATED_FIELDS.has(key))) return current;
+      const recomputed = stepClientErrors(step.key, next);
+      const result: Record<string, string> = {};
+      for (const [key, message] of Object.entries(current)) {
+        if (!VALIDATED_FIELDS.has(key)) result[key] = message;
+        else if (recomputed[key]) result[key] = recomputed[key];
+      }
+      return result;
+    });
+  };
 
   const selectImage = (target: "logo" | "background", label: string, maxMegabytes: number) => (file: File) => {
     const error = brandingImageError(file, label, maxMegabytes);

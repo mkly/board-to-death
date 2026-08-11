@@ -35,9 +35,11 @@ export function AccountSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Avatar className="size-8 rounded-lg">
+        <Avatar className="size-8">
           <AvatarImage src={activeUser.avatar || undefined} alt={activeUser.name} />
-          <AvatarFallback>{getInitials(activeUser.name)}</AvatarFallback>
+          <AvatarFallback className="bg-primary/15 font-medium text-primary">
+            {getInitials(activeUser.name).slice(0, 1)}
+          </AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-56 space-y-1 rounded-lg" side="bottom" align="end" sideOffset={4}>
@@ -49,9 +51,11 @@ export function AccountSwitcher({
             onClick={() => setActiveUser(user)}
           >
             <div className="flex w-full items-center gap-2 px-1 py-1.5">
-              <Avatar className="size-9 rounded-lg">
+              <Avatar className="size-9">
                 <AvatarImage src={user.avatar || undefined} alt={user.name} />
-                <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                <AvatarFallback className="bg-primary/15 font-medium text-primary">
+                  {getInitials(user.name).slice(0, 1)}
+                </AvatarFallback>
               </Avatar>
               <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">{user.name}</span>

@@ -20,11 +20,15 @@ const formSchema = z.object({
 
 type FieldErrors = Partial<Record<keyof z.infer<typeof formSchema>, string>>;
 
-export function RegisterForm() {
+export function RegisterForm({ defaultEmail }: { readonly defaultEmail?: string }) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
   const [isPending, setIsPending] = useState(false);
   const [isSent, setIsSent] = useState(false);
+
+  const clearError = (field: keyof FieldErrors) => () => {
+    setErrors((current) => (current[field] ? { ...current, [field]: undefined } : current));
+  };
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,9 +80,10 @@ export function RegisterForm() {
           <Input
             id="register-organization"
             name="organizationName"
-            placeholder="MeepleCon"
+            placeholder="Aurora Events Co."
             autoComplete="organization"
             aria-invalid={Boolean(errors.organizationName)}
+            onChange={clearError("organizationName")}
             disabled={isPending}
             required
           />
@@ -92,8 +97,10 @@ export function RegisterForm() {
             name="email"
             type="email"
             placeholder="you@example.com"
+            defaultValue={defaultEmail}
             autoComplete="email"
             aria-invalid={Boolean(errors.email)}
+            onChange={clearError("email")}
             disabled={isPending}
             required
           />

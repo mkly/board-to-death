@@ -39,6 +39,7 @@ export async function commentOnSpeakerTaskFile(
 export interface TaskSubmissionState {
   readonly message: string;
   readonly status: "error" | "idle" | "success";
+  readonly inputError?: boolean;
 }
 
 export interface TaskFormState {
@@ -55,7 +56,9 @@ function speakerFiles(): SpeakerFileService {
 }
 
 function failure(error: unknown): TaskSubmissionState {
-  if (error instanceof RepositoryError) return { status: "error", message: error.message };
+  if (error instanceof RepositoryError) {
+    return { status: "error", message: error.message, inputError: error.code === "invalid-input" };
+  }
   console.error(error);
   return { status: "error", message: "The task could not be submitted. Try again." };
 }

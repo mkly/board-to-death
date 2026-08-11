@@ -68,6 +68,16 @@ export function PublicCfpSpeakers({ definition, state, initialParticipants }: Pu
       ? initialParticipants.map((participant, index) => speakerFromRecord(participant, index))
       : Array.from({ length: minimum ?? 0 }, (_, index) => emptySpeaker(index)),
   );
+  // Server errors are keyed by submitted row index. Snapshot the row keys whenever a new action
+  // state arrives so errors stay attached to the rows that were submitted, even if rows are
+  // added or removed afterwards.
+  const [errorRows, setErrorRows] = useState<{
+    readonly state: PublicCfpFormActionState;
+    readonly keys: readonly number[];
+  }>(() => ({ state, keys: speakers.map((speaker) => speaker.key) }));
+  if (errorRows.state !== state) {
+    setErrorRows({ state, keys: speakers.map((speaker) => speaker.key) });
+  }
   if (minimum === undefined || maximum === undefined) return null;
 
   const requiredFields = new Set(definition.requiredSpeakerFields ?? []);
@@ -95,98 +105,101 @@ export function PublicCfpSpeakers({ definition, state, initialParticipants }: Pu
       <CardContent>
         <FieldGroup>
           {state.errors?.participants ? <FieldError errors={fieldErrors(state, "participants")} /> : null}
-          {speakers.map((speaker, index) => (
-            <FieldSet key={speaker.key}>
-              {index > 0 ? <Separator /> : null}
-              <div className="flex items-center justify-between gap-3">
-                <FieldLegend>Speaker {index + 1}</FieldLegend>
-                <Button
-                  aria-label={`Remove speaker ${index + 1}`}
-                  disabled={speakers.length <= minimum}
-                  onClick={() => setSpeakers((current) => current.filter((_, position) => position !== index))}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Trash2Icon />
-                </Button>
-              </div>
-              <FieldGroup>
-                {(["givenName", "familyName", "email"] as const).map((field) => {
-                  const name = `speaker.${index}.${field}`;
-                  const error = state.errors?.[name]?.[0];
-                  const labels = { givenName: "First name", familyName: "Last name", email: "Email" } as const;
-                  return (
-                    <Field data-invalid={Boolean(error) || undefined} key={field}>
-                      <FieldLabel htmlFor={name}>{labels[field]} *</FieldLabel>
-                      <Input
-                        aria-invalid={Boolean(error) || undefined}
-                        id={name}
-                        name={name}
-                        onChange={(event) => updateSpeaker(index, field, event.target.value)}
-                        required
-                        type={field === "email" ? "email" : "text"}
-                        value={speaker[field]}
-                      />
-                      <FieldError errors={fieldErrors(state, name)} />
-                    </Field>
-                  );
-                })}
-                {requiredFields.has("contact") ? (
-                  <Field data-invalid={Boolean(state.errors?.[`speaker.${index}.phone`]) || undefined}>
-                    <FieldLabel htmlFor={`speaker.${index}.phone`}>Phone *</FieldLabel>
-                    <Input
-                      aria-invalid={Boolean(state.errors?.[`speaker.${index}.phone`]) || undefined}
-                      id={`speaker.${index}.phone`}
-                      name={`speaker.${index}.phone`}
-                      onChange={(event) => updateSpeaker(index, "phone", event.target.value)}
-                      required
-                      type="tel"
-                      value={speaker.phone}
-                    />
-                    <FieldError errors={fieldErrors(state, `speaker.${index}.phone`)} />
-                  </Field>
-                ) : null}
-                {requiredFields.has("biography") ? (
-                  <Field data-invalid={Boolean(state.errors?.[`speaker.${index}.biography`]) || undefined}>
-                    <FieldLabel htmlFor={`speaker.${index}.biography`}>Biography *</FieldLabel>
-                    <Textarea
-                      aria-invalid={Boolean(state.errors?.[`speaker.${index}.biography`]) || undefined}
-                      id={`speaker.${index}.biography`}
-                      name={`speaker.${index}.biography`}
-                      onChange={(event) => updateSpeaker(index, "biography", event.target.value)}
-                      required
-                      value={speaker.biography}
-                    />
-                    <FieldError errors={fieldErrors(state, `speaker.${index}.biography`)} />
-                  </Field>
-                ) : null}
-                {requiredFields.has("consent") ? (
-                  <Field
-                    data-invalid={Boolean(state.errors?.[`speaker.${index}.consent`]) || undefined}
-                    orientation="horizontal"
+          {speakers.map((speaker, index) => {
+            const errorIndex = errorRows.keys.indexOf(speaker.key);
+            const errorsFor = (field: string) =>
+              errorIndex === -1 ? undefined : state.errors?.[`speaker.${errorIndex}.${field}`];
+            const errorObjectsFor = (field: string) => errorsFor(field)?.map((message) => ({ message }));
+            return (
+              <FieldSet key={speaker.key}>
+                {index > 0 ? <Separator /> : null}
+                <div className="flex items-center justify-between gap-3">
+                  <FieldLegend>Speaker {index + 1}</FieldLegend>
+                  <Button
+                    aria-label={`Remove speaker ${index + 1}`}
+                    disabled={speakers.length <= minimum}
+                    onClick={() => setSpeakers((current) => current.filter((_, position) => position !== index))}
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
                   >
-                    <Checkbox
-                      aria-invalid={Boolean(state.errors?.[`speaker.${index}.consent`]) || undefined}
-                      checked={speaker.consent}
-                      id={`speaker.${index}.consent`}
-                      name={`speaker.${index}.consent`}
-                      onCheckedChange={(checked) => updateSpeaker(index, "consent", checked === true)}
-                      required
-                    />
-                    <div>
-                      <FieldLabel htmlFor={`speaker.${index}.consent`}>Speaker profile consent *</FieldLabel>
-                      <FieldDescription>
-                        I consent to the event storing this profile, contacting me, and publishing approved speaker
-                        details.
-                      </FieldDescription>
-                      <FieldError errors={fieldErrors(state, `speaker.${index}.consent`)} />
-                    </div>
-                  </Field>
-                ) : null}
-              </FieldGroup>
-            </FieldSet>
-          ))}
+                    <Trash2Icon />
+                  </Button>
+                </div>
+                <FieldGroup>
+                  {(["givenName", "familyName", "email"] as const).map((field) => {
+                    const name = `speaker.${index}.${field}`;
+                    const error = errorsFor(field)?.[0];
+                    const labels = { givenName: "First name", familyName: "Last name", email: "Email" } as const;
+                    return (
+                      <Field data-invalid={Boolean(error) || undefined} key={field}>
+                        <FieldLabel htmlFor={name}>{labels[field]} *</FieldLabel>
+                        <Input
+                          aria-invalid={Boolean(error) || undefined}
+                          id={name}
+                          name={name}
+                          onChange={(event) => updateSpeaker(index, field, event.target.value)}
+                          required
+                          type={field === "email" ? "email" : "text"}
+                          value={speaker[field]}
+                        />
+                        <FieldError errors={errorObjectsFor(field)} />
+                      </Field>
+                    );
+                  })}
+                  {requiredFields.has("contact") ? (
+                    <Field data-invalid={Boolean(errorsFor("phone")) || undefined}>
+                      <FieldLabel htmlFor={`speaker.${index}.phone`}>Phone *</FieldLabel>
+                      <Input
+                        aria-invalid={Boolean(errorsFor("phone")) || undefined}
+                        id={`speaker.${index}.phone`}
+                        name={`speaker.${index}.phone`}
+                        onChange={(event) => updateSpeaker(index, "phone", event.target.value)}
+                        required
+                        type="tel"
+                        value={speaker.phone}
+                      />
+                      <FieldError errors={errorObjectsFor("phone")} />
+                    </Field>
+                  ) : null}
+                  {requiredFields.has("biography") ? (
+                    <Field data-invalid={Boolean(errorsFor("biography")) || undefined}>
+                      <FieldLabel htmlFor={`speaker.${index}.biography`}>Biography *</FieldLabel>
+                      <Textarea
+                        aria-invalid={Boolean(errorsFor("biography")) || undefined}
+                        id={`speaker.${index}.biography`}
+                        name={`speaker.${index}.biography`}
+                        onChange={(event) => updateSpeaker(index, "biography", event.target.value)}
+                        required
+                        value={speaker.biography}
+                      />
+                      <FieldError errors={errorObjectsFor("biography")} />
+                    </Field>
+                  ) : null}
+                  {requiredFields.has("consent") ? (
+                    <Field data-invalid={Boolean(errorsFor("consent")) || undefined} orientation="horizontal">
+                      <Checkbox
+                        aria-invalid={Boolean(errorsFor("consent")) || undefined}
+                        checked={speaker.consent}
+                        id={`speaker.${index}.consent`}
+                        name={`speaker.${index}.consent`}
+                        onCheckedChange={(checked) => updateSpeaker(index, "consent", checked === true)}
+                        required
+                      />
+                      <div>
+                        <FieldLabel htmlFor={`speaker.${index}.consent`}>Speaker profile consent *</FieldLabel>
+                        <FieldDescription>
+                          I consent to the event storing this profile, contacting me, and publishing approved speaker
+                          details.
+                        </FieldDescription>
+                        <FieldError errors={errorObjectsFor("consent")} />
+                      </div>
+                    </Field>
+                  ) : null}
+                </FieldGroup>
+              </FieldSet>
+            );
+          })}
           <Button
             className="self-start"
             disabled={speakers.length >= maximum}

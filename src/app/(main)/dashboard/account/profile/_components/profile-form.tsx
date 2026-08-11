@@ -59,9 +59,11 @@ function AvatarCard({ name, avatarUrl }: { readonly name: string; readonly avata
           </Alert>
         )}
         <form ref={uploadFormRef} action={uploadFormAction} className="flex flex-wrap items-center gap-4">
-          <Avatar className="size-16 rounded-lg">
+          <Avatar className="size-16">
             <AvatarImage src={avatarUrl ?? undefined} alt={name} />
-            <AvatarFallback className="rounded-lg text-lg">{getInitials(name)}</AvatarFallback>
+            <AvatarFallback className="bg-primary/15 font-medium text-primary text-xl">
+              {getInitials(name).slice(0, 1)}
+            </AvatarFallback>
           </Avatar>
           <Field className="min-w-48 flex-1">
             <FieldLabel htmlFor="avatar-file" className="sr-only">

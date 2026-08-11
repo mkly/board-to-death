@@ -4,7 +4,15 @@ import Link from "next/link";
 import { AuthHeroBackground } from "../../_components/auth-hero-background";
 import { RegisterForm } from "../../_components/register-form";
 
-export default function RegisterV1() {
+interface RegisterV1Props {
+  readonly searchParams: Promise<{ email?: string | string[] }>;
+}
+
+export default async function RegisterV1({ searchParams }: RegisterV1Props) {
+  // The login screen sends unrecognized addresses here, so carry the one they already typed.
+  const query = await searchParams;
+  const defaultEmail = typeof query.email === "string" ? query.email : undefined;
+
   return (
     <div className="flex h-dvh">
       <div className="relative hidden bg-slate-950 lg:block lg:w-1/3">
@@ -37,7 +45,7 @@ export default function RegisterV1() {
             </div>
           </div>
           <div className="flex flex-col gap-4">
-            <RegisterForm />
+            <RegisterForm defaultEmail={defaultEmail} />
             <p className="text-center text-muted-foreground text-xs">
               Already have an account?{" "}
               <Link prefetch={false} href="login" className="text-primary">

@@ -441,6 +441,10 @@ export function EventSettingsWorkspace({
   const [pending, setPending] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>();
   const [createOpen, setCreateOpen] = useState(initialSnapshot === null || initialCreateOpen);
+  // With no events the page mounts this workspace inside its centered <Empty> wrapper. Creating the
+  // first event resolves a snapshot locally well before `router.push` commits, so swapping to the full
+  // workspace here would cram the whole settings UI into that wrapper for a few hundred milliseconds.
+  const [awaitingFirstEvent, setAwaitingFirstEvent] = useState(false);
 
   const settingsHref = (eventId: string): string =>
     eventScoped
@@ -479,6 +483,7 @@ export function EventSettingsWorkspace({
     const result = await mutate("create-event", () => createEvent(formData));
     if (result.ok && result.snapshot) {
       setCreateOpen(false);
+      if (!snapshot) setAwaitingFirstEvent(true);
       if (result.firstEvent) fireConfetti();
       router.push(settingsHref(result.snapshot.event.id));
     }
@@ -490,7 +495,7 @@ export function EventSettingsWorkspace({
     return result.ok;
   }
 
-  if (!snapshot) {
+  if (!snapshot || awaitingFirstEvent) {
     return (
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogTrigger asChild>

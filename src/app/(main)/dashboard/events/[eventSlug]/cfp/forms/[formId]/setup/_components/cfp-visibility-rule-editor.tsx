@@ -278,7 +278,7 @@ export function CfpVisibilityRuleEditor({
                 </CardHeader>
                 <CardContent>
                   <FieldGroup className="sm:grid sm:grid-cols-2">
-                    <Field data-invalid={!source || undefined}>
+                    <Field>
                       <FieldLabel htmlFor={`${conditionPrefix}-source`}>Source question</FieldLabel>
                       <Select
                         value={source?.id ?? ""}
@@ -287,7 +287,7 @@ export function CfpVisibilityRuleEditor({
                           if (nextSource) updateCondition(conditionIndex, initialCondition(nextSource));
                         }}
                       >
-                        <SelectTrigger id={`${conditionPrefix}-source`} className="w-full" aria-invalid={!source}>
+                        <SelectTrigger id={`${conditionPrefix}-source`} className="w-full">
                           <SelectValue placeholder="Choose a question" />
                         </SelectTrigger>
                         <SelectContent position="popper">
@@ -301,7 +301,7 @@ export function CfpVisibilityRuleEditor({
                         </SelectContent>
                       </Select>
                     </Field>
-                    <Field data-invalid={!source || undefined}>
+                    <Field>
                       <FieldLabel htmlFor={`${conditionPrefix}-operator`}>Comparison</FieldLabel>
                       <Select
                         value={condition.operator}
@@ -315,7 +315,7 @@ export function CfpVisibilityRuleEditor({
                           }
                         }}
                       >
-                        <SelectTrigger id={`${conditionPrefix}-operator`} className="w-full" aria-invalid={!source}>
+                        <SelectTrigger id={`${conditionPrefix}-operator`} className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper">

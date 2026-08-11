@@ -93,7 +93,8 @@ test.describe
       await page.getByRole("textbox", { name: "Email address" }).fill(unknownEmail);
       await page.getByRole("button", { name: "Email me a sign-in link" }).click();
 
-      await expect(page.getByText("If that address is linked to an account", { exact: false })).toBeVisible();
+      await expect(page.getByText("We couldn't find that account", { exact: false })).toBeVisible();
+      await expect(page.getByRole("alert").getByRole("link", { name: "Create your organization" })).toBeVisible();
       const result = await database.query<{ users: number; sessions: number }>(
         `SELECT
          COUNT(DISTINCT "user"."id")::int AS "users",
