@@ -25,9 +25,13 @@ export default async function SubmissionDetailPage({ params }: SubmissionDetailP
   const submission = await new CfpSubmissionRepository(client).getDetailByEventSlug(eventSlug, submissionId);
   if (!submission) notFound();
   const customFields = new CustomFieldRepository(client);
-  const [definitions, values] = await Promise.all([
+  const [definitions, values, promotedSession] = await Promise.all([
     customFields.listDefinitions(submission.event.id, CustomFieldEntityType.CFP_SUBMISSION),
     customFields.listValues(submission.event.id, { entityType: "CFP_SUBMISSION", submissionId }),
+    client.programSession.findFirst({
+      where: { eventId: submission.event.id, sourceSubmissionId: submission.id },
+      select: { id: true },
+    }),
   ]);
 
   return (
@@ -37,6 +41,7 @@ export default async function SubmissionDetailPage({ params }: SubmissionDetailP
         label: definition.label,
         value: values.find(({ definitionId }) => definitionId === definition.id)?.value,
       }))}
+      promotedSessionId={promotedSession?.id}
       submission={submission}
     />
   );

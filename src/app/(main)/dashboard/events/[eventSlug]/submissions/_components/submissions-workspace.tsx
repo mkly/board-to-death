@@ -68,6 +68,7 @@ import type {
 } from "@/server/cfp/submissions";
 
 import { resetSubmissionView, saveSubmissionView } from "../actions";
+import { SubmissionDecisionControls } from "./submission-decision-controls";
 
 interface SubmissionsWorkspaceProps {
   readonly event: { readonly name: string; readonly slug: string; readonly timezone: string };
@@ -689,6 +690,7 @@ export function SubmissionsWorkspace({
                         {columnLabel(column, customLabels)}
                       </TableHead>
                     ))}
+                    <TableHead className="whitespace-nowrap pr-4 text-right">Decision</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -699,6 +701,14 @@ export function SubmissionsWorkspace({
                           {displayCell(item, column, event.slug, dateFormatter)}
                         </TableCell>
                       ))}
+                      <TableCell className="pr-4 text-right align-top">
+                        <SubmissionDecisionControls
+                          compact
+                          eventSlug={event.slug}
+                          submissionId={item.id}
+                          status={item.status}
+                        />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

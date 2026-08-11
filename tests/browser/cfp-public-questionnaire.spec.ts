@@ -185,9 +185,11 @@ test("finalizes one published submission and shows it in the correct event dashb
     await page
       .getByLabel("Abstract", { exact: false })
       .fill("Build one definition and share its semantics end to end.");
-    await page.getByLabel("Session format", { exact: false }).selectOption("talk");
+    await page.getByLabel("Session format", { exact: false }).click();
+    await page.getByRole("option", { name: "Talk", exact: true }).click();
     await expect(page.getByLabel("Workshop room needs", { exact: false })).toBeHidden();
-    await page.getByLabel("Session format", { exact: false }).selectOption("workshop");
+    await page.getByLabel("Session format", { exact: false }).click();
+    await page.getByRole("option", { name: "Workshop", exact: true }).click();
     await expect(page.getByLabel("Workshop room needs", { exact: false })).toBeVisible();
     await page.getByLabel("Topics", { exact: false }).selectOption(["web", "data"]);
     await page.getByLabel("Recording permission", { exact: false }).check();
@@ -210,6 +212,7 @@ test("finalizes one published submission and shows it in the correct event dashb
     await expect(
       page.getByText("Thanks speaker@example.com — your proposal for Plan Screen 20 Conference is in."),
     ).toBeVisible();
+    await expect(page.getByText("A confirmation email has been sent to speaker@example.com.")).toBeVisible();
     const submission = await database.query(
       `SELECT s."id", s."kind", s."status", s."submittedAt", r."kind" AS "revisionKind"
        FROM "cfp_submissions" s
@@ -280,6 +283,43 @@ test("finalizes one published submission and shows it in the correct event dashb
     await page.goto(`/dashboard/events/${eventSlug}/submissions/${submission.rows[0].id}`);
     await expect(page.getByText("Additional information", { exact: true })).toBeVisible();
     await expect(page.getByText("Strategy game enthusiasts")).toBeVisible();
+    await page.getByRole("button", { name: "Accept proposal" }).click();
+    const decisionDialog = page.getByRole("alertdialog");
+    await expect(decisionDialog.getByRole("heading", { name: "Accept this proposal?" })).toBeVisible();
+    await decisionDialog.getByRole("button", { name: "Accept proposal" }).click();
+    await expect(page.getByText("This proposal has a final decision: Accepted.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Promote to Session" }).click();
+    const promotionDialog = page.getByRole("alertdialog");
+    await expect(promotionDialog.getByRole("heading", { name: "Promote this proposal to a session?" })).toBeVisible();
+    await promotionDialog.getByRole("button", { name: "Promote to Session" }).click();
+    await expect(page.getByRole("link", { name: "View session" })).toBeVisible();
+
+    const decision = await database.query(`SELECT status FROM "cfp_submissions" WHERE "eventId" = $1 AND id = $2`, [
+      eventId,
+      submission.rows[0].id,
+    ]);
+    expect(decision.rows).toEqual([{ status: "ACCEPTED" }]);
+    const promotedSession = await database.query(
+      `SELECT s.kind, s."sourceSubmissionId", v.title, v.description, v."categoryId"
+       FROM "program_sessions" s
+       JOIN "program_session_versions" v ON v."sessionId" = s.id AND v."versionNumber" = 1
+       WHERE s."eventId" = $1 AND s."sourceSubmissionId" = $2`,
+      [eventId, submission.rows[0].id],
+    );
+    expect(promotedSession.rows).toEqual([
+      {
+        kind: "PROMOTED",
+        sourceSubmissionId: submission.rows[0].id,
+        title: "Schema-driven CFPs",
+        description: "A practical session about conditional forms.",
+        categoryId,
+      },
+    ]);
+
+    await page.getByRole("link", { name: "View session" }).click();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/events/${eventSlug}/sessions\\?sessionId=`));
+    await expect(page.getByText("Schema-driven CFPs", { exact: true }).first()).toBeVisible();
   } finally {
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [eventId]);
     await database.query(`DELETE FROM "events" WHERE "id" = $1`, [otherEventId]);

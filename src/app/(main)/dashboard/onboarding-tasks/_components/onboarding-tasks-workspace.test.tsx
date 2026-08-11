@@ -87,6 +87,14 @@ describe("OnboardingTasksWorkspace", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);
 
+  test("opens the creation dialog from a deep link", () => {
+    const emptySnapshot: OnboardingSnapshot = { eventId: eventOptions[0].id, definitions: [] };
+
+    render(<OnboardingTasksWorkspace eventOptions={eventOptions} initialSnapshot={emptySnapshot} initialCreateOpen />);
+
+    expect(screen.getByRole("dialog", { name: "Create onboarding task" })).toBeTruthy();
+  });
+
   test("covers the empty state, validation feedback, creation, and event isolation navigation", async () => {
     const emptySnapshot: OnboardingSnapshot = { eventId: eventOptions[0].id, definitions: [] };
     const validation: MutationResult = {

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const actionMocks = vi.hoisted(() => ({
+  recordSubmissionDecision: vi.fn(),
   resetSubmissionView: vi.fn(),
   saveSubmissionView: vi.fn(),
 }));
@@ -106,6 +107,7 @@ describe("SubmissionsWorkspace", () => {
       "/dashboard/events/board-to-death-2027/submissions/submission-1",
     );
     expect(screen.getByText("Lex")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Record decision" })).toBeTruthy();
     // The assignee name renders three times: the row cell, the Radix select trigger label, and the
     // hidden native select option Radix keeps for form submission.
     expect(screen.getAllByText("Casey Reviewer")).toHaveLength(3);

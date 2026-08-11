@@ -33,7 +33,7 @@ export async function GET(request: NextRequest, context: SpeakerAuthRouteContext
       speakerId,
       token,
     });
-    const response = NextResponse.redirect(new URL(portalHref(event.slug), requestOrigin(request)));
+    const response = NextResponse.redirect(new URL(portalHref(event.slug, "/submissions"), requestOrigin(request)));
     response.cookies.set(SPEAKER_SESSION_COOKIE, session.sessionToken, {
       expires: session.expiresAt,
       httpOnly: true,

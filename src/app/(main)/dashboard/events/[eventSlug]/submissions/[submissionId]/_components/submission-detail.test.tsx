@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../actions", () => ({
+  promoteSubmissionToSession: vi.fn(),
+  recordSubmissionDecision: vi.fn(),
+}));
 
 import type { CfpSubmissionDetail } from "@/server/cfp/submissions";
 
@@ -91,6 +96,9 @@ describe("SubmissionDetail", () => {
     render(<SubmissionDetail submission={detail()} />);
 
     expect(screen.getByRole("heading", { name: "Submission details" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Waitlist proposal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reject proposal" })).toBeTruthy();
     expect(screen.getByText("Abstract", { selector: "dt" })).toBeTruthy();
     expect(screen.getByText("How collaborative games create memorable stories.")).toBeTruthy();
     expect(screen.getByText("Game design")).toBeTruthy();
@@ -117,5 +125,27 @@ describe("SubmissionDetail", () => {
     expect(screen.getByText("No speakers are attached to this submission.")).toBeTruthy();
     expect(screen.getByText("This submission does not have a saved response revision.")).toBeTruthy();
     expect(screen.getByText("No categories assigned.")).toBeTruthy();
+  });
+
+  it("shows a completed decision without further decision controls", () => {
+    render(<SubmissionDetail submission={detail({ status: "ACCEPTED" as CfpSubmissionDetail["status"] })} />);
+
+    expect(screen.getByText("This proposal has a final decision: Accepted.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Promote to Session" })).toBeTruthy();
+  });
+
+  it("links an already promoted proposal to its program session", () => {
+    render(
+      <SubmissionDetail
+        promotedSessionId="88888888-8888-4888-8888-888888888888"
+        submission={detail({ status: "ACCEPTED" as CfpSubmissionDetail["status"] })}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Promote to Session" })).toBeNull();
+    expect(screen.getByRole("link", { name: "View session" }).getAttribute("href")).toBe(
+      "/dashboard/events/board-to-death-2027/sessions?sessionId=88888888-8888-4888-8888-888888888888",
+    );
   });
 });

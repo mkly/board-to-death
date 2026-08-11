@@ -217,6 +217,10 @@ test("shows the populated speaker portal and keeps another speaker's submission 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(fixture.populatedAuthHref);
 
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/submissions`);
+  await expect(page.getByRole("heading", { name: "My submissions" })).toBeVisible();
+  await expect(page.getByText("Designing asymmetric systems players can learn")).toBeVisible();
+  await page.getByRole("link", { name: "Home" }).click();
   await expect(page).toHaveURL(`/portal/${fixture.eventSlug}`);
   await expect(page.getByRole("heading", { name: "Welcome, Ada" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Speaker portal" })).toContainText("Home");
@@ -464,8 +468,8 @@ test("requests a fresh link after session expiry and lets an organizer resend it
   const deliveredSpeakerLink = await speakerDelivery;
   expect(deliveredSpeakerLink.ok).toBe(true);
   await page.goto(((await deliveredSpeakerLink.json()) as { url: string }).url);
-  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}`);
-  await expect(page.getByRole("heading", { name: "Welcome, Ada" })).toBeVisible();
+  await expect(page).toHaveURL(`/portal/${fixture.eventSlug}/submissions`);
+  await expect(page.getByRole("heading", { name: "My submissions" })).toBeVisible();
 
   await page.goto(`/portal/${fixture.eventSlug}/sign-in`);
   await page.getByLabel("Email address").fill("unknown@example.test");

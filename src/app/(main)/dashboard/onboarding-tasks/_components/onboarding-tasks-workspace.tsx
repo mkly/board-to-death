@@ -64,6 +64,7 @@ import type { EventOption, MutationResult, OnboardingSnapshot, TaskDefinitionVie
 interface OnboardingTasksWorkspaceProps {
   readonly eventOptions: readonly EventOption[];
   readonly initialSnapshot: OnboardingSnapshot;
+  readonly initialCreateOpen?: boolean;
 }
 
 type FieldErrors = MutationResult["fieldErrors"];
@@ -291,12 +292,16 @@ function ResponseBadge({ type }: { readonly type: TaskResponseType }) {
   );
 }
 
-export function OnboardingTasksWorkspace({ eventOptions, initialSnapshot }: OnboardingTasksWorkspaceProps) {
+export function OnboardingTasksWorkspace({
+  eventOptions,
+  initialSnapshot,
+  initialCreateOpen = false,
+}: OnboardingTasksWorkspaceProps) {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [pending, setPending] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>();
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(initialCreateOpen);
   const [editing, setEditing] = useState<TaskDefinitionView | null>(null);
 
   const activeDefinitions = snapshot.definitions.filter(({ archivedAt }) => archivedAt === null);

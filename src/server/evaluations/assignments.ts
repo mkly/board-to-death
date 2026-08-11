@@ -5,6 +5,8 @@ import {
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
   EvaluationStatus,
+  EventMembershipRole,
+  MembershipStatus,
   type Prisma,
   type PrismaClient,
 } from "../../generated/prisma/client.ts";
@@ -176,6 +178,31 @@ async function requireReviewer(
   });
   if (!reviewer) {
     invalid(requireActive ? "Select an active reviewer from this event." : "Select a reviewer from this event.");
+  }
+}
+
+async function ensureReviewerMemberships(
+  client: DatabaseClient,
+  eventId: string,
+  reviewerIds: readonly string[],
+): Promise<void> {
+  const reviewers = await client.evaluationReviewer.findMany({
+    where: { eventId, id: { in: [...new Set(reviewerIds)] }, status: EvaluationReviewerStatus.ACTIVE },
+    select: { identityId: true },
+  });
+  for (const reviewer of reviewers) {
+    const identity = await client.user.findUnique({ where: { id: reviewer.identityId }, select: { id: true } });
+    if (!identity) continue;
+    const existing = await client.eventMembership.findUnique({
+      where: { eventId_userId: { eventId, userId: reviewer.identityId } },
+      select: { roles: true },
+    });
+    const roles = [...new Set([...(existing?.roles ?? []), EventMembershipRole.REVIEWER])];
+    await client.eventMembership.upsert({
+      where: { eventId_userId: { eventId, userId: reviewer.identityId } },
+      create: { eventId, userId: reviewer.identityId, roles },
+      update: { roles, status: MembershipStatus.ACTIVE, revokedAt: null },
+    });
   }
 }
 
@@ -431,6 +458,7 @@ export class EvaluationAssignmentRepository {
           select: { id: true },
         });
         if (reviewers.length !== reviewerIds.length) invalid("Select only active reviewers from this event.");
+        await ensureReviewerMemberships(transaction, input.eventId, reviewerIds);
 
         if (input.trackId) {
           const track = await transaction.cfpCategory.findFirst({
@@ -541,6 +569,7 @@ export class EvaluationAssignmentRepository {
         if (committee.members.length === 0) invalid("The selected committee has no active reviewers.");
 
         const reviewerIds = committee.members.map(({ reviewerId }) => reviewerId);
+        await ensureReviewerMemberships(transaction, input.eventId, reviewerIds);
         const existing = await transaction.evaluationAssignment.findMany({
           where: { roundId: input.roundId, submissionId: { in: submissionIds }, reviewerId: { in: reviewerIds } },
         });
@@ -588,6 +617,7 @@ export class EvaluationAssignmentRepository {
           requireReviewer(transaction, input.eventId, input.reviewerId),
           requireEligibleSubmissions(transaction, input.eventId, input.roundId, submissionIds),
         ]);
+        await ensureReviewerMemberships(transaction, input.eventId, [input.reviewerId]);
         const existing = await transaction.evaluationAssignment.findMany({
           where: { roundId: input.roundId, reviewerId: input.reviewerId, submissionId: { in: submissionIds } },
         });
@@ -641,6 +671,7 @@ export class EvaluationAssignmentRepository {
           requireReviewer(transaction, input.eventId, input.reviewerId),
           requireEligibleSubmissions(transaction, input.eventId, input.roundId, submissionIds),
         ]);
+        await ensureReviewerMemberships(transaction, input.eventId, [input.reviewerId]);
         const [sources, targets] = await Promise.all([
           transaction.evaluationAssignment.findMany({
             where: {

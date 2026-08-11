@@ -31,6 +31,7 @@ export interface PublicCfpFormActionState {
   readonly errors?: Readonly<Record<string, readonly string[]>>;
   readonly submissionId?: string;
   readonly confirmationMarkdown?: string;
+  readonly confirmationEmail?: string;
   readonly portalHref?: string;
   readonly autoRedirectDelaySeconds?: number;
 }
@@ -330,6 +331,7 @@ export async function submitPublicCfpForm(
       message: "Your proposal was submitted.",
       submissionId: submission.id,
       confirmationMarkdown: confirmation.previewMarkdown,
+      confirmationEmail: recipient.email,
       ...(leadParticipant
         ? {
             portalHref: speakerPortalHref,

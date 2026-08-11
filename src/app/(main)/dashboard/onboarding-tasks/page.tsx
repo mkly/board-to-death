@@ -8,7 +8,7 @@ import { OnboardingTasksWorkspace } from "./_components/onboarding-tasks-workspa
 import { taskDefinitionView } from "./model";
 
 interface PageProps {
-  readonly searchParams: Promise<{ event?: string }>;
+  readonly searchParams: Promise<{ event?: string; create?: string }>;
 }
 
 export default async function Page({ searchParams }: PageProps) {
@@ -17,8 +17,9 @@ export default async function Page({ searchParams }: PageProps) {
     orderBy: { startsAt: "asc" },
     select: { id: true, name: true },
   });
-  const requestedEventId = (await searchParams).event;
+  const { event: requestedEventId, create } = await searchParams;
   const eventId = eventOptions.some(({ id }) => id === requestedEventId) ? requestedEventId : eventOptions[0]?.id;
+  const initialCreateOpen = create === "1";
 
   if (!eventId) {
     return (
@@ -42,6 +43,7 @@ export default async function Page({ searchParams }: PageProps) {
       key={eventId}
       eventOptions={eventOptions}
       initialSnapshot={{ eventId, definitions: definitions.map(taskDefinitionView) }}
+      initialCreateOpen={initialCreateOpen}
     />
   );
 }

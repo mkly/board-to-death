@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import Link from "next/link";
+
 import { BellOff, BellRing, CalendarClock, Check, ClipboardCheck, RotateCcw, UserPlus, UserX } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
@@ -178,7 +180,8 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                   </EmptyMedia>
                   <EmptyTitle>Nothing to assign yet</EmptyTitle>
                   <EmptyDescription>
-                    Add a task definition and accept at least one speaker before assigning onboarding work.
+                    <Link href={`/dashboard/onboarding-tasks?event=${event.id}&create=1`}>Add a task definition</Link>{" "}
+                    and accept at least one speaker before assigning onboarding work.
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>

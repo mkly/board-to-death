@@ -9,9 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import type { CfpSubmissionDetail as SubmissionDetailData } from "@/server/cfp/submissions";
 
+import { SubmissionDecisionControls } from "../../_components/submission-decision-controls";
+import { SubmissionPromotionControl } from "./submission-promotion-control";
+
 interface SubmissionDetailProps {
   readonly submission: SubmissionDetailData;
   readonly customFields?: readonly { readonly id: string; readonly label: string; readonly value: unknown }[];
+  readonly promotedSessionId?: string | null;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -181,7 +185,7 @@ function CustomFieldList({ customFields = [] }: Pick<SubmissionDetailProps, "cus
   );
 }
 
-export function SubmissionDetail({ submission, customFields = [] }: SubmissionDetailProps) {
+export function SubmissionDetail({ submission, customFields = [], promotedSessionId }: SubmissionDetailProps) {
   const submittedAt = submission.submittedAt ?? submission.createdAt;
 
   return (
@@ -212,6 +216,43 @@ export function SubmissionDetail({ submission, customFields = [] }: SubmissionDe
           Submitted {dateFormatter.format(submittedAt)} UTC
         </div>
       </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Proposal decision</CardTitle>
+          <CardDescription>Record the organizer's final decision for this proposal.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SubmissionDecisionControls
+            eventSlug={submission.event.slug}
+            submissionId={submission.id}
+            status={submission.status}
+          />
+          {submission.status === "ACCEPTED" || submission.status === "REJECTED" || submission.status === "CONFIRMED" ? (
+            <p className="text-muted-foreground text-sm">
+              This proposal has a final decision: {labelForEnum(submission.status)}.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {submission.status === "ACCEPTED" || promotedSessionId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Program session</CardTitle>
+            <CardDescription>
+              Move this accepted proposal into the event program for editing and scheduling.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SubmissionPromotionControl
+              eventSlug={submission.event.slug}
+              promotedSessionId={promotedSessionId}
+              submissionId={submission.id}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card size="sm">
         <CardContent>

@@ -8,7 +8,9 @@ import {
   EvaluationReviewerStatus,
   EvaluationRoundStatus,
   EvaluationStatus,
+  EventMembershipRole,
   EventType,
+  MembershipStatus,
   PrismaClient,
   ReviewerVisibility,
 } from "../../generated/prisma/client.ts";
@@ -17,6 +19,7 @@ import { EvaluationAssignmentRepository } from "./assignments.ts";
 import { EvaluationReminderRepository } from "./reminders.ts";
 import { EvaluationPlanRepository } from "./repositories.ts";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, describe, test } from "node:test";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -80,6 +83,25 @@ async function createFixture(): Promise<Fixture> {
   const otherFormVersion = otherEvent.cfpForms[0]?.versions[0];
   assert.ok(formVersion);
   assert.ok(otherFormVersion);
+
+  const reviewerIdentities = {
+    source: randomUUID(),
+    target: randomUUID(),
+    inactive: randomUUID(),
+    other: randomUUID(),
+  };
+  await client.user.createMany({
+    data: [
+      { id: reviewerIdentities.source, name: "Alex Source", email: `${reviewerIdentities.source}@example.test` },
+      { id: reviewerIdentities.target, name: "Bailey Target", email: `${reviewerIdentities.target}@example.test` },
+      {
+        id: reviewerIdentities.inactive,
+        name: "Inactive Reviewer",
+        email: `${reviewerIdentities.inactive}@example.test`,
+      },
+      { id: reviewerIdentities.other, name: "Other Reviewer", email: `${reviewerIdentities.other}@example.test` },
+    ],
+  });
 
   const [designCategory, strategyCategory] = await Promise.all([
     client.cfpCategory.create({ data: { eventId: event.id, key: "design", label: "Game design" } }),
@@ -170,24 +192,24 @@ async function createFixture(): Promise<Fixture> {
     client.evaluationReviewer.create({
       data: {
         eventId: event.id,
-        identityId: "source-reviewer",
-        email: "source@example.test",
+        identityId: reviewerIdentities.source,
+        email: `${reviewerIdentities.source}@example.test`,
         displayName: "Alex Source",
       },
     }),
     client.evaluationReviewer.create({
       data: {
         eventId: event.id,
-        identityId: "target-reviewer",
-        email: "target@example.test",
+        identityId: reviewerIdentities.target,
+        email: `${reviewerIdentities.target}@example.test`,
         displayName: "Bailey Target",
       },
     }),
     client.evaluationReviewer.create({
       data: {
         eventId: event.id,
-        identityId: "inactive-reviewer",
-        email: "inactive@example.test",
+        identityId: reviewerIdentities.inactive,
+        email: `${reviewerIdentities.inactive}@example.test`,
         displayName: "Inactive Reviewer",
         status: EvaluationReviewerStatus.INACTIVE,
       },
@@ -195,8 +217,8 @@ async function createFixture(): Promise<Fixture> {
     client.evaluationReviewer.create({
       data: {
         eventId: otherEvent.id,
-        identityId: "other-reviewer",
-        email: "other@example.test",
+        identityId: reviewerIdentities.other,
+        email: `${reviewerIdentities.other}@example.test`,
         displayName: "Other Reviewer",
       },
     }),
@@ -275,6 +297,12 @@ describe("reviewer and committee assignments", () => {
     });
     assert.equal(assignments.length, 2);
     assert.ok(assignments.every(({ status }) => status === EvaluationAssignmentStatus.ASSIGNED));
+    const reviewer = await client.evaluationReviewer.findUniqueOrThrow({ where: { id: fixture.sourceReviewerId } });
+    const membership = await client.eventMembership.findUniqueOrThrow({
+      where: { eventId_userId: { eventId: fixture.eventId, userId: reviewer.identityId } },
+    });
+    assert.equal(membership.status, MembershipStatus.ACTIVE);
+    assert.ok(membership.roles.includes(EventMembershipRole.REVIEWER));
     await assert.rejects(
       repository.assign({
         eventId: fixture.eventId,

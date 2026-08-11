@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 
 interface CfpCompletionProps {
   readonly confirmationMarkdown?: string;
+  readonly confirmationEmail?: string;
   readonly submissionId?: string;
   readonly portalHref?: string;
   readonly autoRedirectDelaySeconds?: number;
@@ -17,6 +18,7 @@ interface CfpCompletionProps {
 
 export function CfpCompletion({
   confirmationMarkdown,
+  confirmationEmail,
   submissionId,
   portalHref,
   autoRedirectDelaySeconds,
@@ -42,6 +44,7 @@ export function CfpCompletion({
       </AlertTitle>
       <AlertDescription className="flex flex-col gap-4">
         {confirmationMarkdown ? <SanitizedMarkdown content={confirmationMarkdown} /> : null}
+        {confirmationEmail ? <p>A confirmation email has been sent to {confirmationEmail}.</p> : null}
         <p>Keep this reference: {submissionId}</p>
         {portalHref ? (
           <div className="flex flex-col items-start gap-2">
