@@ -269,6 +269,16 @@ export class EvaluationPlanRepository {
             throw new RepositoryError("invalid-input", "Close the open round before opening another one.");
           }
           if (round.planVersion.status === "DRAFT") {
+            const roundWithoutCriteria = await transaction.evaluationRound.findFirst({
+              where: { planVersionId: round.planVersionId, criteria: { none: {} } },
+              select: { id: true },
+            });
+            if (roundWithoutCriteria) {
+              throw new RepositoryError(
+                "invalid-input",
+                "Add at least one scoring criterion to every round under Scoring rubrics before opening this evaluation round.",
+              );
+            }
             await transaction.evaluationPlanVersion.update({
               where: { id: round.planVersionId },
               data: { status: "ACTIVE", activatedAt: now },

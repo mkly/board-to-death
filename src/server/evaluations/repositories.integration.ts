@@ -81,6 +81,33 @@ describe("evaluation plan lifecycle persistence", () => {
     );
   });
 
+  test("explains that every round needs scoring criteria before activating a plan", async () => {
+    const event = await events.create(baseEvent);
+    const plan = await evaluations.create(event.id, { key: "criteria-check", title: "Criteria check" });
+    const version = plan.versions[0];
+    assert.ok(version);
+    const round = await evaluations.createRound({
+      eventId: event.id,
+      planVersionId: version.id,
+      key: "committee",
+      title: "Committee review",
+      reviewerVisibility: ReviewerVisibility.IDENTIFIED,
+    });
+
+    await assert.rejects(
+      evaluations.transition(event.id, round.id, EvaluationRoundStatus.OPEN),
+      (error: unknown) =>
+        error instanceof RepositoryError &&
+        error.code === "invalid-input" &&
+        error.message ===
+          "Add at least one scoring criterion to every round under Scoring rubrics before opening this evaluation round.",
+    );
+
+    const persisted = (await evaluations.list(event.id))[0]?.versions[0];
+    assert.equal(persisted?.status, "DRAFT");
+    assert.equal(persisted?.rounds[0]?.status, EvaluationRoundStatus.PLANNED);
+  });
+
   test("snapshots visibility, audits every transition, and retires fully archived history", async () => {
     const event = await events.create(baseEvent);
     const plan = await evaluations.create(event.id, { key: "editorial-review", title: "Editorial review" });

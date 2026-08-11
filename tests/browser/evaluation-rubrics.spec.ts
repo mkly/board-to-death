@@ -72,8 +72,14 @@ test("creates, edits, reorders, locks, and reloads an event-scoped rubric", asyn
 
     await page.goto(`/dashboard/events/${event.slug}/evaluations`);
     await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Scoring criteria required" })).toContainText(
+      "Add at least one scoring criterion to every round under Scoring rubrics before opening this evaluation round.",
+    );
+    await expect(page.getByRole("button", { name: "Open round" })).toBeDisabled();
     await page.getByRole("button", { name: "Add default rubric" }).click();
     await expect(page.getByText("Default 1-to-5 rubric added.")).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Scoring criteria required" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open round" })).toBeEnabled();
     await expect(page.getByLabel("Label").nth(0)).toHaveValue("Relevance");
     await expect(page.getByLabel("Label").nth(1)).toHaveValue("Technical Depth");
     await expect(page.getByLabel("Label").nth(2)).toHaveValue("Speaker Authority");

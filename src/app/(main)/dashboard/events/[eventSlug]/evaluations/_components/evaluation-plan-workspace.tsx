@@ -1,6 +1,18 @@
-import { Archive, ArrowDown, ArrowUp, CircleCheck, ClipboardCheck, LockKeyhole, Play, Plus, Save } from "lucide-react";
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  CircleAlert,
+  CircleCheck,
+  ClipboardCheck,
+  LockKeyhole,
+  Play,
+  Plus,
+  Save,
+} from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,6 +137,7 @@ function RoundCard({
   round,
   index,
   rounds,
+  canOpen,
 }: {
   readonly eventSlug: string;
   readonly planVersionId: string;
@@ -132,6 +145,7 @@ function RoundCard({
   readonly round: EvaluationPlanWithVersions["versions"][number]["rounds"][number];
   readonly index: number;
   readonly rounds: EvaluationPlanWithVersions["versions"][number]["rounds"];
+  readonly canOpen: boolean;
 }) {
   const isPlanned = round.status === EvaluationRoundStatus.PLANNED;
   const editable = planVersionStatus === EvaluationPlanVersionStatus.DRAFT && isPlanned;
@@ -203,7 +217,7 @@ function RoundCard({
               <Button
                 type="submit"
                 size="sm"
-                disabled={round._count.criteria === 0}
+                disabled={!canOpen}
                 formAction={transitionRound.bind(null, eventSlug, round.id, EvaluationRoundStatus.OPEN)}
                 formNoValidate
               >
@@ -279,6 +293,7 @@ export function EvaluationPlanWorkspace({ eventSlug, plans }: EvaluationPlanWork
             <CardContent className="flex flex-col gap-8">
               {plan.versions.map((version, versionIndex) => {
                 const editable = version.status === EvaluationPlanVersionStatus.DRAFT;
+                const hasIncompleteRubric = version.rounds.some((round) => round._count.criteria === 0);
                 return (
                   <section key={version.id} className="flex flex-col gap-4" aria-labelledby={`version-${version.id}`}>
                     {versionIndex > 0 ? <Separator /> : null}
@@ -296,18 +311,31 @@ export function EvaluationPlanWorkspace({ eventSlug, plans }: EvaluationPlanWork
                     {version.rounds.length === 0 ? (
                       <p className="text-muted-foreground text-sm">No rounds have been added to this version.</p>
                     ) : (
-                      <div className="grid gap-4 xl:grid-cols-2">
-                        {version.rounds.map((round, index) => (
-                          <RoundCard
-                            key={round.id}
-                            eventSlug={eventSlug}
-                            planVersionId={version.id}
-                            planVersionStatus={version.status}
-                            round={round}
-                            index={index}
-                            rounds={version.rounds}
-                          />
-                        ))}
+                      <div className="flex flex-col gap-4">
+                        {editable && hasIncompleteRubric ? (
+                          <Alert>
+                            <CircleAlert />
+                            <AlertTitle>Scoring criteria required</AlertTitle>
+                            <AlertDescription>
+                              Add at least one scoring criterion to every round under Scoring rubrics before opening
+                              this evaluation round.
+                            </AlertDescription>
+                          </Alert>
+                        ) : null}
+                        <div className="grid gap-4 xl:grid-cols-2">
+                          {version.rounds.map((round, index) => (
+                            <RoundCard
+                              key={round.id}
+                              eventSlug={eventSlug}
+                              planVersionId={version.id}
+                              planVersionStatus={version.status}
+                              round={round}
+                              index={index}
+                              rounds={version.rounds}
+                              canOpen={!hasIncompleteRubric}
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
                     {editable ? (
