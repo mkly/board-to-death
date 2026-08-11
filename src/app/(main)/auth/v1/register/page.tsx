@@ -28,7 +28,7 @@ export default function RegisterV1() {
         </div>
       </div>
 
-      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3">
+      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3 dark:bg-[#010706]">
         <div className="flex w-full max-w-md flex-col gap-10 py-24 lg:py-32">
           <div className="flex flex-col gap-4 text-center">
             <h1 className="font-medium tracking-tight">Create your organization</h1>

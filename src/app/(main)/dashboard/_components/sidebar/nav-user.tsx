@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { CircleUser, EllipsisVertical, LogOut } from "lucide-react";
+import { CircleUser, EllipsisVertical, LogOut, ShieldCheck } from "lucide-react";
 
+import { ThemeSwitcher } from "@/app/(main)/dashboard/_components/header/theme-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -78,13 +79,20 @@ export function NavUser({
                   <span className="truncate font-medium">{user.name}</span>
                   <span className="truncate text-muted-foreground text-xs">{user.email}</span>
                 </div>
+                <ThemeSwitcher />
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/dashboard/account/security">
+                <Link href="/dashboard/account/profile">
                   <CircleUser />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/account/security">
+                  <ShieldCheck />
                   Account security
                 </Link>
               </DropdownMenuItem>

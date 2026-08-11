@@ -23,7 +23,7 @@ export default async function TwoFactorPage({ searchParams }: TwoFactorPageProps
           </div>
         </div>
       </div>
-      <main className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3">
+      <main className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3 dark:bg-[#010706]">
         <div className="flex w-full max-w-md flex-col gap-8 py-20">
           <div className="flex flex-col gap-3 text-center">
             <ShieldCheck className="mx-auto size-10 text-primary" aria-hidden="true" />

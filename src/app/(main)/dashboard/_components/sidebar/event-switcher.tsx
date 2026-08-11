@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import Link from "next/link";
+
 import { CalendarDays, LoaderCircle } from "lucide-react";
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,10 +20,13 @@ export function EventSwitcher({ events, activeEvent }: EventSwitcherProps) {
 
   if (events.length === 0) {
     return (
-      <div className="flex min-w-0 items-center gap-2 rounded-lg border border-dashed p-2 text-muted-foreground text-xs">
+      <Link
+        href="/dashboard"
+        className="flex min-w-0 items-center gap-2 rounded-lg border border-dashed p-2 text-muted-foreground text-xs transition-colors hover:border-solid hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+      >
         <CalendarDays className="size-4 shrink-0" />
-        <span className="truncate">No events available</span>
-      </div>
+        <span className="truncate">No events — create one</span>
+      </Link>
     );
   }
 

@@ -85,6 +85,7 @@ interface EventSettingsWorkspaceProps {
   readonly eventOptions: readonly EventOption[];
   readonly eventScoped?: boolean;
   readonly initialSnapshot: EventSettingsSnapshot | null;
+  readonly initialCreateOpen?: boolean;
 }
 
 type FieldErrors = MutationResult["fieldErrors"];
@@ -432,13 +433,14 @@ export function EventSettingsWorkspace({
   eventOptions: initialEventOptions,
   eventScoped = false,
   initialSnapshot,
+  initialCreateOpen = false,
 }: EventSettingsWorkspaceProps) {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [eventOptions, setEventOptions] = useState(initialEventOptions);
   const [pending, setPending] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>();
-  const [createOpen, setCreateOpen] = useState(initialSnapshot === null);
+  const [createOpen, setCreateOpen] = useState(initialSnapshot === null || initialCreateOpen);
 
   const settingsHref = (eventId: string): string =>
     eventScoped

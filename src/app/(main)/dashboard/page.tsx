@@ -32,7 +32,7 @@ export default async function Page() {
       {activeOrganization && (
         <EmptyContent>
           <Button asChild>
-            <Link href="/dashboard/event-settings">Create your first event</Link>
+            <Link href="/dashboard/event-settings?create=1">Create your first event</Link>
           </Button>
         </EmptyContent>
       )}

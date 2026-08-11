@@ -9,7 +9,7 @@ import { EventSettingsWorkspace } from "./_components/event-settings-workspace";
 import type { EventSettingsSnapshot } from "./types";
 
 interface PageProps {
-  readonly searchParams: Promise<{ event?: string }>;
+  readonly searchParams: Promise<{ event?: string; create?: string }>;
 }
 
 export default async function Page({ searchParams }: PageProps) {
@@ -23,8 +23,9 @@ export default async function Page({ searchParams }: PageProps) {
       select: { id: true, name: true, archivedAt: true },
     })
   ).map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt !== null }));
-  const requestedEventId = (await searchParams).event;
+  const { event: requestedEventId, create } = await searchParams;
   const eventId = eventOptions.some(({ id }) => id === requestedEventId) ? requestedEventId : eventOptions[0]?.id;
+  const initialCreateOpen = create === "1";
 
   let initialSnapshot: EventSettingsSnapshot | null = null;
   if (eventId) {
@@ -67,6 +68,7 @@ export default async function Page({ searchParams }: PageProps) {
       key={initialSnapshot?.event.id}
       eventOptions={eventOptions}
       initialSnapshot={initialSnapshot}
+      initialCreateOpen={initialCreateOpen}
     />
   );
 }

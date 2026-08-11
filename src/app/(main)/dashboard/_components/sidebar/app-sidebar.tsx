@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 
 import { useShallow } from "zustand/react/shallow";
 
@@ -55,14 +56,17 @@ export function AppSidebar({
       collapsible={collapsible}
     >
       <SidebarHeader className="gap-3 border-sidebar-border/60 border-b px-3 py-4">
-        <div className="flex items-center gap-2 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 rounded-md p-2 focus-visible:outline-2 focus-visible:outline-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+        >
           <span data-brand-mark className="flex size-8 shrink-0">
             <Image src="/brand-mark.png" alt="" width={64} height={64} priority className="size-full object-contain" />
           </span>
           <span className="font-bold font-heading text-base tracking-tight group-data-[collapsible=icon]:hidden">
             {APP_CONFIG.name}
           </span>
-        </div>
+        </Link>
         <OrganizationSwitcher organizations={organizations} activeOrganization={activeOrganization} />
         <EventSwitcher events={events} activeEvent={activeEvent} />
       </SidebarHeader>
