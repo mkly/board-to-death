@@ -30,17 +30,6 @@ The current release includes event-scoped CFPs, evaluation, speaker sourcing, sp
 sponsor or exhibitor groups, scheduling, communications, file requests, reports, public resources, published-program
 APIs, embeds, and the deterministic Accelevents adapter.
 
-The following capabilities are outside the supported release:
-
-- Payments, ticketing, invoicing, refunds, and payment-provider integrations
-- Multilingual forms, content, messages, or translation workflows
-- AI-generated review comments, AI scoring, and prompt-driven dashboards
-- CRM and marketing automation, including Airtable synchronization
-- Public sponsor or exhibitor group portals
-- Cloudflare-specific deployment or storage integration
-- Laravel Forge deployment automation
-- A live Accelevents HTTP adapter
-
 Vercel and self-hosted Node deployments are documented. Cloudflare or Forge may host surrounding infrastructure, but
 the repository contains no provider-specific integration for either service.
 
