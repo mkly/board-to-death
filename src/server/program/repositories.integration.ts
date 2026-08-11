@@ -274,6 +274,70 @@ describe("speaker resource persistence", () => {
     assert.equal((await resources.findPublished(eventId, "venue-map"))?.version.bodyMarkdown, "New directions");
   });
 
+  test("republishes an unpublished version by cloning it into a new version", async () => {
+    const eventId = await createEvent("resource-republish");
+    const page = await resources.create({
+      eventId,
+      key: "checklist",
+      slug: "checklist",
+      title: "Checklist",
+      bodyMarkdown: "Checklist content",
+    });
+    await resources.publish(eventId, page.id, versionId(page), new Date("2027-05-01T08:00:00.000Z"));
+    await resources.unpublish(eventId, page.id, new Date("2027-05-01T09:00:00.000Z"));
+
+    await resources.publish(eventId, page.id, versionId(page), new Date("2027-05-01T10:00:00.000Z"));
+    const [republished] = await resources.list(eventId);
+    assert.equal(republished?.status, "published");
+    assert.equal(republished?.version.versionNumber, 2);
+    assert.equal(republished?.version.bodyMarkdown, "Checklist content");
+    assert.equal(republished?.pendingVersion, null);
+    assert.equal((await resources.findPublished(eventId, "checklist"))?.version.bodyMarkdown, "Checklist content");
+  });
+
+  test("rejects slug collisions across pages on create, revise, and publish", async () => {
+    const eventId = await createEvent("resource-slug-conflicts");
+    const first = await resources.create({
+      eventId,
+      key: "shared",
+      slug: "shared",
+      title: "Shared slug owner",
+      bodyMarkdown: "Original content",
+    });
+
+    await expectRepositoryError(
+      resources.create({ eventId, key: "imitator", slug: "shared", title: "Imitator", bodyMarkdown: "Copycat" }),
+      "conflict",
+    );
+
+    const second = await resources.create({
+      eventId,
+      key: "second",
+      slug: "second",
+      title: "Second",
+      bodyMarkdown: "Second content",
+    });
+    await expectRepositoryError(resources.revise(eventId, second.id, { slug: "shared" }), "conflict");
+
+    await resources.publish(eventId, first.id, versionId(first), new Date("2027-06-01T08:00:00.000Z"));
+    const moved = await resources.revise(eventId, first.id, { slug: "moved" });
+    await resources.publish(eventId, first.id, versionId(moved, 1), new Date("2027-06-01T09:00:00.000Z"));
+
+    const claimant = await resources.create({
+      eventId,
+      key: "claimant",
+      slug: "shared",
+      title: "Claimant",
+      bodyMarkdown: "Now owns the slug",
+    });
+    await resources.publish(eventId, claimant.id, versionId(claimant), new Date("2027-06-01T10:00:00.000Z"));
+
+    await expectRepositoryError(
+      resources.publish(eventId, first.id, versionId(moved, 0), new Date("2027-06-01T11:00:00.000Z")),
+      "conflict",
+    );
+  });
+
   test("finds a published resource by slug and excludes drafts, unpublished, archived, and other events", async () => {
     const eventId = await createEvent("resource-find-published");
     const otherEventId = await createEvent("resource-find-published-other");

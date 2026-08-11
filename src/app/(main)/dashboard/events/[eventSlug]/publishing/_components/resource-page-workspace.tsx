@@ -82,11 +82,17 @@ function editableVersion(page: ResourcePage): ResourcePageVersion {
   return page.pendingVersion ?? page.version;
 }
 
-/** The version a publish would activate: a pending revision, or the current one while it is still a draft. */
+/** The version a publish would activate: a pending revision, a draft, or an unpublished version to republish. */
 function publishableVersion(page: ResourcePage | null): ResourcePageVersion | null {
   if (!page) return null;
   if (page.pendingVersion) return page.pendingVersion;
-  return page.version.publishedAt === null && page.version.unpublishedAt === null ? page.version : null;
+  return page.status === "published" ? null : page.version;
+}
+
+function publishLabel(status: ResourceStatus): string {
+  if (status === "published") return "Publish update";
+  if (status === "unpublished") return "Republish";
+  return "Publish";
 }
 
 function toFields(page: ResourcePage | null): EditableFields {
@@ -117,9 +123,30 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
   const publishable = publishableVersion(selected);
 
   const [fields, setFields] = useState<EditableFields>(() => toFields(selected));
-  useEffect(() => {
+
+  // Reset the form only when the selection (or its editable version, after a save) actually changes,
+  // not on every server refresh — a refresh replaces `selected`'s identity without changing content,
+  // and resetting then would wipe in-progress edits after unrelated mutations like reordering.
+  const selectionKey = selected ? `${selected.id}:${editableVersion(selected).id}` : "new";
+  const [lastSelectionKey, setLastSelectionKey] = useState(selectionKey);
+  if (selectionKey !== lastSelectionKey) {
+    setLastSelectionKey(selectionKey);
     setFields(toFields(selected));
-  }, [selected]);
+  }
+
+  const savedFields = toFields(selected);
+  const dirty =
+    fields.slug !== savedFields.slug ||
+    fields.title !== savedFields.title ||
+    fields.summary !== savedFields.summary ||
+    fields.bodyMarkdown !== savedFields.bodyMarkdown;
+
+  const [pendingSelection, setPendingSelection] = useState<{ readonly id: string | null } | null>(null);
+  const selectPage = (id: string | null) => {
+    if (id === selectedId) return;
+    if (dirty) setPendingSelection({ id });
+    else setSelectedId(id);
+  };
 
   const [feedback, setFeedback] = useState("");
   const [mutationPending, startMutation] = useTransition();
@@ -200,11 +227,38 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
             Draft, preview, order, and publish event-scoped pages for speakers.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={() => setSelectedId(null)}>
+        <Button type="button" variant="outline" onClick={() => selectPage(null)}>
           <FilePlus2 data-icon="inline-start" />
           New resource
         </Button>
       </header>
+
+      <AlertDialog
+        open={pendingSelection !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingSelection(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This resource has edits that have not been saved. Switching away will discard them.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingSelection) setSelectedId(pendingSelection.id);
+                setPendingSelection(null);
+              }}
+            >
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
         <Card className="self-start">
@@ -228,7 +282,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                       type="button"
                       variant={selectedId === page.id ? "secondary" : "ghost"}
                       className="h-auto min-w-0 flex-1 justify-start py-2 text-left"
-                      onClick={() => setSelectedId(page.id)}
+                      onClick={() => selectPage(page.id)}
                     >
                       <span className="min-w-0 flex-1 truncate">{page.version.title}</span>
                       <Badge variant={statusVariant(page.status)}>{page.status}</Badge>
@@ -268,10 +322,11 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
               <CardHeader>
                 <CardTitle>{selected ? `Edit ${editableVersion(selected).title}` : "Create resource"}</CardTitle>
                 <CardDescription>Content is stored as Markdown and sanitized wherever it renders.</CardDescription>
-                {selected ? (
+                {selected || dirty ? (
                   <CardAction className="flex flex-wrap items-center gap-2">
-                    <Badge variant={statusVariant(selected.status)}>{selected.status}</Badge>
-                    {selected.pendingVersion ? <Badge variant="outline">unpublished changes</Badge> : null}
+                    {selected ? <Badge variant={statusVariant(selected.status)}>{selected.status}</Badge> : null}
+                    {selected?.pendingVersion ? <Badge variant="outline">unpublished changes</Badge> : null}
+                    {dirty ? <Badge variant="outline">unsaved edits</Badge> : null}
                   </CardAction>
                 ) : null}
               </CardHeader>
@@ -335,13 +390,47 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                 </FieldGroup>
               </CardContent>
               <CardFooter className="flex-wrap justify-between gap-3">
-                <p aria-live="polite" className="text-muted-foreground text-sm">
-                  {feedback}
+                <p aria-live="polite" className="min-w-0 text-muted-foreground text-sm">
+                  {dirty && publishable ? "Publishing uses the last saved version — save your edits first." : feedback}
                 </p>
-                <Button type="submit" disabled={savePending}>
-                  {savePending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-                  {selected ? "Save changes" : "Create draft"}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {selected?.status === "published" && (
+                    <Button type="button" variant="outline" disabled={mutationPending} onClick={unpublish}>
+                      Unpublish
+                    </Button>
+                  )}
+                  {selected && publishable && (
+                    <Button type="button" variant="outline" disabled={mutationPending || dirty} onClick={publish}>
+                      {publishLabel(selected.status)}
+                    </Button>
+                  )}
+                  {selected && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button type="button" variant="destructive" disabled={mutationPending}>
+                          <Archive data-icon="inline-start" />
+                          Archive
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Archive this resource?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            It will disappear from the speaker resource list and any published URL will stop working.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={archive}>Archive resource</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                  <Button type="submit" disabled={savePending}>
+                    {savePending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+                    {selected ? "Save changes" : "Create draft"}
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
           </form>
@@ -377,43 +466,6 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                 </Empty>
               )}
             </CardContent>
-            {selected ? (
-              <CardFooter className="flex-wrap items-center gap-2">
-                {selected.status === "published" && (
-                  <Button type="button" variant="outline" disabled={mutationPending} onClick={unpublish}>
-                    Unpublish
-                  </Button>
-                )}
-                {publishable && (
-                  <Button type="button" disabled={mutationPending} onClick={publish}>
-                    {selected.status === "published" ? "Publish update" : "Publish"}
-                  </Button>
-                )}
-                {selected.status !== "published" && !publishable && (
-                  <p className="text-muted-foreground text-sm">Save changes to create a new draft before publishing.</p>
-                )}
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button type="button" variant="destructive" disabled={mutationPending}>
-                      <Archive data-icon="inline-start" />
-                      Archive
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Archive this resource?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        It will disappear from the speaker resource list and any published URL will stop working.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={archive}>Archive resource</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </CardFooter>
-            ) : null}
           </Card>
         </div>
       </div>

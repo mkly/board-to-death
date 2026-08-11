@@ -81,12 +81,42 @@ function storedEmbedData(value: Prisma.JsonValue): Prisma.InputJsonValue | Prism
   });
 }
 
+/** A slug is taken when another page's latest or actively published version uses it. */
+async function assertSlugAvailable(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  pageId: string | null,
+  slug: string,
+): Promise<void> {
+  const pages = await transaction.speakerResourcePage.findMany({
+    where: {
+      eventId,
+      archivedAt: null,
+      ...(pageId === null ? {} : { id: { not: pageId } }),
+      versions: { some: { slug } },
+    },
+    select: {
+      versions: {
+        orderBy: { versionNumber: "desc" },
+        select: { slug: true, publishedAt: true, unpublishedAt: true },
+      },
+    },
+  });
+  for (const page of pages) {
+    const head = page.versions[0];
+    const active = page.versions.find((version) => version.publishedAt !== null && version.unpublishedAt === null);
+    if (head?.slug === slug || active?.slug === slug) {
+      throw new RepositoryError("conflict", "A resource with this slug already exists for this event.");
+    }
+  }
+}
+
 function mapDatabaseError(error: unknown): never {
   if (error instanceof RepositoryError) throw error;
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = String(error.code);
     if (code === "P2002") {
-      throw new RepositoryError("conflict", "A speaker resource publication already exists.");
+      throw new RepositoryError("conflict", "A resource with this slug already exists for this event.");
     }
     if (code === "P2003" || code === "P2025") {
       throw new RepositoryError("not-found", "An event-owned speaker resource record was not found.");
@@ -110,6 +140,7 @@ export class SpeakerResourceRepository {
       const pageId = await this.client.$transaction(async (transaction) => {
         const event = await transaction.event.findUnique({ where: { id: input.eventId }, select: { id: true } });
         if (!event) throw new RepositoryError("not-found", "The event was not found.");
+        await assertSlugAvailable(transaction, input.eventId, null, slug);
         const last = await transaction.speakerResourcePageVersion.findFirst({
           where: { eventId: input.eventId },
           orderBy: { sortOrder: "desc" },
@@ -152,6 +183,8 @@ export class SpeakerResourceRepository {
         const previous = page?.versions[0];
         if (!page || !previous) throw new RepositoryError("not-found", "The event-owned resource was not found.");
         if (page.archivedAt !== null) invalid("An archived resource cannot be revised.");
+        const slug = input.slug === undefined ? previous.slug : resourceSlug(input.slug);
+        if (slug !== previous.slug) await assertSlugAvailable(transaction, eventId, pageId, slug);
         const sortOrder = input.sortOrder ?? previous.sortOrder;
         if (!Number.isInteger(sortOrder) || sortOrder < 0) invalid("sortOrder must be a non-negative integer.");
         const requestedEmbeds =
@@ -163,7 +196,7 @@ export class SpeakerResourceRepository {
             eventId,
             pageId,
             versionNumber: previous.versionNumber + 1,
-            slug: input.slug === undefined ? previous.slug : resourceSlug(input.slug),
+            slug,
             title: input.title === undefined ? previous.title : requiredText(input.title, "title"),
             summary: input.summary === undefined ? previous.summary : optionalText(input.summary),
             bodyMarkdown: input.bodyMarkdown ?? previous.bodyMarkdown,
@@ -192,9 +225,10 @@ export class SpeakerResourceRepository {
           where: { eventId, pageId, id: versionId },
         });
         if (!version) throw new RepositoryError("not-found", "The event-owned resource version was not found.");
-        if (version.publishedAt !== null || version.unpublishedAt !== null) {
-          invalid("Only a draft resource version can be published.");
+        if (version.publishedAt !== null && version.unpublishedAt === null) {
+          invalid("This resource version is already published.");
         }
+        await assertSlugAvailable(transaction, eventId, pageId, version.slug);
         const active = await transaction.speakerResourcePageVersion.findFirst({
           where: { eventId, pageId, publishedAt: { not: null }, unpublishedAt: null },
           select: { publishedAt: true },
@@ -206,10 +240,34 @@ export class SpeakerResourceRepository {
           where: { eventId, pageId, publishedAt: { not: null }, unpublishedAt: null },
           data: { unpublishedAt: publishedAt },
         });
-        await transaction.speakerResourcePageVersion.update({
-          where: { id: versionId },
-          data: { publishedAt },
-        });
+        if (version.unpublishedAt === null) {
+          await transaction.speakerResourcePageVersion.update({
+            where: { id: versionId },
+            data: { publishedAt },
+          });
+        } else {
+          // Versions are immutable once their publish window closes; republishing clones the
+          // content into a new version whose window opens now.
+          const head = await transaction.speakerResourcePageVersion.findFirst({
+            where: { eventId, pageId },
+            orderBy: { versionNumber: "desc" },
+            select: { versionNumber: true },
+          });
+          await transaction.speakerResourcePageVersion.create({
+            data: {
+              eventId,
+              pageId,
+              versionNumber: (head?.versionNumber ?? 0) + 1,
+              slug: version.slug,
+              title: version.title,
+              summary: version.summary,
+              bodyMarkdown: version.bodyMarkdown,
+              allowedEmbedUrls: storedEmbedData(version.allowedEmbedUrls),
+              sortOrder: version.sortOrder,
+              publishedAt,
+            },
+          });
+        }
       });
       return await this.require(eventId, pageId);
     } catch (error) {
