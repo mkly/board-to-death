@@ -35,6 +35,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 
 import {
   archiveResourcePage,
@@ -149,7 +150,6 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     else setSelectedId(id);
   };
 
-  const [feedback, setFeedback] = useState("");
   const [mutationPending, startMutation] = useTransition();
 
   // Refreshing inside a transition keeps that transition pending on the server round trip, which leaves the
@@ -171,10 +171,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     },
     INITIAL_STATE,
   );
-
-  useEffect(() => {
-    if (saveState.message) setFeedback(saveState.message);
-  }, [saveState]);
+  useActionToast(saveState);
 
   const updateField = (field: keyof EditableFields, value: string) => {
     setFields((current) => ({ ...current, [field]: value }));
@@ -190,7 +187,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     if (!selected || !publishable) return;
     startMutation(async () => {
       const result = await publishResourcePage(event.slug, selected.id, publishable.id);
-      setFeedback(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success") requestRefresh();
     });
   };
@@ -199,7 +196,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     if (!selected) return;
     startMutation(async () => {
       const result = await unpublishResourcePage(event.slug, selected.id);
-      setFeedback(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success") requestRefresh();
     });
   };
@@ -208,7 +205,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
     if (!selected) return;
     startMutation(async () => {
       const result = await archiveResourcePage(event.slug, selected.id);
-      setFeedback(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success") {
         setSelectedId(null);
         requestRefresh();
@@ -219,7 +216,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
   const move = (pageId: string, direction: "up" | "down") => {
     startMutation(async () => {
       const result = await moveResourcePage(event.slug, pageId, direction);
-      setFeedback(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success") requestRefresh();
     });
   };
@@ -397,9 +394,11 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                 </FieldGroup>
               </CardContent>
               <CardFooter className="flex-wrap justify-between gap-3">
-                <p aria-live="polite" className="min-w-0 text-muted-foreground text-sm">
-                  {dirty && publishable ? "Publishing uses the last saved version — save your edits first." : feedback}
-                </p>
+                {dirty && publishable ? (
+                  <p aria-live="polite" className="min-w-0 text-muted-foreground text-sm">
+                    Publishing uses the last saved version — save your edits first.
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-2">
                   {selected?.status === "published" && (
                     <Button type="button" variant="outline" disabled={mutationPending} onClick={unpublish}>

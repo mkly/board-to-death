@@ -35,6 +35,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import {
   CustomFieldEntityType,
   type CustomFieldEntityType as CustomFieldEntityTypeValue,
@@ -202,7 +203,7 @@ function ExistingField({
     updateCustomField.bind(null, eventSlug, definition.id),
     INITIAL_STATE,
   );
-  const [mutationMessage, setMutationMessage] = useState("");
+  useActionToast(state);
   const [mutating, startMutation] = useTransition();
   const move = (offset: -1 | 1) => {
     const next = [...orderedIds];
@@ -210,13 +211,13 @@ function ExistingField({
     [next[index], next[destination]] = [next[destination], next[index]];
     startMutation(async () => {
       const result = await moveCustomField(eventSlug, definition.entityType, next);
-      setMutationMessage(result.message ?? "");
+      actionResultToast(result);
     });
   };
   const remove = () => {
     startMutation(async () => {
       const result = await deleteCustomField(eventSlug, definition.id);
-      setMutationMessage(result.message ?? "");
+      actionResultToast(result);
     });
   };
   return (
@@ -252,9 +253,6 @@ function ExistingField({
           <DefinitionFields definition={definition} />
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <p className="text-muted-foreground text-sm" aria-live="polite">
-            {state.message ?? mutationMessage}
-          </p>
           <div className="flex gap-2">
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -299,6 +297,7 @@ function EntityFields({
   readonly definitions: readonly EditableCustomField[];
 }) {
   const [state, action, pending] = useActionState(createCustomField.bind(null, eventSlug), INITIAL_STATE);
+  useActionToast(state);
   const orderedIds = definitions.map(({ id }) => id);
   return (
     <div className="flex flex-col gap-5">
@@ -335,9 +334,6 @@ function EntityFields({
             <DefinitionFields />
           </CardContent>
           <CardFooter className="justify-between gap-3">
-            <p className="text-muted-foreground text-sm" aria-live="polite">
-              {state.message}
-            </p>
             <Button type="submit" disabled={pending}>
               {pending ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
               Add field

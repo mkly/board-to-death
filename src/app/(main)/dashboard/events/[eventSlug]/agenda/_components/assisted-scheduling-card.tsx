@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { CalendarClock, Check, Sparkles, X } from "lucide-react";
-import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -29,6 +28,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type AssistedScheduleState, acceptAssistedSchedule, previewAssistedSchedule } from "../actions";
 
@@ -60,11 +60,7 @@ export function AssistedSchedulingCard({
   const proposals = state.proposals ?? [];
   const unplaced = state.unplaced ?? [];
   const acceptLabel = proposals.length === 1 ? "Accept proposed placement" : "Accept proposed placements";
-
-  useEffect(() => {
-    if (state.status === "success" && state.message) toast.success(state.message);
-    if (state.status === "error" && state.message) toast.error(state.message);
-  }, [state]);
+  useActionToast(state);
 
   const preview = () => {
     startTransition(async () => setState(await previewAssistedSchedule(eventSlug)));
@@ -88,8 +84,7 @@ export function AssistedSchedulingCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {state.status === "preview" ? (
-          <div className="flex flex-col gap-3" aria-live="polite">
-            <p className="text-muted-foreground text-sm">{state.message}</p>
+          <div className="flex flex-col gap-3">
             {proposals.length > 0 ? (
               <ol className="grid gap-2 md:grid-cols-2">
                 {proposals.map((proposal) => (

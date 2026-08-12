@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 
-import { CircleCheckIcon, SendIcon, TriangleAlertIcon } from "lucide-react";
+import { SendIcon } from "lucide-react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardFooter } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -18,25 +18,18 @@ const INITIAL_STATE: SpeakerSignInActionState = { status: "idle" };
 export function SpeakerSignInForm({ eventSlug }: { readonly eventSlug: string }) {
   const [state, formAction, pending] = useActionState(requestSpeakerSignInLink.bind(null, eventSlug), INITIAL_STATE);
   const invalid = state.status === "error";
+  useEffect(() => {
+    if (state.status === "success") {
+      toast.success(state.message);
+    } else if (state.status === "error") {
+      toast.error(state.message);
+    }
+  }, [state]);
 
   return (
     <form noValidate action={formAction}>
       <CardContent>
         <FieldGroup>
-          {state.status === "success" ? (
-            <Alert>
-              <CircleCheckIcon aria-hidden="true" />
-              <AlertTitle>Check your inbox</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
-          {invalid ? (
-            <Alert variant="destructive">
-              <TriangleAlertIcon aria-hidden="true" />
-              <AlertTitle>Link not requested</AlertTitle>
-              <AlertDescription>Enter a valid email address and try again.</AlertDescription>
-            </Alert>
-          ) : null}
           <Field data-invalid={invalid || undefined}>
             <FieldLabel htmlFor="speaker-sign-in-email">Email address</FieldLabel>
             <Input

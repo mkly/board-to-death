@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { CalendarDays, Download, MapPin, Search, TriangleAlert, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -177,7 +178,6 @@ export function ItineraryWorkspace({
   const [restored, setRestored] = useState(false);
   const [droppedCount, setDroppedCount] = useState(0);
   const [exporting, setExporting] = useState(false);
-  const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [trackId, setTrackId] = useState("");
   const [day, setDay] = useState("");
@@ -249,12 +249,12 @@ export function ItineraryWorkspace({
   const toggleSession = (session: ItinerarySession, selected: boolean) => {
     if (!selected) {
       setSelectedIds((current) => current.filter((id) => id !== session.id));
-      setStatus(`${session.title} removed from your itinerary.`);
+      toast.success(`${session.title} removed from your itinerary.`);
       return;
     }
     setSelectedIds((current) => (current.includes(session.id) ? current : [...current, session.id]));
     const clash = selectedSessions.find((candidate) => sessionsOverlap(candidate, session));
-    setStatus(
+    toast.success(
       clash
         ? `${session.title} added to your itinerary. It overlaps with ${clash.title}.`
         : `${session.title} added to your itinerary.`,
@@ -282,9 +282,9 @@ export function ItineraryWorkspace({
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
-      setStatus("Your itinerary calendar download is ready.");
+      toast.success("Your itinerary calendar is ready.");
     } catch {
-      setStatus("Your itinerary calendar could not be downloaded. Please try again.");
+      toast.error("Your itinerary calendar could not be downloaded. Please try again.");
     } finally {
       setExporting(false);
     }
@@ -350,11 +350,6 @@ export function ItineraryWorkspace({
           </span>
         }
       />
-
-      {/* Always rendered so assistive technology has a live region to announce into. */}
-      <p aria-live="polite" className="sr-only" role="status">
-        {status}
-      </p>
 
       {sessions.length === 0 ? (
         <Card size={density === "compact" ? "sm" : "default"}>

@@ -54,7 +54,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { actionResultToast } from "@/hooks/use-action-toast";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import {
   columnLabel,
   defaultSubmissionColumns,
@@ -432,6 +432,7 @@ function ColumnDialog({
   readonly hasSavedView: boolean;
 }) {
   const [state, formAction, pending] = useActionState(saveSubmissionView, { status: "idle" });
+  useActionToast(state);
   const [resetPending, startResetTransition] = useTransition();
   const customLabels = Object.fromEntries(options.customColumns.map(({ id, label }) => [id, label]));
   const available = [
@@ -534,14 +535,6 @@ function ColumnDialog({
             ))}
           </div>
         </div>
-        {state.message ? (
-          <p
-            aria-live="polite"
-            className={cn("text-sm", state.status === "error" ? "text-destructive" : "text-muted-foreground")}
-          >
-            {state.message}
-          </p>
-        ) : null}
         <DialogFooter>
           {hasSavedView ? (
             <Button

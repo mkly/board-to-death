@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 
 import { KeyRound, RadioTower } from "lucide-react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
@@ -15,24 +15,27 @@ import { createWebhookEndpoint, type DeveloperAccessActionState, issueApiToken }
 
 const initialState: DeveloperAccessActionState = { status: "idle" };
 
-function ResultAlert({ state }: { readonly state: DeveloperAccessActionState }) {
-  if (state.status === "idle") return null;
-  return (
-    <Alert variant={state.status === "error" ? "destructive" : "default"}>
-      {state.status === "error" ? <RadioTower /> : <KeyRound />}
-      <AlertTitle>{state.status === "error" ? "Could not save" : "Secret created"}</AlertTitle>
-      <AlertDescription className="flex flex-col gap-2">
-        <span>{state.message}</span>
-        {state.secret ? (
-          <code className="break-all rounded-md bg-muted p-3 text-foreground">{state.secret}</code>
-        ) : null}
-      </AlertDescription>
-    </Alert>
-  );
+function useIssueStateToast(state: DeveloperAccessActionState): void {
+  useEffect(() => {
+    if (!state.message) return;
+    if (state.status === "error") {
+      toast.error(state.message);
+      return;
+    }
+    if (state.status === "success" && state.secret) {
+      toast.success(state.message, { description: `Copy this secret now: ${state.secret}` });
+      return;
+    }
+    if (state.status === "success") {
+      toast.success(state.message);
+    }
+  }, [state]);
 }
 
 export function ApiTokenForm({ eventSlug }: { readonly eventSlug: string }) {
   const [state, action, pending] = useActionState(issueApiToken, initialState);
+  useIssueStateToast(state);
+
   return (
     <form noValidate action={action} className="flex flex-col gap-4">
       <input type="hidden" name="eventSlug" value={eventSlug} />
@@ -55,7 +58,6 @@ export function ApiTokenForm({ eventSlug }: { readonly eventSlug: string }) {
           </FieldGroup>
         </FieldSet>
       </FieldGroup>
-      <ResultAlert state={state} />
       <Button type="submit" disabled={pending}>
         <KeyRound data-icon="inline-start" />
         {pending ? "Issuing…" : "Issue token"}
@@ -66,6 +68,8 @@ export function ApiTokenForm({ eventSlug }: { readonly eventSlug: string }) {
 
 export function WebhookEndpointForm({ eventSlug }: { readonly eventSlug: string }) {
   const [state, action, pending] = useActionState(createWebhookEndpoint, initialState);
+  useIssueStateToast(state);
+
   return (
     <form noValidate action={action} className="flex flex-col gap-4">
       <input type="hidden" name="eventSlug" value={eventSlug} />
@@ -92,7 +96,6 @@ export function WebhookEndpointForm({ eventSlug }: { readonly eventSlug: string 
           </FieldGroup>
         </FieldSet>
       </FieldGroup>
-      <ResultAlert state={state} />
       <Button type="submit" disabled={pending}>
         <RadioTower data-icon="inline-start" />
         {pending ? "Registering…" : "Register endpoint"}

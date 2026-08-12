@@ -25,6 +25,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import {
   EMAIL_TEMPLATE_PREVIEW_VALUES,
   EMAIL_TEMPLATE_VARIABLES,
@@ -116,6 +117,7 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
     previewValues,
   );
   const submitLabel = saveButtonLabel(pending, draft.id === "");
+  useActionToast(state);
 
   const updateDraft = (field: keyof DraftTemplate, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -273,10 +275,7 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
                   </Field>
                 </FieldGroup>
               </CardContent>
-              <CardFooter className="justify-between gap-3">
-                <p aria-live="polite" className="text-muted-foreground text-sm">
-                  {state.message}
-                </p>
+              <CardFooter className="justify-end gap-3">
                 <Button type="submit" disabled={pending}>
                   {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
                   {submitLabel}

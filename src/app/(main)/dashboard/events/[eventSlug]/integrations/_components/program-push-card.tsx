@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { pushAcceleventsProgram, type SyncRunMutationState } from "../actions";
 
@@ -30,6 +31,7 @@ export function ProgramPushCard({ eventSlug, connected, publishedVersion }: Prog
     if (result.status === "success") router.refresh();
     return result;
   }, INITIAL_STATE);
+  useActionToast(state);
   const ready = connected && publishedVersion !== null;
 
   return (
@@ -62,10 +64,7 @@ export function ProgramPushCard({ eventSlug, connected, publishedVersion }: Prog
             </p>
           )}
         </CardContent>
-        <CardFooter className="justify-between gap-3">
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {state.message}
-          </p>
+        <CardFooter className="justify-end gap-3">
           <form action={formAction}>
             <input type="hidden" name="eventSlug" value={eventSlug} />
             <input type="hidden" name="confirmed" value={confirmed ? "true" : "false"} />

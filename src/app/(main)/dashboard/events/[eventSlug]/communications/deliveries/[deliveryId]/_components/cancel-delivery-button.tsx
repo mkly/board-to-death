@@ -4,7 +4,6 @@ import { useActionState } from "react";
 
 import { Ban, CircleAlert } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type CancelBulkDeliveryState, cancelBulkDelivery } from "../actions";
 
@@ -31,6 +31,7 @@ interface CancelDeliveryButtonProps {
 
 export function CancelDeliveryButton({ eventSlug, deliveryId }: CancelDeliveryButtonProps) {
   const [state, formAction, pending] = useActionState(cancelBulkDelivery, initialState);
+  useActionToast(state);
   const formId = `cancel-delivery-${deliveryId}`;
 
   return (
@@ -64,12 +65,6 @@ export function CancelDeliveryButton({ eventSlug, deliveryId }: CancelDeliveryBu
           </AlertDialogContent>
         </AlertDialog>
       </form>
-      {state.status !== "idle" && (
-        <Alert variant={state.status === "error" ? "destructive" : "default"}>
-          <AlertTitle>{state.status === "error" ? "Cancellation failed" : "Delivery cancelled"}</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }

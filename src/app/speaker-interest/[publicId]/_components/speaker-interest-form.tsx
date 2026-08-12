@@ -4,13 +4,13 @@ import { useActionState } from "react";
 
 import { CheckCircle2, Send } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type SpeakerInterestActionState, submitSpeakerInterest } from "../actions";
 
@@ -22,6 +22,7 @@ function fieldError(state: SpeakerInterestActionState, field: string): string | 
 
 export function SpeakerInterestForm({ publicId }: { readonly publicId: string }) {
   const [state, action, pending] = useActionState(submitSpeakerInterest.bind(null, publicId), INITIAL_STATE);
+  useActionToast(state);
 
   if (state.status === "success") {
     return (
@@ -31,7 +32,7 @@ export function SpeakerInterestForm({ publicId }: { readonly publicId: string })
             <CheckCircle2 />
           </EmptyMedia>
           <EmptyTitle>Interest received</EmptyTitle>
-          <EmptyDescription>{state.message}</EmptyDescription>
+          <EmptyDescription>Thanks for your interest. The event team can now follow up with you.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -46,12 +47,6 @@ export function SpeakerInterestForm({ publicId }: { readonly publicId: string })
       <CardContent>
         <form noValidate action={action}>
           <FieldGroup>
-            {state.status === "error" && state.message ? (
-              <Alert variant="destructive">
-                <AlertTitle>We could not submit your interest</AlertTitle>
-                <AlertDescription>{state.message}</AlertDescription>
-              </Alert>
-            ) : null}
             <div className="grid gap-5 sm:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(state, "givenName")) || undefined}>
                 <FieldLabel htmlFor="interest-given-name">First name</FieldLabel>

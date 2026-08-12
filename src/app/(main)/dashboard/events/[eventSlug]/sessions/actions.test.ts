@@ -5,7 +5,7 @@ import {
   CustomFieldEntityType,
   CustomFieldType,
   ProgramSessionContentApprovalStatus,
-} from "@/generated/prisma/enums";
+} from "@/generated/prisma/client";
 import { customFieldFormPrefix } from "@/lib/custom-fields";
 
 const mocks = vi.hoisted(() => ({

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { promoteSubmissionToSession, type SubmissionPromotionActionState } from "../../actions";
 
@@ -37,6 +38,7 @@ export function SubmissionPromotionControl({
   promotedSessionId,
 }: SubmissionPromotionControlProps) {
   const [state, formAction, pending] = useActionState(promoteSubmissionToSession, initialState);
+  useActionToast(state);
   const [confirming, setConfirming] = useState(false);
   const sessionId = state.status === "success" ? state.sessionId : promotedSessionId;
   const sessionHref = sessionId
@@ -92,13 +94,6 @@ export function SubmissionPromotionControl({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {state.status === "error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>Session not created</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
     </div>
   );
 }

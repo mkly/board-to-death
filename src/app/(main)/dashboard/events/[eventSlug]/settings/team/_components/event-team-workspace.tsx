@@ -12,7 +12,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EventInvitationStatus, EventMembershipRole, MembershipStatus } from "@/generated/prisma/client";
+import { EventInvitationStatus, EventMembershipRole, MembershipStatus } from "@/generated/prisma/enums";
 import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { EventTeamSnapshot } from "@/server/event-memberships";
 

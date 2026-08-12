@@ -2,13 +2,13 @@
 
 import { useActionState } from "react";
 
-import { CheckCircle2, FileUp } from "lucide-react";
+import { FileUp } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type FileRequestUploadState, uploadFileRequest } from "../actions";
 
@@ -22,26 +22,11 @@ export function FulfillmentForm({
   readonly acceptedTypes: string[];
 }) {
   const [state, action, pending] = useActionState(uploadFileRequest.bind(null, token), INITIAL_STATE);
-
-  if (state.status === "success") {
-    return (
-      <Alert>
-        <CheckCircle2 />
-        <AlertTitle>Upload complete</AlertTitle>
-        <AlertDescription>{state.message}</AlertDescription>
-      </Alert>
-    );
-  }
+  useActionToast(state);
 
   return (
     <form noValidate action={action}>
       <FieldGroup>
-        {state.status === "error" ? (
-          <Alert variant="destructive">
-            <AlertTitle>Upload not accepted</AlertTitle>
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
-        ) : null}
         <Field data-disabled={pending || undefined}>
           <FieldLabel htmlFor="fulfillment-file">File</FieldLabel>
           <Input

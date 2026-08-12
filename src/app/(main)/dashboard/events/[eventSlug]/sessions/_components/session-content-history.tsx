@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 
-import { History, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 
 import {
   AlertDialog,
@@ -16,9 +16,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import { actionResultToast } from "@/hooks/use-action-toast";
 
 import { restoreProgramSessionContent } from "../actions";
 
@@ -72,7 +73,6 @@ export function SessionContentHistory({
   archived,
   versions,
 }: SessionContentHistoryProps) {
-  const [message, setMessage] = useState("");
   const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
   const current = versions.at(-1);
@@ -94,7 +94,7 @@ export function SessionContentHistory({
     setRestoringVersion(versionNumber);
     startTransition(async () => {
       const result = await restoreProgramSessionContent(eventSlug, sessionId, versionNumber);
-      setMessage(result.message ?? "");
+      actionResultToast(result);
       setRestoringVersion(null);
     });
   };
@@ -167,14 +167,6 @@ export function SessionContentHistory({
           })}
         </ol>
       </CardContent>
-      {message ? (
-        <CardFooter className="gap-2">
-          <History />
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {message}
-          </p>
-        </CardFooter>
-      ) : null}
     </Card>
   );
 }

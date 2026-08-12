@@ -4,14 +4,14 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
 
-import { CircleAlertIcon, MailCheckIcon, SendIcon } from "lucide-react";
+import { SendIcon } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { EvaluationReminderWorkspace } from "@/server/evaluations/reminders";
 
 import { type SendEvaluationRemindersState, sendEvaluationReminders } from "../actions";
@@ -36,6 +36,7 @@ export function ReviewerReminders({ eventSlug, roundId, workspace }: ReviewerRem
   useEffect(() => {
     if (state.status === "success") setSelectedIds([]);
   }, [state]);
+  useActionToast(state);
 
   function toggleReviewer(reviewerId: string, checked: boolean) {
     setSelectedIds((current) => (checked ? [...current, reviewerId] : current.filter((id) => id !== reviewerId)));
@@ -50,14 +51,6 @@ export function ReviewerReminders({ eventSlug, roundId, workspace }: ReviewerRem
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {state.message ? (
-          <Alert variant={state.status === "error" ? "destructive" : "default"}>
-            {state.status === "error" ? <CircleAlertIcon /> : <MailCheckIcon />}
-            <AlertTitle>{state.status === "error" ? "Reminders not sent" : "Reminders queued"}</AlertTitle>
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
-        ) : null}
-
         {workspace.targets.length > 0 ? (
           <form action={formAction} className="flex flex-col gap-4">
             <input type="hidden" name="eventSlug" value={eventSlug} />

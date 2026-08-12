@@ -2,9 +2,8 @@
 
 import { useActionState, useMemo } from "react";
 
-import { AlertCircle, CheckCircle2, FileSpreadsheet, Save } from "lucide-react";
+import { FileSpreadsheet, Save } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +11,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { applySpeakerCsv, previewSpeakerCsv, type SpeakerCsvImportState } from "../actions";
 
@@ -26,6 +26,8 @@ function outcomeBadge(outcome: "created" | "skipped" | "rejected") {
 export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) {
   const [previewState, previewAction, previewPending] = useActionState(previewSpeakerCsv, INITIAL_STATE);
   const [applyState, applyAction, applyPending] = useActionState(applySpeakerCsv, INITIAL_STATE);
+  useActionToast(previewState);
+  useActionToast(applyState);
   const acceptedPayload = useMemo(
     () => previewState.rows?.flatMap((row) => (row.payload ? [row.payload] : [])) ?? [],
     [previewState.rows],
@@ -66,27 +68,6 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
           </FieldDescription>
         </form>
 
-        {visibleState.status === "error" ? (
-          <Alert variant="destructive">
-            <AlertCircle />
-            <AlertTitle>Import could not continue</AlertTitle>
-            <AlertDescription>{visibleState.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {visibleState.status === "success" ? (
-          <Alert>
-            <CheckCircle2 />
-            <AlertTitle>Import complete</AlertTitle>
-            <AlertDescription>{visibleState.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {showPreview ? (
-          <Alert>
-            <FileSpreadsheet />
-            <AlertTitle>Preview ready</AlertTitle>
-            <AlertDescription>{previewState.message}</AlertDescription>
-          </Alert>
-        ) : null}
         {visibleState.counts ? (
           <output aria-live="polite" className="flex flex-wrap gap-2">
             <Badge>{visibleState.counts.created} create</Badge>

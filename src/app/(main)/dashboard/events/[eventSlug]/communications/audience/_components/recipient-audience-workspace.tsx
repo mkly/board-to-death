@@ -1,3 +1,7 @@
+"use client";
+
+import { type ChangeEvent, useState } from "react";
+
 import Link from "next/link";
 
 import { CheckCircle2, MailSearch, MailX } from "lucide-react";
@@ -13,7 +17,7 @@ import {
   CfpSubmissionStatus,
   ProgramSessionParticipantRole,
   SpeakerTaskAssignmentStatus,
-} from "@/generated/prisma/client";
+} from "@/generated/prisma/enums";
 import type {
   RecipientAudienceOptions,
   RecipientAudiencePreview,
@@ -52,6 +56,18 @@ const PARTICIPANT_ROLE_OPTIONS = [
   [ProgramSessionParticipantRole.CHAIRPERSON, "Chairpersons"],
 ] as const;
 
+function hasSelection(selection: RecipientAudienceSelection): boolean {
+  return [
+    selection.speakerIds,
+    selection.sessionIds,
+    selection.participantRoles,
+    selection.categoryIds,
+    selection.acceptanceStatuses,
+    selection.onboardingStatuses,
+    selection.tierIds,
+  ].some((criteria) => (criteria?.length ?? 0) > 0);
+}
+
 function checked(values: readonly string[] | undefined, value: string): boolean {
   return values?.includes(value) ?? false;
 }
@@ -64,6 +80,16 @@ export function RecipientAudienceWorkspace({
   confirmationToken,
   templates,
 }: RecipientAudienceWorkspaceProps) {
+  const [hasAudienceSelection, setHasAudienceSelection] = useState<boolean>(hasSelection(selection));
+
+  const onFormSelectionChange = (event: ChangeEvent<HTMLFormElement>) => {
+    const form = event.currentTarget;
+    const hasAnyChecked = [...form.querySelectorAll("input[type='checkbox']")].some(
+      (input) => (input as HTMLInputElement).checked,
+    );
+    setHasAudienceSelection(hasAnyChecked);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -81,7 +107,7 @@ export function RecipientAudienceWorkspace({
         </Button>
       </header>
 
-      <form method="get">
+      <form method="get" onChange={onFormSelectionChange}>
         <Card>
           <CardHeader>
             <CardTitle>Choose recipients</CardTitle>
@@ -233,7 +259,7 @@ export function RecipientAudienceWorkspace({
             </FieldGroup>
           </CardContent>
           <CardFooter className="flex gap-2">
-            <Button type="submit">
+            <Button type="submit" disabled={!hasAudienceSelection}>
               <MailSearch data-icon="inline-start" />
               Preview audience
             </Button>

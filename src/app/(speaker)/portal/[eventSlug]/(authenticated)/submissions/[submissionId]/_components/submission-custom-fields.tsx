@@ -7,10 +7,10 @@ import {
   CustomFieldInputs,
   type CustomFieldInputValue,
 } from "@/components/custom-fields/custom-field-inputs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type SubmissionCustomFieldActionState, saveSubmissionCustomFields } from "../actions";
 
@@ -29,6 +29,7 @@ export function SubmissionCustomFields({
 }) {
   const action = saveSubmissionCustomFields.bind(null, eventSlug, submissionId);
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  useActionToast(state);
   if (definitions.length === 0) return null;
 
   return (
@@ -39,11 +40,6 @@ export function SubmissionCustomFields({
           <CardDescription>Event-specific details shared with the organizers.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {state.message ? (
-            <Alert variant={state.status === "error" ? "destructive" : "default"}>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
           <CustomFieldInputs definitions={definitions} errors={state.errors} idPrefix="portal-" values={values} />
         </CardContent>
         <CardFooter>

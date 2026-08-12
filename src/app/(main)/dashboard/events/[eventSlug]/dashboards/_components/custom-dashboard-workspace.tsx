@@ -7,7 +7,6 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ChartNoAxesCombined, LayoutDashboard, Plus, Settings2, Trash2 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import type { CfpSubmissionStatus, DashboardWidgetDataSource, DashboardWidgetKind } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 import { dashboardEventHref } from "@/navigation/sidebar/sidebar-items";
 import type { EventOverviewMetrics } from "@/server/dashboard/overview";
 
@@ -99,7 +99,7 @@ const submissionStatusLabels: Readonly<Record<CfpSubmissionStatus, string>> = {
 };
 
 const chartConfig = {
-  count: { label: "Count", color: "var(--chart-3)" },
+  count: { label: "Count", color: "var(--primary)" },
 } satisfies ChartConfig;
 
 function fieldError(state: DashboardMutationState, field: string): string | undefined {
@@ -532,7 +532,7 @@ function ChartWidget({
         <CartesianGrid vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
         <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-        <Bar dataKey="count" fill="var(--color-count)" radius={6} />
+        <Bar dataKey="count" fill="var(--color-count)" />
       </BarChart>
     </ChartContainer>
   );
@@ -677,6 +677,7 @@ export function CustomDashboardWorkspace({
   widgetOptions,
 }: CustomDashboardWorkspaceProps) {
   const [state, action, pending] = useActionState(mutateDashboard, INITIAL_STATE);
+  useActionToast(state);
   const [selectedId, setSelectedId] = useState(dashboards[0]?.id ?? "");
   const activeDashboard = useMemo(
     () => dashboards.find(({ id }) => id === selectedId) ?? dashboards[0] ?? null,
@@ -713,12 +714,6 @@ export function CustomDashboardWorkspace({
           state={state}
         />
       </header>
-
-      {state.status === "error" && state.message ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
 
       {dashboards.length === 0 ? (
         <Empty className="min-h-96 border">

@@ -6,7 +6,6 @@ import Link from "next/link";
 
 import {
   ArrowLeft,
-  Check,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -41,6 +40,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { EvaluationRecommendation } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { ReviewerAssignmentDetail } from "@/server/evaluations/reviewer-workspace";
 
 import { declareEvaluationConflict, type EvaluationFormState, saveEvaluationDraft, submitEvaluation } from "../actions";
@@ -77,23 +77,6 @@ const recommendations = Object.keys(recommendationLabels) as EvaluationRecommend
 
 const INITIAL_STATE: EvaluationFormState = { status: "idle" };
 
-function latestState(first: EvaluationFormState, second: EvaluationFormState): EvaluationFormState {
-  if (first.status === "idle") return second;
-  if (second.status === "idle") return first;
-  return (second.at ?? 0) >= (first.at ?? 0) ? second : first;
-}
-
-function FormAlert({ state }: { readonly state: EvaluationFormState }) {
-  if (state.status === "idle") return null;
-  return (
-    <Alert variant={state.status === "error" ? "destructive" : "default"}>
-      {state.status === "success" ? <Check /> : null}
-      <AlertTitle>{state.status === "error" ? "Evaluation not saved" : "Evaluation saved"}</AlertTitle>
-      <AlertDescription>{state.message}</AlertDescription>
-    </Alert>
-  );
-}
-
 export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentDetailProps) {
   const visibility = visibilityDetails[assignment.visibility];
   const VisibilityIcon = visibility.icon;
@@ -102,6 +85,9 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
   const [draftState, draftAction, draftPending] = useActionState(saveEvaluationDraft, INITIAL_STATE);
   const [submitState, submitAction, submitPending] = useActionState(submitEvaluation, INITIAL_STATE);
   const [recusalState, recusalAction, recusalPending] = useActionState(declareEvaluationConflict, INITIAL_STATE);
+  useActionToast(draftState);
+  useActionToast(submitState);
+  useActionToast(recusalState);
   const recusalFormId = `declare-conflict-${assignment.id}`;
 
   return (
@@ -200,15 +186,6 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
             <h2 className="font-semibold text-lg">Rubric guidance</h2>
             <p className="text-muted-foreground text-sm">{assignment.round.planTitle}</p>
           </div>
-
-          <FormAlert state={latestState(draftState, submitState)} />
-          {recusalState.status === "error" ? (
-            <Alert variant="destructive">
-              <ShieldAlert />
-              <AlertTitle>Conflict not declared</AlertTitle>
-              <AlertDescription>{recusalState.message}</AlertDescription>
-            </Alert>
-          ) : null}
 
           {isFinal ? (
             <>

@@ -2,16 +2,16 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 
-import { Trash2Icon, TriangleAlertIcon, UploadIcon } from "lucide-react";
+import { Trash2Icon, UploadIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 import { getInitials } from "@/lib/utils";
 
 import { type AvatarActionState, type ProfileActionState, removeAvatar, updateProfile, uploadAvatar } from "../actions";
@@ -25,10 +25,11 @@ function AvatarCard({ name, avatarUrl }: { readonly name: string; readonly avata
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const uploadFormRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  useActionToast(uploadState);
+  useActionToast(removeState);
 
   useEffect(() => {
     if (uploadState.status !== "success") return;
-    if (uploadState.message) toast.success(uploadState.message);
     // The upload succeeded, so the stale selection must not linger next to the new avatar.
     if (fileInputRef.current) fileInputRef.current.value = "";
     setSelectedFileName(null);
@@ -44,20 +45,6 @@ function AvatarCard({ name, avatarUrl }: { readonly name: string; readonly avata
         <CardDescription>Shown next to your name across the dashboard. JPEG, PNG, or WebP up to 5 MB.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {uploadState.status === "error" && (
-          <Alert variant="destructive">
-            <TriangleAlertIcon aria-hidden="true" />
-            <AlertTitle>Upload failed</AlertTitle>
-            <AlertDescription>{uploadState.message}</AlertDescription>
-          </Alert>
-        )}
-        {removeState.status === "error" && (
-          <Alert variant="destructive">
-            <TriangleAlertIcon aria-hidden="true" />
-            <AlertTitle>Removal failed</AlertTitle>
-            <AlertDescription>{removeState.message}</AlertDescription>
-          </Alert>
-        )}
         <form ref={uploadFormRef} action={uploadFormAction} className="flex flex-wrap items-center gap-4">
           <Avatar className="size-16">
             <AvatarImage src={avatarUrl ?? undefined} alt={name} />
@@ -121,10 +108,7 @@ function DetailsCard({
   readonly email: string;
 }) {
   const [state, formAction, pending] = useActionState(updateProfile, INITIAL_PROFILE_STATE);
-
-  useEffect(() => {
-    if (state.status === "success" && state.message) toast.success(state.message);
-  }, [state]);
+  useActionToast(state);
 
   const fieldError = (field: "firstName" | "lastName" | "email") => state.fieldErrors?.[field]?.[0];
 

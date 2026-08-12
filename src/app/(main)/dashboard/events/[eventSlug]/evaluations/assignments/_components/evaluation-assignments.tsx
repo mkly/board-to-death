@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 
 import { useRouter } from "next/navigation";
 
-import { CircleAlertIcon, ClipboardCheckIcon, LockOpenIcon, ShieldAlertIcon, UsersRoundIcon } from "lucide-react";
+import { ClipboardCheckIcon, LockOpenIcon, ShieldAlertIcon, UsersRoundIcon } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -17,6 +17,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet 
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { EvaluationAssignmentWorkspace } from "@/server/evaluations/assignments";
 
 import { type ManageAssignmentsState, manageEvaluationAssignments, reopenEvaluationAssignment } from "../actions";
@@ -35,6 +36,7 @@ function ReopenAssignmentButton({
 }) {
   const [state, setState] = useState<ManageAssignmentsState>(reopenInitialState);
   const [pending, startTransition] = useTransition();
+  useActionToast(state);
 
   function handleReopen() {
     startTransition(async () => {
@@ -53,7 +55,7 @@ function ReopenAssignmentButton({
       size="sm"
       disabled={pending}
       aria-label="Reopen evaluation for this reviewer and return it for correction"
-      title={state.status === "error" ? state.message : "Return evaluation for correction"}
+      title="Return evaluation for correction"
       onClick={handleReopen}
     >
       {pending ? <Spinner data-icon="inline-start" /> : <LockOpenIcon data-icon="inline-start" />}
@@ -138,6 +140,7 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
       setDistributionReviewerIds([]);
     }
   }, [state]);
+  useActionToast(state);
 
   function toggleSubmission(submissionId: string, checked: boolean) {
     setSelectedIds((current) => (checked ? [...current, submissionId] : current.filter((id) => id !== submissionId)));
@@ -222,14 +225,6 @@ export function EvaluationAssignments({ event, workspace }: EvaluationAssignment
               <UsersRoundIcon />
               <AlertTitle>No active reviewers</AlertTitle>
               <AlertDescription>Add or reactivate an event reviewer before creating assignments.</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {state.message ? (
-            <Alert variant={state.status === "error" ? "destructive" : "default"}>
-              {state.status === "error" ? <CircleAlertIcon /> : <ClipboardCheckIcon />}
-              <AlertTitle>{state.status === "error" ? "Assignments not updated" : "Assignments updated"}</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
             </Alert>
           ) : null}
 

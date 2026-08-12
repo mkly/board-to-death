@@ -16,16 +16,20 @@
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const presetDir = path.resolve(__dirname, "../styles/presets");
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const presetDir = path.resolve(scriptDirectory, "../styles/presets");
 
 if (!fs.existsSync(presetDir)) {
   console.error(`❌ Preset directory not found at: ${presetDir}`);
   process.exit(1);
 }
 
-const outputPath = path.resolve(__dirname, "../lib/preferences/theme.ts");
+const outputPath = path.resolve(scriptDirectory, "../lib/preferences/theme.ts");
 
 const files = fs.readdirSync(presetDir).filter((file) => file.endsWith(".css"));
 

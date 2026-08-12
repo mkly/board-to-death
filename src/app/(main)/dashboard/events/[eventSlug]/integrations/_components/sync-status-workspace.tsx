@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 
 import { Ban, RefreshCw } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { SyncRunRecordSummary, SyncRunSummary } from "@/server/integrations";
 
 import { requestSyncRunCancellation, retryAcceleventsSyncRun, type SyncRunMutationState } from "../actions";
@@ -91,6 +91,7 @@ interface CancelSyncRunButtonProps {
 
 function CancelSyncRunButton({ eventSlug, runId }: CancelSyncRunButtonProps) {
   const [state, formAction, pending] = useActionState(requestSyncRunCancellation, initialState);
+  useActionToast(state);
   const formId = `cancel-sync-run-${runId}`;
 
   return (
@@ -124,12 +125,6 @@ function CancelSyncRunButton({ eventSlug, runId }: CancelSyncRunButtonProps) {
           </AlertDialogContent>
         </AlertDialog>
       </form>
-      {state.status !== "idle" && (
-        <Alert variant={state.status === "error" ? "destructive" : "default"}>
-          <AlertTitle>{state.status === "error" ? "Cancellation failed" : "Cancellation requested"}</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }
@@ -142,6 +137,7 @@ interface RetrySyncRunButtonProps {
 
 function RetrySyncRunButton({ eventSlug, runId, retryEligibleCount }: RetrySyncRunButtonProps) {
   const [state, formAction, pending] = useActionState(retryAcceleventsSyncRun, initialState);
+  useActionToast(state);
   const formId = `retry-sync-run-${runId}`;
 
   return (
@@ -176,12 +172,6 @@ function RetrySyncRunButton({ eventSlug, runId, retryEligibleCount }: RetrySyncR
           </AlertDialogContent>
         </AlertDialog>
       </form>
-      {state.status !== "idle" && (
-        <Alert variant={state.status === "error" ? "destructive" : "default"}>
-          <AlertTitle>{state.status === "error" ? "Retry failed" : "Retry submitted"}</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }

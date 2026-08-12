@@ -141,16 +141,16 @@ describe("AgendaWorkspace", () => {
     renderWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "Propose schedule" }));
 
-    expect(await screen.findByText("Review 1 proposed placement.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Accept proposed placement" })).toBeTruthy();
     expect(actionMocks.acceptAssistedSchedule).not.toHaveBeenCalled();
     const discardButton = screen.getByRole("button", { name: "Discard" });
     await waitFor(() => expect((discardButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(discardButton);
-    await waitFor(() => expect(screen.queryByText("Review 1 proposed placement.")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Accept proposed placement" })).toBeNull());
     expect(actionMocks.acceptAssistedSchedule).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Propose schedule" }));
-    await screen.findByText("Review 1 proposed placement.");
+    await screen.findByRole("button", { name: "Accept proposed placement" });
     const acceptTrigger = screen.getByRole("button", { name: "Accept proposed placement" });
     await waitFor(() => expect((acceptTrigger as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(acceptTrigger);

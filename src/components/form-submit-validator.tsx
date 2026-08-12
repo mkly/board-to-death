@@ -107,31 +107,8 @@ function syncForm(form: HTMLFormElement): void {
   }
 }
 
-function syncAllForms() {
-  for (const form of Array.from(document.forms)) {
-    if (isManagedForm(form)) {
-      syncForm(form);
-    }
-  }
-}
-
 export function FormSubmitValidator() {
   useEffect(() => {
-    syncAllForms();
-
-    let scheduled = false;
-    const requestSync = () => {
-      if (scheduled) {
-        return;
-      }
-
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        syncAllForms();
-      });
-    };
-
     const handleChange = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Element)) {
@@ -177,13 +154,7 @@ export function FormSubmitValidator() {
     document.addEventListener("change", handleChange, true);
     document.addEventListener("submit", handleSubmit, true);
 
-    const observer = new MutationObserver(() => {
-      requestSync();
-    });
-    observer.observe(document.body, { attributes: true, childList: true, subtree: true });
-
     return () => {
-      observer.disconnect();
       document.removeEventListener("input", handleChange, true);
       document.removeEventListener("change", handleChange, true);
       document.removeEventListener("submit", handleSubmit, true);

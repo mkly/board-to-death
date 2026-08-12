@@ -5,9 +5,9 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 
 import { Filter, History, PencilLine } from "lucide-react";
+import { toast } from "sonner";
 
 import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +31,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-import { applyBulkEdit, type BulkEditActionState } from "../actions";
+import { applyBulkEdit } from "../actions";
 
 type EntityType = "CONTACT" | "SESSION" | "GROUP";
 
@@ -219,7 +219,6 @@ export function BulkEditWorkspace({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [field, setField] = useState<string>(FIELD_OPTIONS[initialEntityType][0].value);
   const [value, setValue] = useState("");
-  const [result, setResult] = useState<BulkEditActionState | null>(null);
   const [pending, startTransition] = useTransition();
   const records = recordsByType[entityType];
   const fieldLabel = FIELD_OPTIONS[entityType].find((option) => option.value === field)?.label ?? field;
@@ -230,7 +229,6 @@ export function BulkEditWorkspace({
     setSelected(new Set());
     setField(FIELD_OPTIONS[type][0].value);
     setValue("");
-    setResult(null);
   };
 
   const confirmEdit = () => {
@@ -242,8 +240,28 @@ export function BulkEditWorkspace({
         field,
         value: submittedValue,
       });
-      setResult(actionResult);
-      if (actionResult.status === "success") setSelected(new Set());
+      if (actionResult.status === "success") {
+        setSelected(new Set());
+        toast.success(actionResult.message);
+        return;
+      }
+
+      if (actionResult.status === "partial" && actionResult.failures) {
+        toast.error(actionResult.message, {
+          description: (
+            <ul className="mt-1 list-disc pl-5">
+              {actionResult.failures.map((failure) => (
+                <li key={failure.recordId}>
+                  {records.find(({ id }) => id === failure.recordId)?.name ?? failure.recordId}: {failure.message}
+                </li>
+              ))}
+            </ul>
+          ),
+        });
+        return;
+      }
+
+      toast.error(actionResult.message);
     });
   };
 
@@ -256,24 +274,6 @@ export function BulkEditWorkspace({
           Select event records, choose one field, and review the count before applying the same value to each record.
         </p>
       </header>
-
-      {result ? (
-        <Alert variant={result.status === "error" ? "destructive" : "default"}>
-          <AlertTitle>{result.status === "partial" ? "Some records were not updated" : "Bulk edit result"}</AlertTitle>
-          <AlertDescription>
-            <p>{result.message}</p>
-            {result.failures?.length ? (
-              <ul className="mt-2 list-disc pl-5">
-                {result.failures.map((failure) => (
-                  <li key={failure.recordId}>
-                    {records.find(({ id }) => id === failure.recordId)?.name ?? failure.recordId}: {failure.message}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
         <Card className="min-w-0 self-start">

@@ -1,12 +1,12 @@
 "use client";
 
-import { type ReactNode, useActionState } from "react";
+import { type ReactNode, useActionState, useEffect } from "react";
 
 import Link from "next/link";
 
 import { MailCheck, Send } from "lucide-react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,6 +74,19 @@ export function BulkSendConfirmation({
   templates,
 }: BulkSendConfirmationProps) {
   const [state, formAction, pending] = useActionState(confirmBulkCommunication, initialState);
+  useEffect(() => {
+    if (!state.message) return;
+    if (state.status === "error") {
+      toast.error(state.message);
+      return;
+    }
+    if (state.status === "success") {
+      toast.success(state.message, {
+        description: state.deliveryHref ? <Link href={state.deliveryHref}>View delivery details</Link> : undefined,
+      });
+    }
+  }, [state]);
+
   let confirmationAction: ReactNode;
   if (state.status === "success") {
     confirmationAction = (
@@ -155,21 +168,6 @@ export function BulkSendConfirmation({
               </FieldDescription>
             </Field>
           </FieldGroup>
-          {state.status !== "idle" && (
-            <Alert variant={state.status === "error" ? "destructive" : "default"} className="mt-4">
-              <MailCheck />
-              <AlertTitle>{state.status === "error" ? "Send not queued" : "Bulk send queued"}</AlertTitle>
-              <AlertDescription>
-                {state.message}
-                {state.deliveryHref && (
-                  <>
-                    {" "}
-                    <Link href={state.deliveryHref}>View delivery details</Link>
-                  </>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
         </CardContent>
         <CardFooter>{confirmationAction}</CardFooter>
       </form>

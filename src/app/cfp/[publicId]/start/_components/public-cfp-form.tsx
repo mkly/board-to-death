@@ -2,6 +2,8 @@
 
 import { type FormEvent, startTransition, useActionState, useEffect, useMemo, useState } from "react";
 
+import { toast } from "sonner";
+
 import {
   type CustomFieldInputDefinition,
   CustomFieldInputs,
@@ -18,6 +20,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { CfpDraftPolicy } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { CfpFormDefinition, CfpQuestion } from "@/lib/cfp";
 import { publicCfpStartHref, visibleCfpQuestionIds } from "@/lib/cfp";
 
@@ -92,12 +95,25 @@ export function PublicCfpForm({
   const [currentDraftToken, setCurrentDraftToken] = useState<string | undefined>(draftToken);
   const visibleIds = useMemo(() => visibleCfpQuestionIds(definition, answers), [answers, definition]);
   const draftsEnabled = draftPolicy !== "DISABLED";
+  useActionToast(state);
 
   useEffect(() => {
     if (draftState.status === "success" && draftState.token) {
       setCurrentDraftToken(draftState.token);
     }
   }, [draftState]);
+
+  useEffect(() => {
+    if (draftState.status === "success" && draftState.token && draftState.message) {
+      toast.success(draftState.message, {
+        description: `Resume this response later with this link: ${publicCfpStartHref(publicId, draftState.token)}`,
+      });
+      return;
+    }
+    if (draftState.status === "error" && draftState.message) {
+      toast.error(draftState.message);
+    }
+  }, [draftState, publicId]);
 
   function setAnswer(questionId: string, value: ClientAnswer): void {
     setAnswers((current) => ({ ...current, [questionId]: value }));
@@ -229,32 +245,6 @@ export function PublicCfpForm({
           <AlertDescription>
             The form was updated since you last saved. Review your responses before submitting — some questions may have
             changed.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {state.status === "error" && state.message ? (
-        <Alert variant="destructive">
-          <AlertTitle>We could not submit your proposal</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {draftState.status === "error" && draftState.message ? (
-        <Alert variant="destructive">
-          <AlertTitle>We could not save your draft</AlertTitle>
-          <AlertDescription>{draftState.message}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {draftState.status === "success" && draftState.token ? (
-        <Alert>
-          <AlertTitle>Draft saved</AlertTitle>
-          <AlertDescription>
-            Resume this response later with this link:{" "}
-            <a className="underline" href={publicCfpStartHref(publicId, draftState.token)}>
-              {publicCfpStartHref(publicId, draftState.token)}
-            </a>
           </AlertDescription>
         </Alert>
       ) : null}

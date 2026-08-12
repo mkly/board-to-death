@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { AlertCircle, CheckCircle2, FileSearch, FileSpreadsheet, Save } from "lucide-react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -112,6 +113,15 @@ export function SpreadsheetImportWorkspace({ event, recentImports }: Spreadsheet
     () => new Set(Object.values(mapping).filter((value) => value !== SKIP_COLUMN)),
     [mapping],
   );
+  useEffect(() => {
+    if (state.status === "success" && state.message) {
+      const message = state.importId ? `${state.message} Audit reference: ${state.importId}` : state.message;
+      toast.success(message);
+    }
+    if (state.status === "error" && state.message) {
+      toast.error(state.message);
+    }
+  }, [state]);
 
   function run(action: (formData: FormData) => Promise<SpreadsheetActionState>, includeMapping: boolean) {
     if (!file) {
@@ -207,23 +217,18 @@ export function SpreadsheetImportWorkspace({ event, recentImports }: Spreadsheet
               <Alert variant="destructive">
                 <AlertCircle />
                 <AlertTitle>Import could not continue</AlertTitle>
-                <AlertDescription>{state.message}</AlertDescription>
               </Alert>
             ) : null}
             {state.status === "success" ? (
               <Alert>
                 <CheckCircle2 />
                 <AlertTitle>Import committed</AlertTitle>
-                <AlertDescription>
-                  {state.message} Audit reference: {state.importId}
-                </AlertDescription>
               </Alert>
             ) : null}
             {state.status === "ready" || state.status === "preview" ? (
               <Alert>
                 <FileSpreadsheet />
                 <AlertTitle>{state.status === "ready" ? "Map spreadsheet columns" : "Preview complete"}</AlertTitle>
-                <AlertDescription>{state.message}</AlertDescription>
               </Alert>
             ) : null}
 

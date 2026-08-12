@@ -7,7 +7,6 @@ import {
   type DragCancelEvent,
   type DragEndEvent,
   type DragMoveEvent,
-  DragOverlay,
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
@@ -220,7 +219,7 @@ function ScheduledCard({
       }}
       className={cn(
         "absolute right-2 left-2 flex touch-none flex-col overflow-hidden rounded-lg border bg-card shadow-sm",
-        isDragging && "opacity-0",
+        isDragging && "pointer-events-none z-30 opacity-80 shadow-lg",
       )}
     >
       <button
@@ -267,6 +266,7 @@ function ScheduledCard({
 
 function TimelineLane({
   disabled,
+  dropPreview,
   event,
   lane,
   onResize,
@@ -275,6 +275,7 @@ function TimelineLane({
   timelineStart,
 }: {
   readonly disabled: boolean;
+  readonly dropPreview: { readonly top: number; readonly height: number } | null;
   readonly event: AgendaScheduleBoardProps["event"];
   readonly lane: Lane;
   readonly onResize: (change: PlacementChange) => void;
@@ -311,6 +312,13 @@ function TimelineLane({
             </div>
           );
         })}
+        {dropPreview ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-2 left-2 z-20 rounded-lg border-2 border-primary border-dashed bg-primary/10"
+            style={{ top: dropPreview.top, height: dropPreview.height }}
+          />
+        ) : null}
         {laneSessions.map((session) => (
           <ScheduledCard
             key={session.id}
@@ -427,11 +435,16 @@ export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaSc
     clearDrag();
     if (dragEvent.over && change) persistChange(change);
   };
-  const activeSession = displayedSessions.find(({ id }) => id === activeSessionId) ?? null;
   const previewLane =
     (dragPreview
       ? lanes.find((lane) => lane.roomId === dragPreview.roomId && lane.trackId === dragPreview.trackId)
       : null) ?? null;
+  const dropPreview = dragPreview
+    ? {
+        top: ((new Date(dragPreview.startsAt).getTime() - timelineStart) / 60_000) * PIXELS_PER_MINUTE,
+        height: Math.max(dragPreview.durationMinutes * PIXELS_PER_MINUTE, MIN_CARD_HEIGHT),
+      }
+    : null;
 
   if (rooms.length === 0) return null;
 
@@ -483,6 +496,7 @@ export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaSc
                 <TimelineLane
                   key={lane.id}
                   disabled={pending}
+                  dropPreview={previewLane?.id === lane.id ? dropPreview : null}
                   event={event}
                   lane={lane}
                   onResize={persistChange}
@@ -493,16 +507,6 @@ export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaSc
               ))}
             </div>
           </div>
-          <DragOverlay dropAnimation={null}>
-            {activeSession?.placement ? (
-              <div className="w-56 rounded-lg border bg-card p-3 shadow-lg">
-                <p className="truncate font-medium text-sm">{activeSession.title}</p>
-                <p className="text-muted-foreground text-xs">
-                  {dragPreview ? formatDateTime(dragPreview.startsAt, event.timezone) : "Moving..."}
-                </p>
-              </div>
-            ) : null}
-          </DragOverlay>
         </DndContext>
       </CardContent>
 

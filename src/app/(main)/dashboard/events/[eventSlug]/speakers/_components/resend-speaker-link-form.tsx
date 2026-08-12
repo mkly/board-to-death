@@ -6,7 +6,7 @@ import { SendIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type ResendSpeakerLinkActionState, resendSpeakerPortalLink } from "../actions";
 
@@ -23,6 +23,7 @@ export function ResendSpeakerLinkForm({
     resendSpeakerPortalLink.bind(null, eventSlug, speakerId),
     INITIAL_STATE,
   );
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex flex-col items-start gap-2">
@@ -30,12 +31,6 @@ export function ResendSpeakerLinkForm({
         {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
         {pending ? "Sending..." : "Send sign-in link"}
       </Button>
-      <p
-        aria-live="polite"
-        className={cn("text-sm", state.status === "error" ? "text-destructive" : "text-muted-foreground")}
-      >
-        {state.message}
-      </p>
     </form>
   );
 }

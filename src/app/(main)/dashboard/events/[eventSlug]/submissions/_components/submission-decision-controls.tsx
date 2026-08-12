@@ -4,7 +4,6 @@ import { startTransition, useActionState, useState } from "react";
 
 import { CheckIcon, ChevronDownIcon, CircleAlertIcon, Clock3Icon, XIcon } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import type { CfpSubmissionStatus } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { recordSubmissionDecision, type SubmissionDecisionActionState } from "../actions";
 
@@ -83,6 +83,7 @@ export function SubmissionDecisionControls({
   compact = false,
 }: SubmissionDecisionControlsProps) {
   const [state, formAction, pending] = useActionState(recordSubmissionDecision, initialState);
+  useActionToast(state);
   const [decision, setDecision] = useState<SubmissionDecision | null>(null);
   const availableDecisions: readonly SubmissionDecision[] =
     status === "WAITLISTED" ? ["ACCEPTED", "REJECTED"] : ["ACCEPTED", "WAITLISTED", "REJECTED"];
@@ -162,13 +163,6 @@ export function SubmissionDecisionControls({
           ) : null}
         </AlertDialogContent>
       </AlertDialog>
-
-      {state.status !== "idle" ? (
-        <Alert variant={state.status === "error" ? "destructive" : "default"}>
-          <AlertTitle>{state.status === "error" ? "Decision not recorded" : "Decision recorded"}</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
     </div>
   );
 }

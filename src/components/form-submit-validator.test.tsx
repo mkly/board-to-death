@@ -10,7 +10,7 @@ describe("FormSubmitValidator", () => {
     cleanup();
   });
 
-  test("disables submit controls while required fields are invalid", async () => {
+  test("leaves server-rendered controls untouched until validation is triggered", async () => {
     render(
       <>
         <FormSubmitValidator />
@@ -24,14 +24,14 @@ describe("FormSubmitValidator", () => {
 
     const submitButton = screen.getByRole("button", { name: /save/i }) as HTMLButtonElement;
 
-    await waitFor(() => {
-      expect(submitButton.disabled).toBe(true);
-    });
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.dataset.formSubmitValidatorBaseDisabled).toBeUndefined();
     expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBeNull();
 
     fireEvent.submit(screen.getByRole("textbox").closest("form") as HTMLFormElement);
 
     await waitFor(() => {
+      expect(submitButton.disabled).toBe(true);
       expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBe("true");
     });
 

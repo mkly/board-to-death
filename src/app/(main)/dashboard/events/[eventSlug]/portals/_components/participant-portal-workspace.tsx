@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { ArrowDown, ArrowUp, Eye, Plus, Save, Trash2 } from "lucide-react";
 
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 
 import {
   type BrandingImagePick,
@@ -197,7 +199,6 @@ export function ParticipantPortalWorkspace({
   const selected = portals.find(({ id }) => id === selectedId) ?? EMPTY_PORTAL;
   const [previewId, setPreviewId] = useState(() => previewParticipants[0]?.id ?? "");
   const preview = previewParticipants.find(({ id }) => id === previewId);
-  const [feedback, setFeedback] = useState("");
   const [mutationPending, startMutation] = useTransition();
   const [saveState, saveAction, savePending] = useActionState(saveParticipantPortal, INITIAL_STATE);
   const [logo, setLogo] = useState<BrandingImagePick | null>(null);
@@ -276,19 +277,19 @@ export function ParticipantPortalWorkspace({
   }, []);
 
   useEffect(() => {
-    if (!saveState.message) return;
-    setFeedback(saveState.message);
+    if (saveState.status !== "success") return;
     if (saveState.status === "success") {
       resetBranding();
       if (saveState.portalId) setSelectedId(saveState.portalId);
       router.refresh();
     }
   }, [router, saveState, resetBranding]);
+  useActionToast(saveState);
 
   const mutate = (operation: () => Promise<PortalMutationState>) => {
     startMutation(async () => {
       const result = await operation();
-      setFeedback(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success") router.refresh();
     });
   };
@@ -308,12 +309,6 @@ export function ParticipantPortalWorkspace({
           New portal
         </Button>
       </header>
-
-      {feedback ? (
-        <p aria-live="polite" className="text-muted-foreground text-sm">
-          {feedback}
-        </p>
-      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
         <Card className="self-start">
@@ -697,5 +692,3 @@ export function ParticipantPortalWorkspace({
     </div>
   );
 }
-
-import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";

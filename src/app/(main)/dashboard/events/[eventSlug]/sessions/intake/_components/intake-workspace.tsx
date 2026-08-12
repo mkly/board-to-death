@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 
-import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Save } from "lucide-react";
+import { Download, FileSpreadsheet, Save } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,6 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useActionToast } from "@/hooks/use-action-toast";
 import { type CfpFormDefinition, type CfpQuestion, visibleCfpQuestionIds } from "@/lib/cfp";
 
 import {
@@ -200,6 +201,7 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
   const [kind, setKind] = useState<"abstract" | "guaranteed_session">("abstract");
   const [formVersionId, setFormVersionId] = useState(forms[0]?.id ?? "");
   const [answers, setAnswers] = useState<Readonly<Record<string, IntakeAnswer>>>({});
+  useActionToast(state);
   const selectedForm = forms.find(({ id }) => id === formVersionId);
   const visibleIds = useMemo(
     () => (selectedForm ? visibleCfpQuestionIds(selectedForm.definition, answers) : new Set<string>()),
@@ -219,22 +221,6 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
         </CardHeader>
         <CardContent>
           <FieldGroup>
-            {state.status === "success" ? (
-              <Alert>
-                <CheckCircle2 />
-                <AlertTitle>Record created</AlertTitle>
-                <AlertDescription>
-                  {state.message} Reference: {state.recordId}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            {state.status === "error" && state.message ? (
-              <Alert variant="destructive">
-                <AlertCircle />
-                <AlertTitle>Intake could not be saved</AlertTitle>
-                <AlertDescription>{state.message}</AlertDescription>
-              </Alert>
-            ) : null}
             <Field>
               <FieldLabel id="intake-kind-label">Record type</FieldLabel>
               <ToggleGroup
@@ -461,6 +447,8 @@ function PreviewTable({ state }: { readonly state: CsvIntakeState }) {
 function CsvIntake({ event }: Pick<IntakeWorkspaceProps, "event">) {
   const [previewState, previewAction, previewPending] = useActionState(previewAdminIntakeCsv, INITIAL_CSV_STATE);
   const [applyState, applyAction, applyPending] = useActionState(applyAdminIntakeCsv, INITIAL_CSV_STATE);
+  useActionToast(previewState);
+  useActionToast(applyState);
   const acceptedPayload = useMemo(
     () => previewState.rows?.flatMap((row) => (row.payload ? [row.payload] : [])) ?? [],
     [previewState.rows],
@@ -504,20 +492,6 @@ function CsvIntake({ event }: Pick<IntakeWorkspaceProps, "event">) {
             </Button>
           </div>
         </form>
-        {visibleState.status === "error" && visibleState.message ? (
-          <Alert variant="destructive">
-            <AlertCircle />
-            <AlertTitle>CSV intake failed</AlertTitle>
-            <AlertDescription>{visibleState.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {visibleState.status === "success" && visibleState.message ? (
-          <Alert>
-            <CheckCircle2 />
-            <AlertTitle>Import finished</AlertTitle>
-            <AlertDescription>{visibleState.message}</AlertDescription>
-          </Alert>
-        ) : null}
         {previewState.status === "preview" ? (
           <output aria-live="polite" className="flex flex-wrap gap-2">
             <Badge>{previewState.counts?.created ?? 0} create</Badge>

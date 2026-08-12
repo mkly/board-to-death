@@ -2,11 +2,11 @@
 
 import { useActionState } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type PartnerIntakeActionState, submitPartnerIntake } from "../actions";
 
@@ -18,6 +18,7 @@ function fieldErrors(state: PartnerIntakeActionState, field: string) {
 
 export function PublicPartnerIntakeForm({ publicId }: { readonly publicId: string }) {
   const [state, action, pending] = useActionState(submitPartnerIntake.bind(null, publicId), INITIAL_STATE);
+  useActionToast(state);
 
   if (state.status === "success") {
     return (
@@ -26,7 +27,9 @@ export function PublicPartnerIntakeForm({ publicId }: { readonly publicId: strin
           <CardTitle>
             <h2>Thanks for your interest</h2>
           </CardTitle>
-          <CardDescription>{state.message}</CardDescription>
+          <CardDescription>
+            Your interest form was received. The event team will review it before creating a partner record.
+          </CardDescription>
         </CardHeader>
       </Card>
     );
@@ -45,12 +48,6 @@ export function PublicPartnerIntakeForm({ publicId }: { readonly publicId: strin
       <CardContent>
         <form action={action} noValidate>
           <FieldGroup>
-            {state.status === "error" && state.message ? (
-              <Alert variant="destructive">
-                <AlertTitle>We could not submit this form</AlertTitle>
-                <AlertDescription>{state.message}</AlertDescription>
-              </Alert>
-            ) : null}
             <Field data-invalid={Boolean(state.errors?.organizationName)}>
               <FieldLabel htmlFor="organizationName">Organization name</FieldLabel>
               <Input

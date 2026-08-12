@@ -22,6 +22,7 @@ import {
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type {
   SessionMappingDefinition,
   SessionPreviewAction,
@@ -162,6 +163,7 @@ export function SessionMappingPreview({
     if (result.status === "success") router.refresh();
     return result;
   }, INITIAL_STATE);
+  useActionToast(state);
   const counts = useMemo(
     () =>
       Object.fromEntries(
@@ -297,10 +299,7 @@ export function SessionMappingPreview({
                 </Field>
               </FieldGroup>
             </CardContent>
-            <CardFooter className="justify-between gap-3">
-              <p aria-live="polite" className="text-muted-foreground text-sm">
-                {state.message}
-              </p>
+            <CardFooter className="justify-end gap-3">
               <Button type="submit" disabled={pending}>
                 {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
                 {pending ? "Saving..." : "Save mapping"}

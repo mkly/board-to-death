@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import { Copy, Download, FileChartColumn, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { mutateReport, type ReportMutationState } from "../actions";
 
@@ -135,6 +135,7 @@ function ReportEditor({
   useEffect(() => {
     if (state.status === "success") setOpen(false);
   }, [state]);
+  useActionToast(state);
 
   function changeBaseType(value: ReportBaseType) {
     setBaseType(value);
@@ -299,11 +300,6 @@ function ReportEditor({
               </Button>
             </FieldSet>
           </FieldGroup>
-          {state.status === "error" ? (
-            <Alert variant="destructive">
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
           <DialogFooter>
             <Button
               type="submit"

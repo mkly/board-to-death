@@ -249,7 +249,7 @@ describe("SessionWorkspace", () => {
         1,
       ),
     );
-    expect(await screen.findByText("Version 1 restored as version 3.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Version 1 restored as version 3.")).toBeNull());
   });
 
   test("creates a manual session and renders field-level server validation", async () => {

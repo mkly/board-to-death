@@ -2,10 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 
-import { CircleCheckIcon } from "lucide-react";
-
 import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { CfpFormDefinition, CfpQuestion } from "@/lib/cfp";
 import { visibleCfpQuestionIds } from "@/lib/cfp";
 
@@ -68,6 +66,7 @@ export function ApplicantSubmissionEditor({
 }: ApplicantSubmissionEditorProps) {
   const action = updateApplicantSubmission.bind(null, eventSlug, submissionId);
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  useActionToast(state);
   const [answers, setAnswers] = useState<Readonly<Record<string, ClientAnswer>>>(() =>
     initialClientAnswers(initialAnswers),
   );
@@ -177,19 +176,6 @@ export function ApplicantSubmissionEditor({
           <CardDescription>You can update your responses until the call for proposals closes.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          {state.status === "success" ? (
-            <Alert>
-              <CircleCheckIcon />
-              <AlertTitle>Proposal updated</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
-          {state.status === "error" && state.message ? (
-            <Alert variant="destructive">
-              <AlertTitle>We could not update your proposal</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
           {definition.sections.map((section) => {
             const questions = section.questions.filter(({ id }) => visibleIds.has(id));
             if (questions.length === 0) return null;

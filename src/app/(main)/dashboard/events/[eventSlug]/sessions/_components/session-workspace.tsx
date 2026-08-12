@@ -59,6 +59,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ProgramSessionContentApprovalStatus, ProgramSessionParticipantRole } from "@/generated/prisma/client";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 
 import { archiveProgramSession, cloneProgramSession, type SessionMutationState, saveProgramSession } from "../actions";
 import { SessionContentHistory, type SessionContentVersion } from "./session-content-history";
@@ -171,6 +172,7 @@ function SessionForm({
     },
     INITIAL_MUTATION_STATE,
   );
+  useActionToast(state);
   const isNew = session === null;
   const parentOptions = sessions.filter(
     (candidate) => !candidate.archived && candidate.parentSessionId === null && candidate.id !== session?.id,
@@ -355,9 +357,6 @@ function SessionForm({
         <input type="hidden" name="eventSlug" value={eventSlug} />
         <input type="hidden" name="sessionId" value={session?.id ?? ""} />
         {formFields}
-        <p aria-live="polite" className="text-muted-foreground text-sm">
-          {state.message}
-        </p>
         {!session?.archived ? (
           <div className="flex justify-end">
             <Button type="submit" disabled={pending}>
@@ -392,9 +391,6 @@ function SessionForm({
         </CardHeader>
         <CardContent>{formFields}</CardContent>
         <CardFooter className="justify-between gap-3">
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {state.message}
-          </p>
           {!session?.archived ? (
             <Button type="submit" disabled={pending}>
               {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
@@ -421,7 +417,6 @@ export function SessionWorkspace({
     sessions.some(({ id }) => id === initialSessionId) ? (initialSessionId ?? null) : null,
   );
   const [createOpen, setCreateOpen] = useState(false);
-  const [archiveMessage, setArchiveMessage] = useState("");
   const [archivePending, startArchiveTransition] = useTransition();
   const [clonePending, startCloneTransition] = useTransition();
   const filteredSessions = useMemo(
@@ -433,14 +428,13 @@ export function SessionWorkspace({
   const inspect = (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setCreateOpen(false);
-    setArchiveMessage("");
   };
 
   const archiveSelected = () => {
     if (!selectedSession) return;
     startArchiveTransition(async () => {
       const result = await archiveProgramSession(event.slug, selectedSession.id);
-      setArchiveMessage(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success") setSelectedSessionId(null);
     });
   };
@@ -449,7 +443,7 @@ export function SessionWorkspace({
     if (!selectedSession) return;
     startCloneTransition(async () => {
       const result = await cloneProgramSession(event.slug, selectedSession.id);
-      setArchiveMessage(result.message ?? "");
+      actionResultToast(result);
       if (result.status === "success" && result.sessionId) {
         setSelectedSessionId(result.sessionId);
         setCreateOpen(false);
@@ -480,7 +474,6 @@ export function SessionWorkspace({
               setCreateOpen(open);
               if (open) {
                 setSelectedSessionId(null);
-                setArchiveMessage("");
               }
             }}
           >
@@ -692,7 +685,7 @@ export function SessionWorkspace({
           {selectedSession && !selectedSession.archived ? (
             <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
               <p aria-live="polite" className="text-muted-foreground text-sm">
-                {archiveMessage || "Archiving preserves every saved version."}
+                Archiving preserves every saved version.
               </p>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" size="sm" disabled={clonePending} onClick={cloneSelected}>

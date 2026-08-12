@@ -2,9 +2,6 @@
 
 import { useActionState, useState } from "react";
 
-import { TriangleAlertIcon } from "lucide-react";
-
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { SpeakerFileControl } from "../../_components/speaker-file-control";
 import {
@@ -74,6 +72,7 @@ export function SpeakerProfileForm({
 }) {
   const action = updateSpeakerProfile.bind(null, eventSlug);
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  useActionToast(state);
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [pronouns, setPronouns] = useState(profile.pronouns ?? "");
   const [organization, setOrganization] = useState(profile.organization ?? "");
@@ -93,14 +92,6 @@ export function SpeakerProfileForm({
           <CardContent>
             <input type="hidden" name="expectedVersionNumber" value={profile.versionNumber} />
             <FieldGroup>
-              {state.status === "error" ? (
-                <Alert variant="destructive">
-                  <TriangleAlertIcon aria-hidden="true" />
-                  <AlertTitle>Profile not saved</AlertTitle>
-                  <AlertDescription>{state.message}</AlertDescription>
-                </Alert>
-              ) : null}
-
               <FieldSet>
                 <FieldLegend>Contact</FieldLegend>
                 <FieldDescription>Your email is managed by the event team and used for portal access.</FieldDescription>

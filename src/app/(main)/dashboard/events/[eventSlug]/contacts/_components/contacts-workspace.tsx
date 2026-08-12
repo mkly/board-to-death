@@ -292,6 +292,7 @@ function ContactEditor({
   readonly eventSlug: string;
 }) {
   const [state, action, pending] = useActionState(saveContactRecord, INITIAL_STATE);
+  useActionToast(state);
 
   return (
     <form noValidate action={action}>
@@ -364,10 +365,7 @@ function ContactEditor({
             <SavedCustomFields definitions={definitions} values={contact.customFieldValues} />
           </FieldGroup>
         </CardContent>
-        <CardFooter className="justify-between gap-3">
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {state.message}
-          </p>
+        <CardFooter className="justify-end">
           <Button disabled={pending} type="submit">
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
             {pending ? "Saving..." : "Save contact"}

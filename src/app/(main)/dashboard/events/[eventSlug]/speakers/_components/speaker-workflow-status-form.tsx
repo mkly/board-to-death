@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import type { SpeakerWorkflowStatus } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type UpdateSpeakerWorkflowStatusActionState, updateSpeakerWorkflowStatus } from "../actions";
 
@@ -30,6 +31,7 @@ export function SpeakerWorkflowStatusForm({ eventSlug, speakerId, workflowStatus
     updateSpeakerWorkflowStatus.bind(null, eventSlug, speakerId),
     initialState,
   );
+  useActionToast(state);
   const fieldId = `speaker-workflow-status-${speakerId}`;
 
   return (
@@ -53,9 +55,6 @@ export function SpeakerWorkflowStatusForm({ eventSlug, speakerId, workflowStatus
         {pending ? <Spinner data-icon="inline-start" /> : null}
         Save status
       </Button>
-      <p aria-live="polite" className="sr-only">
-        {state.message}
-      </p>
     </form>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 
-import { CheckCircle2Icon, SaveIcon, SendIcon, UploadIcon } from "lucide-react";
+import { SaveIcon, SendIcon, UploadIcon } from "lucide-react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +12,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import { type PortalFormAnswers, type PortalFormDefinition, visiblePortalFormFieldIds } from "@/lib/portal-forms";
 import type { SpeakerTaskResponseKind } from "@/server/speakers";
 
@@ -51,6 +52,7 @@ interface PlainTaskResponseFormProps {
 
 function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseFormProps) {
   const [state, formAction, pending] = useActionState(action, initialTaskSubmissionState);
+  useActionToast(state);
   const inputInvalid = state.status === "error" && state.inputError === true;
   let submitIcon = <SendIcon data-icon="inline-start" />;
   if (pending) submitIcon = <Spinner data-icon="inline-start" />;
@@ -99,14 +101,6 @@ function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseF
         {state.status === "error" ? <FieldError>{state.message}</FieldError> : null}
       </FieldGroup>
 
-      {state.status === "success" ? (
-        <Alert>
-          <CheckCircle2Icon aria-hidden="true" />
-          <AlertTitle>Submitted</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <Button type="submit" disabled={pending} className="w-fit">
         {submitIcon}
         {pending ? "Submitting…" : "Submit task"}
@@ -123,21 +117,18 @@ interface PortalFormResponseProps {
 
 function PortalFormResponse({ action, definition, initialAnswers }: PortalFormResponseProps) {
   const [state, formAction, pending] = useActionState(action, initialTaskFormState);
+  useEffect(() => {
+    if (!state.message) return;
+    if (state.ok)
+      toast.success(state.message, { description: `Task form ${state.submitted ? "submitted" : "saved"}.` });
+    else toast.error(state.message);
+  }, [state]);
   const [answers, setAnswers] = useState<PortalFormAnswers>(initialAnswers);
   const visibleIds = useMemo(() => visiblePortalFormFieldIds(definition, answers), [answers, definition]);
   const submitted = state.submitted === true;
-  let alertTitle = "Check your response";
-  if (state.ok) alertTitle = submitted ? definition.confirmation.subject : "Saved";
 
   return (
     <form noValidate action={formAction} className="flex flex-col gap-5">
-      {state.message ? (
-        <Alert variant={state.ok ? "default" : "destructive"}>
-          {state.ok ? <CheckCircle2Icon aria-hidden="true" /> : null}
-          <AlertTitle>{alertTitle}</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
-      ) : null}
       {definition.sections.map((section) => (
         <Card key={section.id}>
           <CardHeader>

@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 
 export interface ActionToastState {
-  readonly status: "idle" | "success" | "error";
+  readonly status: "idle" | "preview" | "success" | "error" | "conflict";
   readonly message?: string;
 }
 

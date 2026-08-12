@@ -2,13 +2,13 @@
 
 import { useActionState, useState } from "react";
 
-import { DownloadIcon, Trash2Icon, TriangleAlertIcon, UploadIcon } from "lucide-react";
+import { DownloadIcon, Trash2Icon, UploadIcon } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 export interface SpeakerFileActionResult {
   readonly status: "idle" | "success" | "error";
@@ -39,6 +39,8 @@ export function SpeakerFileControl({
   const [uploadState, uploadFormAction, uploadPending] = useActionState(uploadAction, INITIAL_STATE);
   const [removeState, removeFormAction, removePending] = useActionState(removeAction, INITIAL_STATE);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  useActionToast(uploadState);
+  useActionToast(removeState);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4">
@@ -56,21 +58,6 @@ export function SpeakerFileControl({
           </Button>
         ) : null}
       </div>
-
-      {uploadState.status === "error" ? (
-        <Alert variant="destructive">
-          <TriangleAlertIcon aria-hidden="true" />
-          <AlertTitle>Upload failed</AlertTitle>
-          <AlertDescription>{uploadState.message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {removeState.status === "error" ? (
-        <Alert variant="destructive">
-          <TriangleAlertIcon aria-hidden="true" />
-          <AlertTitle>Removal failed</AlertTitle>
-          <AlertDescription>{removeState.message}</AlertDescription>
-        </Alert>
-      ) : null}
 
       <form action={uploadFormAction} className="flex flex-wrap items-end gap-2">
         <Field className="min-w-0 flex-1">

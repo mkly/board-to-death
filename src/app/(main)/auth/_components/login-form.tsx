@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 
 import Link from "next/link";
 
 import { TriangleAlertIcon } from "lucide-react";
+import { toast } from "sonner";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -19,16 +19,19 @@ const INITIAL_STATE: SignInActionState = { status: "idle" };
 export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL?: string }) {
   const [state, formAction, isPending] = useActionState(requestSignInLink, INITIAL_STATE);
 
-  if (state.status === "sent") {
-    return (
-      <div className="flex flex-col gap-2 text-center" role="status">
-        <p className="font-medium">Check your inbox</p>
-        <p className="text-muted-foreground text-sm">
-          A single-use sign-in link is on its way. It expires in 10 minutes.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (state.status === "sent") {
+      toast.success("Check your inbox", {
+        description: "A single-use sign-in link is on its way. It expires in 10 minutes.",
+      });
+    } else if (state.status === "unknown-account") {
+      toast.error("We couldn't find that account", {
+        description: `No GatherPulse account is registered to ${state.email}. Check the email address for typos, or create a workspace to get started.`,
+      });
+    } else if (state.status === "error" && state.message) {
+      toast.error(state.message);
+    }
+  }, [state]);
 
   const fieldError = state.status === "error" && state.field === "email" ? state.message : undefined;
   const formError = state.status === "error" && !state.field ? state.message : undefined;
@@ -36,23 +39,19 @@ export function LoginForm({ callbackURL = "/dashboard" }: { readonly callbackURL
   return (
     <form action={formAction} noValidate className="flex flex-col gap-4">
       <input type="hidden" name="callbackURL" value={callbackURL} />
-      {state.status === "unknown-account" && (
-        <Alert variant="destructive">
-          <TriangleAlertIcon aria-hidden="true" />
-          <AlertTitle>We couldn&apos;t find that account</AlertTitle>
-          <AlertDescription className="flex flex-col items-start gap-2">
-            <span>
-              No GatherPulse account is registered to {state.email}. Check the address for typos, or create a workspace
-              to get started.
-            </span>
-            <Button asChild size="sm" variant="outline">
-              <Link prefetch={false} href={`/auth/v1/register?email=${encodeURIComponent(state.email)}`}>
-                Create your workspace
-              </Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      {state.status === "unknown-account" ? (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-destructive text-sm">
+            <TriangleAlertIcon aria-hidden="true" className="inline-block size-4" />
+            <span className="ml-2">No GatherPulse account is registered to {state.email}. Create one to continue.</span>
+          </p>
+          <Button asChild size="sm" variant="outline">
+            <Link prefetch={false} href={`/auth/v1/register?email=${encodeURIComponent(state.email)}`}>
+              Create your workspace
+            </Link>
+          </Button>
+        </div>
+      ) : null}
       <FieldGroup className="gap-4">
         <Field className="gap-1.5" data-invalid={Boolean(fieldError)}>
           <FieldLabel htmlFor="login-email">Email address</FieldLabel>
