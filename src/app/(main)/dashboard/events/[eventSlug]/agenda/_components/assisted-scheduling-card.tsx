@@ -58,6 +58,7 @@ export function AssistedSchedulingCard({
   const [pending, startTransition] = useTransition();
   const proposals = state.proposals ?? [];
   const unplaced = state.unplaced ?? [];
+  const acceptLabel = proposals.length === 1 ? "Accept proposed placement" : "Accept proposed placements";
 
   const preview = () => {
     startTransition(async () => setState(await previewAssistedSchedule(eventSlug)));
@@ -142,9 +143,9 @@ export function AssistedSchedulingCard({
         {state.status === "preview" && proposals.length > 0 ? (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" disabled={pending}>
+              <Button type="button" aria-label={acceptLabel} disabled={pending}>
                 {pending ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
-                Accept proposals
+                {acceptLabel}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -157,7 +158,7 @@ export function AssistedSchedulingCard({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep reviewing</AlertDialogCancel>
-                <AlertDialogAction onClick={accept}>Accept proposals</AlertDialogAction>
+                <AlertDialogAction onClick={accept}>{acceptLabel}</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

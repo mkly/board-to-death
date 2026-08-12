@@ -28,6 +28,12 @@ class ResizeObserverStub {
 }
 
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: { configurable: true, value: () => false },
+  releasePointerCapture: { configurable: true, value: () => undefined },
+  scrollIntoView: { configurable: true, value: () => undefined },
+  setPointerCapture: { configurable: true, value: () => undefined },
+});
 
 const sessions: readonly SessionWorkspaceSession[] = [
   {
@@ -82,7 +88,13 @@ const sessions: readonly SessionWorkspaceSession[] = [
     trackName: null,
     parentSessionId: null,
     parentSessionTitle: null,
-    participants: [],
+    participants: [
+      {
+        speakerId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        speakerName: "Alex Rivera",
+        role: ProgramSessionParticipantRole.SPEAKER,
+      },
+    ],
     versionNumber: 1,
     versions: [
       {
@@ -163,13 +175,18 @@ describe("SessionWorkspace", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Archived" }));
     expect(within(table).getByText("Retired workshop")).toBeTruthy();
     expect(within(table).queryByText("Opening keynote")).toBeNull();
+  });
 
-    fireEvent.click(screen.getByRole("radio", { name: "All active" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Filter sessions by participant role" }), {
-      target: { value: ProgramSessionParticipantRole.MODERATOR },
-    });
+  test("filters sessions by participant role", async () => {
+    renderWorkspace();
+
+    const table = screen.getByRole("table");
+    fireEvent.click(screen.getByRole("combobox", { name: "Filter sessions by participant role" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Moderator" }));
+
     expect(within(table).getByText("Designing cooperative tension")).toBeTruthy();
     expect(within(table).queryByText("Opening keynote")).toBeNull();
+    expect(screen.getByText("1 session")).toBeTruthy();
   });
 
   test("inspects and edits persisted session details", async () => {

@@ -58,7 +58,7 @@ test.beforeAll(async () => {
     await database.query(
       `INSERT INTO "cfp_form_questions"
         ("id", "stepId", "key", "type", "label", "required", "constraints", "sortOrder")
-       VALUES ($1, $2, 'format', 'select', 'Format', true, $3::jsonb, 1)`,
+       VALUES ($1, $2, 'session-format', 'select', 'Session Format', true, $3::jsonb, 1)`,
       [
         randomUUID(),
         stepId,
@@ -66,6 +66,21 @@ test.beforeAll(async () => {
           options: [
             { value: "talk", label: "Talk" },
             { value: "workshop", label: "Workshop" },
+          ],
+        }),
+      ],
+    );
+    await database.query(
+      `INSERT INTO "cfp_form_questions"
+        ("id", "stepId", "key", "type", "label", "required", "constraints", "sortOrder")
+       VALUES ($1, $2, 'track', 'select', 'Track', true, $3::jsonb, 2)`,
+      [
+        randomUUID(),
+        stepId,
+        JSON.stringify({
+          options: [
+            { value: "ai-engineering", label: "AI Engineering" },
+            { value: "platform-infra", label: "Platform & Infra" },
           ],
         }),
       ],
@@ -137,10 +152,13 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await page.getByRole("switch", { name: "Required answer" }).last().click();
   await page.getByRole("switch", { name: "Conditional visibility" }).last().click();
   await page.getByLabel("Source question").click();
-  await page.getByRole("option", { name: "Format" }).click();
+  await expect(page.getByRole("option", { name: "Session Format" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Track" })).toBeVisible();
+  await page.getByRole("option", { name: "Session Format" }).click();
   await page.getByLabel("Comparison value").click();
   await page.getByRole("option", { name: "Workshop" }).click();
 
+  await page.getByRole("button", { name: "Move Audience experience up" }).click();
   await page.getByRole("button", { name: "Move Audience experience up" }).click();
   await page.getByRole("button", { name: "Remove Abstract" }).click();
   await expect(page.getByRole("heading", { name: "Remove this question?" })).toBeVisible();
@@ -155,11 +173,12 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   await page.getByRole("tab", { name: "Questions" }).click();
   await expect(page.getByText("Version 3", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Label").first()).toHaveValue("Audience experience");
-  await expect(page.getByLabel("Label").nth(1)).toHaveValue("Format");
+  await expect(page.getByLabel("Label").nth(1)).toHaveValue("Session Format");
+  await expect(page.getByLabel("Label").nth(2)).toHaveValue("Track");
   await expect(page.getByLabel("Custom type identifier")).toHaveValue("audience_scale");
   await expect(page.getByRole("switch", { name: "Required answer" }).first()).toBeChecked();
   await expect(page.getByRole("switch", { name: "Conditional visibility" }).first()).toBeChecked();
-  await expect(page.getByLabel("Source question")).toHaveText("Format");
+  await expect(page.getByLabel("Source question")).toHaveText("Session Format");
   await expect(page.getByLabel("Comparison value")).toHaveText("Workshop");
   await expect(page.getByText("Abstract", { exact: true })).toHaveCount(0);
 
@@ -181,7 +200,7 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
       ORDER BY q."sortOrder"`,
     [formId],
   );
-  expect(persisted.rows.map(({ key }) => key)).toEqual(["audience-experience", "format"]);
+  expect(persisted.rows.map(({ key }) => key)).toEqual(["audience-experience", "session-format", "track"]);
   expect(persisted.rows[0]).toMatchObject({
     type: "audience_scale",
     required: true,
@@ -191,6 +210,6 @@ test("configures, validates, reorders, removes, saves, and restores CFP question
   expect(persisted.rows[0]?.customTypes).toContain("audience_scale");
   expect(persisted.rows[0]?.visibleWhen).toEqual({
     logic: "all",
-    conditions: [{ questionId: "format", operator: "equals", value: "workshop" }],
+    conditions: [{ questionId: "session-format", operator: "equals", value: "workshop" }],
   });
 });

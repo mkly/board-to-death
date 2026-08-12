@@ -90,6 +90,12 @@ function agendaViews() {
   return within(card as HTMLElement);
 }
 
+async function setStartTime(time: string) {
+  fireEvent.click(screen.getByLabelText("Starts at"));
+  fireEvent.change(await screen.findByLabelText("Time"), { target: { value: time } });
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+}
+
 describe("AgendaWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,11 +144,11 @@ describe("AgendaWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Propose schedule" }));
     await screen.findByText("Review 1 proposed placement.");
-    const acceptTrigger = screen.getByRole("button", { name: "Accept proposals" });
+    const acceptTrigger = screen.getByRole("button", { name: "Accept proposed placement" });
     await waitFor(() => expect((acceptTrigger as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(acceptTrigger);
     const confirmation = await screen.findByRole("alertdialog");
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Accept proposals" }));
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Accept proposed placement" }));
 
     await waitFor(() => expect(actionMocks.acceptAssistedSchedule).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("1 placement was added to the agenda.")).toBeTruthy();
@@ -237,7 +243,7 @@ describe("AgendaWorkspace", () => {
   test("submits keyboard-accessible placement fields", async () => {
     renderWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "Schedule Opening keynote" }));
-    fireEvent.change(screen.getByLabelText("Starts at"), { target: { value: "2027-03-13T11:30" } });
+    await setStartTime("11:30");
     fireEvent.change(screen.getByLabelText("Duration (minutes)"), { target: { value: "50" } });
     await act(async () => {
       fireEvent.submit(screen.getByRole("button", { name: "Add to agenda" }).closest("form") as HTMLFormElement);
@@ -278,6 +284,7 @@ describe("AgendaWorkspace", () => {
       .mockResolvedValueOnce({ status: "success", message: "Session added to the agenda." });
     renderWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "Schedule Opening keynote" }));
+    await setStartTime("11:30");
     fireEvent.click(screen.getByRole("radio", { name: "Allow after confirmation" }));
     await act(async () => {
       fireEvent.submit(screen.getByRole("button", { name: "Add to agenda" }).closest("form") as HTMLFormElement);
@@ -285,12 +292,14 @@ describe("AgendaWorkspace", () => {
 
     expect(await screen.findByRole("alertdialog")).toBeTruthy();
     expect(screen.getByText(/Main Hall overlaps with Designing cooperative tension/)).toBeTruthy();
-    expect((screen.getByLabelText("Starts at") as HTMLInputElement).value).toBe("2027-03-13T11:30");
+    expect(screen.getByLabelText("Starts at").textContent).toContain("Mar 13, 2027, 11:30 AM");
+    expect((document.querySelector('input[name="startsAt"]') as HTMLInputElement).value).toBe("2027-03-13T11:30");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirm and save" }));
     });
     await waitFor(() => expect(actionMocks.saveAgendaPlacement).toHaveBeenCalledTimes(2));
     const confirmedFormData = actionMocks.saveAgendaPlacement.mock.calls[1]?.[1] as FormData;
     expect(confirmedFormData.get("conflictsConfirmed")).toBe("true");
+    expect(confirmedFormData.get("startsAt")).toBe("2027-03-13T11:30");
   });
 });
