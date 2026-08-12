@@ -117,6 +117,15 @@ describe("CFP public access lookup", () => {
     assert.ok(lookup.status === "not-yet-open" && lookup.opensAt.getTime() === opensAt.getTime());
   });
 
+  test("resolves an active published policy by its event slug", async () => {
+    const { event, published } = await setup("public-event-slug");
+
+    const lookup = await publicAccess.findByPublicId(event.slug);
+
+    assert.equal(lookup.status, "open");
+    assert.ok(lookup.status === "open" && lookup.publicId === published.publicId);
+  });
+
   test("reports closed and archived policies as closed", async () => {
     const { event, published, owner } = await setup("closed-archived");
 

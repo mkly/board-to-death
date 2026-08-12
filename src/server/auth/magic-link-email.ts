@@ -66,6 +66,11 @@ export function createConfiguredMagicLinkSender({
   wording = SIGN_IN_WORDING,
 }: MagicLinkDeliveryConfig): SendMagicLink {
   return async ({ email, url }) => {
+    if (process.env.NODE_ENV === "development") {
+      console.info(`[auth] Magic link for ${email}: ${url}`);
+      return;
+    }
+
     const content = emailContent(url, wording);
 
     if (resendApiKey && resendFromEmail) {
@@ -84,16 +89,14 @@ export function createConfiguredMagicLinkSender({
         });
 
         if (!response.ok) {
-          const body = await response.text().catch(() => "");
-          throw new Error(`Resend rejected magic-link delivery with status ${response.status}: ${body.slice(0, 500)}`);
+          throw new Error(`Resend rejected magic-link delivery with status ${response.status}`);
         }
       });
       return;
     }
 
     if (!webhookUrl) {
-      console.info(`[auth] Magic link for ${email}: ${url}`);
-      return;
+      throw new Error("Magic-link delivery is not configured.");
     }
 
     await deliverWithObservability("webhook", email, async () => {

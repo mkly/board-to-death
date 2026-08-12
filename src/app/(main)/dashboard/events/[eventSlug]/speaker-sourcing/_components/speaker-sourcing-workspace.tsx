@@ -1,9 +1,12 @@
+"use client";
+
+import { useActionState, useTransition } from "react";
+
 import Link from "next/link";
 
 import { ArrowRight, ClipboardList, ExternalLink, MessageSquareText, UserPlus, UsersRound } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +14,9 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { DirectoryPersonSummary } from "@/server/contacts/repositories";
 import type { SpeakerSourcingBoardStage, SpeakerSourcingRepository } from "@/server/speaker-sourcing/repositories";
 
@@ -22,16 +27,17 @@ import {
   createInterestFormAction,
   enrollProspectAction,
   moveProspectAction,
+  type SpeakerSourcingActionState,
 } from "../actions";
 
 type InterestFormSummary = Awaited<ReturnType<SpeakerSourcingRepository["listInterestForms"]>>[number];
 
+const INITIAL_STATE: SpeakerSourcingActionState = { status: "idle" };
+
 interface SpeakerSourcingWorkspaceProps {
   readonly availablePeople: readonly DirectoryPersonSummary[];
-  readonly error?: string;
   readonly event: { readonly id: string; readonly name: string; readonly slug: string };
   readonly forms: readonly InterestFormSummary[];
-  readonly notice?: string;
   readonly stages: readonly SpeakerSourcingBoardStage[];
 }
 
@@ -60,6 +66,18 @@ function ProspectCard({
   readonly prospect: SpeakerSourcingBoardStage["prospects"][number];
   readonly stages: readonly SpeakerSourcingBoardStage[];
 }) {
+  const [moveState, moveAction, movePending] = useActionState(
+    moveProspectAction.bind(null, event.slug, prospect.id),
+    INITIAL_STATE,
+  );
+  useActionToast(moveState);
+  const [noteState, noteAction, notePending] = useActionState(
+    addProspectNoteAction.bind(null, event.slug, prospect.id),
+    INITIAL_STATE,
+  );
+  useActionToast(noteState);
+  const [assigning, startAssignTransition] = useTransition();
+
   const fullName = `${prospect.person.givenName} ${prospect.person.familyName}`;
   return (
     <Card size="sm">
@@ -80,7 +98,7 @@ function ProspectCard({
           </div>
         </dl>
 
-        <form action={moveProspectAction.bind(null, event.slug, prospect.id)}>
+        <form action={moveAction}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`prospect-stage-${prospect.id}`}>Move card</FieldLabel>
@@ -90,22 +108,22 @@ function ProspectCard({
                 name="stageId"
                 options={stages.map((stage) => ({ value: stage.id, label: stage.name }))}
               />
-              <Button size="sm" type="submit" variant="outline">
-                <ArrowRight data-icon="inline-start" />
-                Move
+              <Button disabled={movePending} size="sm" type="submit" variant="outline">
+                {movePending ? <Spinner data-icon="inline-start" /> : <ArrowRight data-icon="inline-start" />}
+                {movePending ? "Moving…" : "Move"}
               </Button>
             </Field>
           </FieldGroup>
         </form>
 
-        <form action={addProspectNoteAction.bind(null, event.slug, prospect.id)}>
+        <form action={noteAction}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`prospect-note-${prospect.id}`}>Internal note</FieldLabel>
               <Textarea id={`prospect-note-${prospect.id}`} maxLength={2000} name="note" required />
-              <Button size="sm" type="submit" variant="outline">
-                <MessageSquareText data-icon="inline-start" />
-                Add note
+              <Button disabled={notePending} size="sm" type="submit" variant="outline">
+                {notePending ? <Spinner data-icon="inline-start" /> : <MessageSquareText data-icon="inline-start" />}
+                {notePending ? "Adding…" : "Add note"}
               </Button>
             </Field>
           </FieldGroup>
@@ -136,26 +154,42 @@ function ProspectCard({
         {prospect.assignedEvent ? (
           <Badge variant="secondary">Assigned to {prospect.assignedEvent.name}</Badge>
         ) : (
-          <form action={assignProspectAction.bind(null, event.slug, prospect.id)}>
-            <Button size="sm" type="submit">
-              <UserPlus data-icon="inline-start" />
-              Assign to {event.name}
-            </Button>
-          </form>
+          <Button
+            disabled={assigning}
+            size="sm"
+            type="button"
+            onClick={() =>
+              startAssignTransition(async () => {
+                actionResultToast(await assignProspectAction(event.slug, prospect.id));
+              })
+            }
+          >
+            {assigning ? <Spinner data-icon="inline-start" /> : <UserPlus data-icon="inline-start" />}
+            {assigning ? "Assigning…" : `Assign to ${event.name}`}
+          </Button>
         )}
       </CardFooter>
     </Card>
   );
 }
 
-export function SpeakerSourcingWorkspace({
-  availablePeople,
-  error,
-  event,
-  forms,
-  notice,
-  stages,
-}: SpeakerSourcingWorkspaceProps) {
+export function SpeakerSourcingWorkspace({ availablePeople, event, forms, stages }: SpeakerSourcingWorkspaceProps) {
+  const [interestFormState, interestFormAction, interestFormPending] = useActionState(
+    createInterestFormAction.bind(null, event.slug),
+    INITIAL_STATE,
+  );
+  useActionToast(interestFormState);
+  const [enrollState, enrollAction, enrollPending] = useActionState(
+    enrollProspectAction.bind(null, event.slug),
+    INITIAL_STATE,
+  );
+  useActionToast(enrollState);
+  const [stagesState, stagesAction, stagesPending] = useActionState(
+    configureStagesAction.bind(null, event.slug),
+    INITIAL_STATE,
+  );
+  useActionToast(stagesState);
+
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -166,19 +200,6 @@ export function SpeakerSourcingWorkspace({
         </p>
       </header>
 
-      {notice ? (
-        <Alert>
-          <AlertTitle>Pipeline updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to update the pipeline</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
@@ -188,7 +209,7 @@ export function SpeakerSourcingWorkspace({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={createInterestFormAction.bind(null, event.slug)}>
+            <form action={interestFormAction}>
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="interest-form-title">Title</FieldLabel>
@@ -198,9 +219,13 @@ export function SpeakerSourcingWorkspace({
                   <FieldLabel htmlFor="interest-form-description">Description</FieldLabel>
                   <Textarea id="interest-form-description" maxLength={1000} name="description" />
                 </Field>
-                <Button className="self-start" type="submit">
-                  <ExternalLink data-icon="inline-start" />
-                  Publish form
+                <Button className="self-start" disabled={interestFormPending} type="submit">
+                  {interestFormPending ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <ExternalLink data-icon="inline-start" />
+                  )}
+                  {interestFormPending ? "Publishing…" : "Publish form"}
                 </Button>
               </FieldGroup>
             </form>
@@ -244,7 +269,7 @@ export function SpeakerSourcingWorkspace({
                 </EmptyHeader>
               </Empty>
             ) : (
-              <form action={enrollProspectAction.bind(null, event.slug)}>
+              <form action={enrollAction}>
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="manual-prospect-person">Directory person</FieldLabel>
@@ -258,9 +283,9 @@ export function SpeakerSourcingWorkspace({
                         label: `${person.givenName} ${person.familyName} · ${person.email}`,
                       }))}
                     />
-                    <Button className="self-start" type="submit">
-                      <UserPlus data-icon="inline-start" />
-                      Enroll prospect
+                    <Button className="self-start" disabled={enrollPending} type="submit">
+                      {enrollPending ? <Spinner data-icon="inline-start" /> : <UserPlus data-icon="inline-start" />}
+                      {enrollPending ? "Enrolling…" : "Enroll prospect"}
                     </Button>
                   </Field>
                 </FieldGroup>
@@ -278,7 +303,7 @@ export function SpeakerSourcingWorkspace({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={configureStagesAction.bind(null, event.slug)}>
+          <form action={stagesAction}>
             <FieldGroup>
               {stages.map((stage, index) => (
                 <Field key={stage.id} orientation="responsive">
@@ -297,8 +322,9 @@ export function SpeakerSourcingWorkspace({
                 </Field>
               ))}
               <FieldDescription>Choose a unique position for each stage.</FieldDescription>
-              <Button className="self-start" type="submit" variant="outline">
-                Save stage settings
+              <Button className="self-start" disabled={stagesPending} type="submit" variant="outline">
+                {stagesPending ? <Spinner data-icon="inline-start" /> : null}
+                {stagesPending ? "Saving…" : "Save stage settings"}
               </Button>
             </FieldGroup>
           </form>

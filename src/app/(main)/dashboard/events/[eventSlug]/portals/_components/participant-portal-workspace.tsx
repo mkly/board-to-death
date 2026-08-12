@@ -30,15 +30,7 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
@@ -345,29 +337,19 @@ export function ParticipantPortalWorkspace({
                 <TabsContent value="identity" className="pt-5" forceMount>
                   <FieldGroup>
                     <div className="grid gap-5 md:grid-cols-2">
-                      <Field data-invalid={Boolean(firstError(saveState, "name"))}>
-                        <FieldLabel htmlFor="portal-name">Name</FieldLabel>
-                        <Input
-                          id="portal-name"
-                          name="name"
-                          defaultValue={selected.name}
-                          required
-                          aria-invalid={Boolean(firstError(saveState, "name"))}
-                        />
-                        <FieldError>{firstError(saveState, "name")}</FieldError>
-                      </Field>
-                      <Field data-invalid={Boolean(firstError(saveState, "slug"))}>
-                        <FieldLabel htmlFor="portal-slug">Slug</FieldLabel>
-                        <Input
-                          id="portal-slug"
-                          name="slug"
-                          defaultValue={selected.slug}
-                          required
-                          aria-invalid={Boolean(firstError(saveState, "slug"))}
-                        />
-                        <FieldDescription>Internal identifier for this portal.</FieldDescription>
-                        <FieldError>{firstError(saveState, "slug")}</FieldError>
-                      </Field>
+                      <DerivedIdentifierFields
+                        identifierDescription="Internal identifier for this portal."
+                        identifierError={firstError(saveState, "slug")}
+                        identifierId="portal-slug"
+                        identifierInitialValue={selected.slug}
+                        identifierLabel="Slug"
+                        identifierName="slug"
+                        sourceError={firstError(saveState, "name")}
+                        sourceId="portal-name"
+                        sourceInitialValue={selected.name}
+                        sourceLabel="Name"
+                        sourceName="name"
+                      />
                     </div>
                     <Field>
                       <FieldLabel htmlFor="portal-welcome">Welcome message</FieldLabel>
@@ -593,3 +575,5 @@ export function ParticipantPortalWorkspace({
     </div>
   );
 }
+
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";

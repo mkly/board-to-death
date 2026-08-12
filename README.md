@@ -48,13 +48,23 @@ npm run dev
 Open <http://localhost:3000>. Authentication uses magic links. Dashboard access comes from active organization or
 event memberships, not from an email allowlist.
 
-Seed a repeatable demonstration event with:
+Seed repeatable demonstration data with:
 
 ```sh
 npm run db:seed
 ```
 
-The seed replaces only the `board-to-death-demo` event and uses stable IDs. It creates no login account or password.
+The seed creates two fixtures with stable IDs and replaces only its own records on rerun:
+
+- The `board-to-death-demo` representative event. It creates no login account or password.
+- The **Tabletop Guild** demo organization (`tabletop-guild`) with two events — `protospiel-summit-2026`, a
+  fully-populated post-CFP conference, and `winter-playtest-nights-2026`, an early-stage meetup with an open CFP —
+  plus log-in-able demo users. Sign in with a magic link as any of: `mike@tabletopguild.test` (owner),
+  `priya@tabletopguild.test` (owner), `marcus@tabletopguild.test`, `elena@tabletopguild.test`, or
+  `tomas@tabletopguild.test`. In development the magic-link URL is printed to the dev-server console. The seeded
+  speakers double as speaker-portal logins: enter e.g. `amara.osei@example.test` at
+  `/portal/protospiel-summit-2026/sign-in` for the speaker-side view.
+
 See [production operations](docs/operations.md#seed-and-demo-access) for the fixture contents and security notes.
 
 ## Database commands

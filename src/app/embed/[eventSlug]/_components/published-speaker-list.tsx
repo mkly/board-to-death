@@ -9,9 +9,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
+
+import { EmbedHeader } from "./embed-kit";
+
+const FILTER_LABEL_CLASS = "font-medium text-[11px] text-muted-foreground uppercase tracking-wide";
 
 export interface PublishedSpeakerListItem {
   readonly id: string;
@@ -68,53 +71,54 @@ export function PublishedSpeakerList({ density, enabledFilters, eventName, speak
 
   return (
     <section aria-labelledby="speaker-list-title" className="mx-auto flex w-full max-w-4xl flex-col gap-5">
-      <header className="flex flex-col gap-1">
-        <p className="text-muted-foreground text-sm">{eventName}</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-tight" id="speaker-list-title">
-          Speakers
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Meet the speakers and explore their sessions in the published program.
-        </p>
-      </header>
+      <EmbedHeader
+        eyebrow="Speakers"
+        title={eventName}
+        titleId="speaker-list-title"
+        description="Meet the speakers and explore their sessions in the published program."
+      />
 
       {showSearch || showOrganization ? (
-        <FieldGroup className="rounded-xl border bg-card p-3 sm:flex-row sm:items-end">
-          {showSearch ? (
-            <Field>
-              <FieldLabel htmlFor="speaker-search">Search speakers</FieldLabel>
-              <div className="relative">
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  className="pl-8"
-                  id="speaker-search"
-                  onChange={(event) => setSearch(event.currentTarget.value)}
-                  placeholder="Name, organization, or session"
-                  type="search"
-                  value={search}
+        <search>
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-y py-3">
+            {showSearch ? (
+              <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="speaker-search">
+                  Search speakers
+                </label>
+                <InputGroup>
+                  <InputGroupInput
+                    id="speaker-search"
+                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    placeholder="Name, organization, or session"
+                    type="search"
+                    value={search}
+                  />
+                  <InputGroupAddon align="inline-start">
+                    <Search aria-hidden="true" />
+                  </InputGroupAddon>
+                </InputGroup>
+              </div>
+            ) : null}
+            {showOrganization ? (
+              <div className="flex flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="speaker-organization">
+                  Organization
+                </label>
+                <FormSelect
+                  className="min-w-48"
+                  id="speaker-organization"
+                  onValueChange={setOrganization}
+                  value={organization}
+                  options={[
+                    { value: "", label: "All organizations" },
+                    ...organizations.map((option) => ({ value: option, label: option })),
+                  ]}
                 />
               </div>
-            </Field>
-          ) : null}
-          {showOrganization ? (
-            <Field className="sm:max-w-64">
-              <FieldLabel htmlFor="speaker-organization">Organization</FieldLabel>
-              <FormSelect
-                className="w-full"
-                id="speaker-organization"
-                onValueChange={setOrganization}
-                value={organization}
-                options={[
-                  { value: "", label: "All organizations" },
-                  ...organizations.map((option) => ({ value: option, label: option })),
-                ]}
-              />
-            </Field>
-          ) : null}
-        </FieldGroup>
+            ) : null}
+          </div>
+        </search>
       ) : null}
 
       <p aria-live="polite" className="sr-only" role="status">
@@ -130,7 +134,7 @@ export function PublishedSpeakerList({ density, enabledFilters, eventName, speak
                   <Avatar aria-label={`${speaker.name} profile image`} className="row-span-2" role="img" size="lg">
                     <AvatarFallback aria-hidden="true">{speaker.initials}</AvatarFallback>
                   </Avatar>
-                  <CardTitle className="min-w-0 break-words">{speaker.name}</CardTitle>
+                  <CardTitle className="min-w-0 break-words font-heading">{speaker.name}</CardTitle>
                   <CardDescription className="min-w-0 break-words">
                     {[speaker.jobTitle, speaker.organization].filter(Boolean).join(" at ") || "Event speaker"}
                     {speaker.pronouns ? ` · ${speaker.pronouns}` : ""}
@@ -175,7 +179,7 @@ export function PublishedSpeakerList({ density, enabledFilters, eventName, speak
           ))}
         </ul>
       ) : (
-        <Empty className="border">
+        <Empty className="border border-dashed">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Users aria-hidden="true" />

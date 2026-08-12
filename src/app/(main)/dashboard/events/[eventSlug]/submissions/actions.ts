@@ -80,13 +80,14 @@ export async function saveSubmissionView(
   return { status: "success", message: "Your table view was saved for this event." };
 }
 
-export async function resetSubmissionView(eventSlug: string): Promise<void> {
+export async function resetSubmissionView(eventSlug: string): Promise<SubmissionViewActionState> {
   const context = await authorizedContext(eventSlug);
-  if (!context) return;
+  if (!context) return { status: "error", message: "This event is not available." };
   await getDatabaseClient().cfpSubmissionView.deleteMany({
     where: { eventId: context.event.id, userId: context.userId },
   });
   revalidatePath(`/dashboard/events/${context.event.slug}/submissions`);
+  return { status: "success", message: "Saved table view reset." };
 }
 
 export async function recordSubmissionDecision(

@@ -1,22 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/client";
+import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/enums";
 
 const mocks = vi.hoisted(() => ({
   findMembership: vi.fn(),
   getSession: vi.fn(),
   invite: vi.fn(),
-  redirect: vi.fn((url: string) => {
-    throw new Error(`REDIRECT:${url}`);
-  }),
   resend: vi.fn(),
+  revalidatePath: vi.fn(),
   revoke: vi.fn(),
   setMembershipActive: vi.fn(),
   signInMagicLink: vi.fn(),
 }));
 
+vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/server/auth/auth", () => ({
   auth: { api: { getSession: mocks.getSession, signInMagicLink: mocks.signInMagicLink } },
 }));
@@ -34,6 +32,7 @@ vi.mock("@/server/organization-memberships/organization-invitations", () => ({
 
 import {
   inviteOrganizationMember,
+  type OrganizationTeamActionState,
   resendOrganizationInvitation,
   revokeOrganizationInvitation,
   setOrganizationMembershipActive,
@@ -41,6 +40,7 @@ import {
 
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const ownerId = "owner-user";
+const initialState: OrganizationTeamActionState = { status: "idle" };
 
 function invitationForm(): FormData {
   const formData = new FormData();
@@ -57,9 +57,10 @@ beforeEach(() => {
 
 describe("organization team actions", () => {
   it("allows an active owner to invite a member", async () => {
-    await expect(inviteOrganizationMember(organizationId, invitationForm())).rejects.toThrow(
-      "REDIRECT:/dashboard/organization?notice=Invitation+sent+to+new-member%40example.test.",
-    );
+    await expect(inviteOrganizationMember(organizationId, initialState, invitationForm())).resolves.toEqual({
+      status: "success",
+      message: "Invitation sent to new-member@example.test.",
+    });
 
     expect(mocks.findMembership).toHaveBeenCalledWith({
       where: {
@@ -79,31 +80,35 @@ describe("organization team actions", () => {
       },
       expect.any(Function),
     );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/dashboard/organization");
   });
 
   it.each([
-    ["invite", () => inviteOrganizationMember(organizationId, invitationForm())],
+    ["invite", () => inviteOrganizationMember(organizationId, initialState, invitationForm())],
     ["resend", () => resendOrganizationInvitation(organizationId, "invitation-id")],
     ["revoke", () => revokeOrganizationInvitation(organizationId, "invitation-id")],
     ["membership access", () => setOrganizationMembershipActive(organizationId, "membership-id", false)],
   ])("refuses the %s action for a member without owner access", async (_name, action) => {
     mocks.findMembership.mockResolvedValue(null);
 
-    await expect(action()).rejects.toThrow(
-      "REDIRECT:/dashboard/organization?error=Organization+owner+access+is+required.",
-    );
+    await expect(action()).resolves.toEqual({
+      status: "error",
+      message: "Organization owner access is required.",
+    });
     expect(mocks.invite).not.toHaveBeenCalled();
     expect(mocks.resend).not.toHaveBeenCalled();
     expect(mocks.revoke).not.toHaveBeenCalled();
     expect(mocks.setMembershipActive).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("refuses an organization action for an unauthenticated non-member", async () => {
     mocks.getSession.mockResolvedValue(null);
 
-    await expect(revokeOrganizationInvitation(organizationId, "invitation-id")).rejects.toThrow(
-      "REDIRECT:/dashboard/organization?error=Organization+owner+access+is+required.",
-    );
+    await expect(revokeOrganizationInvitation(organizationId, "invitation-id")).resolves.toEqual({
+      status: "error",
+      message: "Organization owner access is required.",
+    });
     expect(mocks.findMembership).not.toHaveBeenCalled();
     expect(mocks.revoke).not.toHaveBeenCalled();
   });
@@ -113,9 +118,11 @@ describe("organization team actions", () => {
       .mockResolvedValueOnce({ userId: ownerId, organization: { id: organizationId } })
       .mockResolvedValueOnce({ userId: ownerId });
 
-    await expect(setOrganizationMembershipActive(organizationId, "membership-id", false)).rejects.toThrow(
-      "REDIRECT:/dashboard/organization?error=You+cannot+remove+your+own+organization+access.",
-    );
+    await expect(setOrganizationMembershipActive(organizationId, "membership-id", false)).resolves.toEqual({
+      status: "error",
+      message: "You cannot remove your own organization access.",
+    });
     expect(mocks.setMembershipActive).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 });

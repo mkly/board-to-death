@@ -1,11 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/client";
+import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/enums";
 import { auth } from "@/server/auth/auth";
 import { provisionMagicLinkUser } from "@/server/auth/magic-link-user";
 import { getDatabaseClient } from "@/server/database/client";
@@ -20,17 +20,23 @@ const inviteSchema = z.object({
   role: z.enum([OrganizationMemberRole.OWNER, OrganizationMemberRole.MEMBER]),
 });
 
+export interface OrganizationTeamActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
 }
 
-function destination(result: { readonly notice?: string; readonly error?: string }): string {
-  const query = new URLSearchParams();
-  if (result.notice) query.set("notice", result.notice);
-  if (result.error) query.set("error", result.error);
-  const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  return `/dashboard/organization${suffix}`;
+function succeed(notice: string): OrganizationTeamActionState {
+  revalidatePath("/dashboard/organization");
+  return { status: "success", message: notice };
+}
+
+function fail(error: unknown): OrganizationTeamActionState {
+  return { status: "error", message: errorMessage(error) };
 }
 
 function errorMessage(error: unknown): string {
@@ -67,16 +73,19 @@ async function magicLinkDelivery(): Promise<OrganizationInvitationDelivery> {
   };
 }
 
-export async function inviteOrganizationMember(organizationId: string, formData: FormData): Promise<never> {
+export async function inviteOrganizationMember(
+  organizationId: string,
+  _previousState: OrganizationTeamActionState,
+  formData: FormData,
+): Promise<OrganizationTeamActionState> {
   const parsed = inviteSchema.safeParse({
     email: field(formData, "email").trim().toLowerCase(),
     role: field(formData, "role"),
   });
   if (!parsed.success) {
-    redirect(destination({ error: parsed.error.issues[0]?.message ?? "Review the invitation." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the invitation." };
   }
 
-  let result: { readonly notice?: string; readonly error?: string };
   try {
     const owner = await requireOrganizationOwner(organizationId);
     await new OrganizationInvitationService(getDatabaseClient()).invite(
@@ -87,15 +96,16 @@ export async function inviteOrganizationMember(organizationId: string, formData:
       },
       await magicLinkDelivery(),
     );
-    result = { notice: `Invitation sent to ${parsed.data.email}.` };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(result));
+  return succeed(`Invitation sent to ${parsed.data.email}.`);
 }
 
-export async function resendOrganizationInvitation(organizationId: string, invitationId: string): Promise<never> {
-  let result: { readonly notice?: string; readonly error?: string };
+export async function resendOrganizationInvitation(
+  organizationId: string,
+  invitationId: string,
+): Promise<OrganizationTeamActionState> {
   try {
     const owner = await requireOrganizationOwner(organizationId);
     await new OrganizationInvitationService(getDatabaseClient()).resend(
@@ -103,31 +113,30 @@ export async function resendOrganizationInvitation(organizationId: string, invit
       invitationId,
       await magicLinkDelivery(),
     );
-    result = { notice: "Invitation sent again with a fresh link." };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(result));
+  return succeed("Invitation sent again with a fresh link.");
 }
 
-export async function revokeOrganizationInvitation(organizationId: string, invitationId: string): Promise<never> {
-  let result: { readonly notice?: string; readonly error?: string };
+export async function revokeOrganizationInvitation(
+  organizationId: string,
+  invitationId: string,
+): Promise<OrganizationTeamActionState> {
   try {
     const owner = await requireOrganizationOwner(organizationId);
     await new OrganizationInvitationService(getDatabaseClient()).revoke(owner.organizationId, invitationId);
-    result = { notice: "Pending invitation revoked." };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(result));
+  return succeed("Pending invitation revoked.");
 }
 
 export async function setOrganizationMembershipActive(
   organizationId: string,
   membershipId: string,
   active: boolean,
-): Promise<never> {
-  let result: { readonly notice?: string; readonly error?: string };
+): Promise<OrganizationTeamActionState> {
   try {
     const owner = await requireOrganizationOwner(organizationId);
     const target = await getDatabaseClient().organizationMember.findFirst({
@@ -144,9 +153,8 @@ export async function setOrganizationMembershipActive(
       membershipId,
       active,
     );
-    result = { notice: active ? "Organization access restored." : "Organization access set to inactive." };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(result));
+  return succeed(active ? "Organization access restored." : "Organization access set to inactive.");
 }

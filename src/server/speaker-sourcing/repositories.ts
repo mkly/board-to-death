@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import {
   type Person,
   type Prisma,
@@ -223,6 +225,7 @@ export class SpeakerSourcingRepository {
   }
 
   async findPublishedInterestForm(publicId: string) {
+    if (!z.uuid().safeParse(publicId).success) return null;
     return this.client.speakerInterestForm.findFirst({
       where: { publicId, publishedAt: { not: null } },
       include: { event: { select: { id: true, name: true, slug: true } } },
@@ -233,6 +236,9 @@ export class SpeakerSourcingRepository {
     const email = normalizeEmail(input.email);
     const givenName = requiredText(input.givenName, "givenName");
     const familyName = requiredText(input.familyName, "familyName");
+    if (!z.uuid().safeParse(input.publicId).success) {
+      throw new RepositoryError("not-found", "This speaker interest form is not available.");
+    }
     try {
       const publishedForm = await this.client.speakerInterestForm.findFirst({
         where: { publicId: input.publicId, publishedAt: { not: null } },

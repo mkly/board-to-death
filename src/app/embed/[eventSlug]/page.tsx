@@ -145,7 +145,7 @@ async function publishedSessionList(
           durationMinutes: session.durationMinutes,
           format: session.format ?? null,
           location: room ? { id: room.id, name: room.name } : null,
-          track: track ? { id: track.id, name: track.name } : null,
+          track: track ? { id: track.id, name: track.name, color: track.color ?? null } : null,
           speakers: session.speakerIds.flatMap((speakerId) => {
             const speaker = speakersById.get(speakerId);
             return speaker ? [{ id: speaker.id, name: speakerName(speaker) }] : [];
@@ -198,7 +198,7 @@ async function publishedItinerary(eventSlug: string): Promise<
             room: roomsById.get(placement.roomId)?.name ?? null,
             tracks: placement.trackIds.flatMap((trackId) => {
               const track = tracksById.get(trackId);
-              return track ? [{ id: track.id, name: track.name }] : [];
+              return track ? [{ id: track.id, name: track.name, color: track.color ?? null }] : [];
             }),
             speakers: [...new Set([...session.speakerIds, ...placement.speakerIds])].flatMap((speakerId) => {
               const speaker = speakersById.get(speakerId);
@@ -227,16 +227,16 @@ const AGENDA_UNAVAILABLE_COPY = {
 } as const;
 
 function agendaData(snapshot: PublishedProgramSnapshot) {
-  const sessions = new Map(snapshot.sessions.map((session) => [session.id, session]));
-  const rooms = new Map(snapshot.rooms.map((room) => [room.id, room]));
-  const tracks = new Map(snapshot.tracks.map((track) => [track.id, track]));
-  const speakers = new Map(snapshot.speakers.map((speaker) => [speaker.id, speaker]));
+  const sessions = new Map((snapshot.sessions ?? []).map((session) => [session.id, session]));
+  const rooms = new Map((snapshot.rooms ?? []).map((room) => [room.id, room]));
+  const tracks = new Map((snapshot.tracks ?? []).map((track) => [track.id, track]));
+  const speakers = new Map((snapshot.speakers ?? []).map((speaker) => [speaker.id, speaker]));
 
   return {
     event: snapshot.event,
-    rooms: snapshot.rooms,
-    tracks: snapshot.tracks,
-    placements: snapshot.placements.flatMap((placement) => {
+    rooms: snapshot.rooms ?? [],
+    tracks: snapshot.tracks ?? [],
+    placements: (snapshot.placements ?? []).flatMap((placement) => {
       const session = sessions.get(placement.sessionId);
       const room = rooms.get(placement.roomId);
       if (!session || !room) return [];
@@ -253,7 +253,7 @@ function agendaData(snapshot: PublishedProgramSnapshot) {
           room: { id: room.id, name: room.name },
           tracks: placement.trackIds.flatMap((trackId) => {
             const track = tracks.get(trackId);
-            return track ? [{ id: track.id, name: track.name }] : [];
+            return track ? [{ id: track.id, name: track.name, color: track.color ?? null }] : [];
           }),
           speakers: placement.speakerIds.flatMap((speakerId) => {
             const speaker = speakers.get(speakerId);

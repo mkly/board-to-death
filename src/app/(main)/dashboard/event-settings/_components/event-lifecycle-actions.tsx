@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Archive, ArchiveRestore, Copy } from "lucide-react";
 
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +28,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
 interface EventLifecycleActionsProps {
@@ -81,15 +81,18 @@ export function EventLifecycleActions({ event, pending, onClone, onArchive, onRe
             }}
           >
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="clone-event-name">Event name</FieldLabel>
-                <Input id="clone-event-name" name="name" defaultValue={`${event.name} copy`} required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="clone-event-slug">Slug</FieldLabel>
-                <Input id="clone-event-slug" name="slug" defaultValue={copySlug(event.slug)} required />
-                <FieldDescription>Use a unique lowercase slug.</FieldDescription>
-              </Field>
+              <DerivedIdentifierFields
+                identifierDescription="Use a unique lowercase slug."
+                identifierId="clone-event-slug"
+                identifierInitialValue={copySlug(event.slug)}
+                identifierInitialValueIsDerived
+                identifierLabel="Slug"
+                identifierName="slug"
+                sourceId="clone-event-name"
+                sourceInitialValue={`${event.name} copy`}
+                sourceLabel="Event name"
+                sourceName="name"
+              />
               <FieldSet>
                 <FieldLegend variant="label">Configuration to carry over</FieldLegend>
                 <FieldGroup className="gap-3">

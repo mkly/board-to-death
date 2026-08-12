@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Archive, ArrowDown, ArrowUp, ExternalLink, FilePlus2, Save } from "lucide-react";
 
 import { SanitizedMarkdown } from "@/components/content/sanitized-markdown";
+import { useDerivedIdentifierChanges } from "@/components/derived-identifier-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -178,6 +179,12 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
   const updateField = (field: keyof EditableFields, value: string) => {
     setFields((current) => ({ ...current, [field]: value }));
   };
+  const titleAndSlugChanges = useDerivedIdentifierChanges({
+    identifier: fields.slug,
+    onIdentifierChange: (value) => updateField("slug", value),
+    onSourceChange: (value) => updateField("title", value),
+    resetKey: selectionKey,
+  });
 
   const publish = () => {
     if (!selected || !publishable) return;
@@ -338,7 +345,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                       id="resource-title"
                       name="title"
                       value={fields.title}
-                      onChange={(changeEvent) => updateField("title", changeEvent.target.value)}
+                      onChange={(changeEvent) => titleAndSlugChanges.changeSource(changeEvent.target.value)}
                       aria-invalid={Boolean(firstError(saveState, "title")) || undefined}
                       placeholder="Travel and lodging"
                       required
@@ -351,7 +358,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
                       id="resource-slug"
                       name="slug"
                       value={fields.slug}
-                      onChange={(changeEvent) => updateField("slug", changeEvent.target.value)}
+                      onChange={(changeEvent) => titleAndSlugChanges.changeIdentifier(changeEvent.target.value)}
                       aria-invalid={Boolean(firstError(saveState, "slug")) || undefined}
                       placeholder="travel-and-lodging"
                       required

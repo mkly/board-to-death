@@ -10,7 +10,7 @@ import {
   CustomFieldType,
   ProgramSessionContentApprovalStatus,
   ProgramSessionParticipantRole,
-} from "@/generated/prisma/client";
+} from "@/generated/prisma/enums";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { type PreparedCustomFieldFile, prepareCustomFieldFile, putCustomFieldFile } from "@/server/custom-fields/files";

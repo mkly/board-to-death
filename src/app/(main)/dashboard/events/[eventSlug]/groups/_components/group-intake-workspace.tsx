@@ -1,6 +1,10 @@
+"use client";
+
+import { useActionState, useTransition } from "react";
+
 import Link from "next/link";
 
-import { ExternalLink, Inbox, Send, X } from "lucide-react";
+import { Check, ExternalLink, Inbox, Send, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,11 +12,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ContactGroupIntakeForm, ContactGroupKind } from "@/generated/prisma/client";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { ContactGroupIntakeSubmissionWithDetails } from "@/server/contacts/group-intake";
 
-import { closeIntakeFormAction, publishIntakeFormAction, reviewIntakeSubmissionAction } from "../actions";
+import {
+  closeIntakeFormAction,
+  type GroupActionState,
+  publishIntakeFormAction,
+  reviewIntakeSubmissionAction,
+} from "../actions";
 
 interface GroupIntakeWorkspaceProps {
   readonly event: {
@@ -25,6 +36,7 @@ interface GroupIntakeWorkspaceProps {
 }
 
 const KIND_LABELS: Record<ContactGroupKind, string> = { SPONSOR: "Sponsor", EXHIBITOR: "Exhibitor" };
+const INITIAL_STATE: GroupActionState = { status: "idle" };
 
 function IntakeFormCard({
   event,
@@ -37,6 +49,14 @@ function IntakeFormCard({
   const label = KIND_LABELS[kind];
   const enabled = kind === "SPONSOR" ? event.sponsorsEnabled : event.exhibitorsEnabled;
   const published = form?.status === "PUBLISHED";
+  const [state, action, pending] = useActionState(publishIntakeFormAction.bind(null, event.slug, kind), INITIAL_STATE);
+  useActionToast(state);
+  const [closing, startClosing] = useTransition();
+  const close = () => {
+    startClosing(async () => {
+      actionResultToast(await closeIntakeFormAction(event.slug, kind));
+    });
+  };
   return (
     <Card>
       <CardHeader>
@@ -51,7 +71,7 @@ function IntakeFormCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <form action={publishIntakeFormAction.bind(null, event.slug, kind)}>
+        <form action={action}>
           <FieldGroup>
             <Field data-disabled={!enabled}>
               <FieldLabel htmlFor={`${kind}-intake-title`}>Form title</FieldLabel>
@@ -73,8 +93,8 @@ function IntakeFormCard({
               />
             </Field>
             <div className="flex flex-wrap gap-2">
-              <Button disabled={!enabled} type="submit">
-                <Send data-icon="inline-start" />
+              <Button disabled={!enabled || pending || closing} type="submit">
+                {pending ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
                 {published ? "Update published form" : "Publish form"}
               </Button>
               {published && form ? (
@@ -85,7 +105,8 @@ function IntakeFormCard({
                       Open public form
                     </Link>
                   </Button>
-                  <Button formAction={closeIntakeFormAction.bind(null, event.slug, kind)} type="submit" variant="ghost">
+                  <Button disabled={pending || closing} onClick={close} type="button" variant="ghost">
+                    {closing ? <Spinner data-icon="inline-start" /> : null}
                     Close form
                   </Button>
                 </>
@@ -102,6 +123,30 @@ function submissionStatusVariant(status: ContactGroupIntakeSubmissionWithDetails
   if (status === "ACCEPTED") return "default" as const;
   if (status === "REJECTED") return "destructive" as const;
   return "secondary" as const;
+}
+
+function SubmissionReviewButtons({
+  event,
+  submissionId,
+}: Pick<GroupIntakeWorkspaceProps, "event"> & { readonly submissionId: string }) {
+  const [reviewing, startReview] = useTransition();
+  const review = (decision: "accept" | "reject") => {
+    startReview(async () => {
+      actionResultToast(await reviewIntakeSubmissionAction(event.slug, submissionId, decision));
+    });
+  };
+  return (
+    <div className="flex justify-end gap-2">
+      <Button disabled={reviewing} onClick={() => review("accept")} size="sm" type="button">
+        {reviewing ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
+        Accept
+      </Button>
+      <Button disabled={reviewing} onClick={() => review("reject")} size="sm" type="button" variant="outline">
+        <X data-icon="inline-start" />
+        Reject
+      </Button>
+    </div>
+  );
 }
 
 export function GroupIntakeWorkspace({ event, forms, submissions }: GroupIntakeWorkspaceProps) {
@@ -174,24 +219,7 @@ export function GroupIntakeWorkspace({ event, forms, submissions }: GroupIntakeW
                     </TableCell>
                     <TableCell className="text-right">
                       {submission.status === "PENDING" ? (
-                        <form className="flex justify-end gap-2">
-                          <Button
-                            formAction={reviewIntakeSubmissionAction.bind(null, event.slug, submission.id, "accept")}
-                            size="sm"
-                            type="submit"
-                          >
-                            Accept
-                          </Button>
-                          <Button
-                            formAction={reviewIntakeSubmissionAction.bind(null, event.slug, submission.id, "reject")}
-                            size="sm"
-                            type="submit"
-                            variant="outline"
-                          >
-                            <X data-icon="inline-start" />
-                            Reject
-                          </Button>
-                        </form>
+                        <SubmissionReviewButtons event={event} submissionId={submission.id} />
                       ) : (
                         <span className="text-muted-foreground text-xs">
                           {submission.acceptedGroup?.name ?? submission.reviewedBy?.name ?? "Reviewed"}

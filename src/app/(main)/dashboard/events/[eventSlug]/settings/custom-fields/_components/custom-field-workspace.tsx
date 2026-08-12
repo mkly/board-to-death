@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 
 import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
 
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -127,15 +128,20 @@ function DefinitionFields({ definition }: { readonly definition?: EditableCustom
   return (
     <FieldGroup>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field>
-          <FieldLabel>Label</FieldLabel>
-          <Input name="label" defaultValue={definition?.label} maxLength={120} required />
-        </Field>
-        <Field>
-          <FieldLabel>API key</FieldLabel>
-          <Input name="key" defaultValue={definition?.key} placeholder="dietary_requirements" required />
-          <FieldDescription>Stable key used by filters and exports.</FieldDescription>
-        </Field>
+        <DerivedIdentifierFields
+          identifierDescription="Stable key used by filters and exports."
+          identifierId={`custom-field-key-${definition?.id ?? "new"}`}
+          identifierInitialValue={definition?.key}
+          identifierLabel="API key"
+          identifierName="key"
+          identifierPlaceholder="dietary_requirements"
+          separator="_"
+          sourceId={`custom-field-label-${definition?.id ?? "new"}`}
+          sourceInitialValue={definition?.label}
+          sourceLabel="Label"
+          sourceMaxLength={120}
+          sourceName="label"
+        />
       </div>
       <Field>
         <FieldLabel>Description</FieldLabel>

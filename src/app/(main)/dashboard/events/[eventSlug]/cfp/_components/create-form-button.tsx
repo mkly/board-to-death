@@ -1,23 +1,14 @@
 "use client";
 
+import { useTransition } from "react";
+
 import { Plus } from "lucide-react";
-import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { actionResultToast } from "@/hooks/use-action-toast";
 
 import { createCfpFormDraft } from "../actions";
-
-function SubmitButton({ label }: { readonly label: string }) {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
-      {pending ? "Creating…" : label}
-    </Button>
-  );
-}
 
 export function CreateFormButton({
   eventSlug,
@@ -26,11 +17,22 @@ export function CreateFormButton({
   readonly eventSlug: string;
   readonly label?: string;
 }) {
-  const createDraft = createCfpFormDraft.bind(null, eventSlug);
+  const [pending, startTransition] = useTransition();
 
   return (
-    <form action={createDraft}>
-      <SubmitButton label={label} />
-    </form>
+    <Button
+      disabled={pending}
+      type="button"
+      onClick={() =>
+        startTransition(async () => {
+          // On success the action redirects to the new form's setup page instead of resolving.
+          const result = await createCfpFormDraft(eventSlug);
+          if (result) actionResultToast(result);
+        })
+      }
+    >
+      {pending ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+      {pending ? "Creating…" : label}
+    </Button>
   );
 }

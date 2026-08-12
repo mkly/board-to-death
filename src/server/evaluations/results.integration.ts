@@ -314,7 +314,7 @@ describe("evaluation result aggregation", () => {
         rank: first.rank,
         tied: first.tied,
       },
-      { active: 2, complete: 1, incomplete: 1, withdrawn: 1, weightedAverage: 4.5, rank: 1, tied: true },
+      { active: 2, complete: 1, incomplete: 1, withdrawn: 1, weightedAverage: 4.75, rank: 1, tied: false },
     );
     assert.deepEqual(
       first.criteria.map(({ label, average, scoreCount, missingScoreCount }) => ({
@@ -324,17 +324,17 @@ describe("evaluation result aggregation", () => {
         missingScoreCount,
       })),
       [
-        { label: "Clarity", average: 3, scoreCount: 2, missingScoreCount: 0 },
+        { label: "Clarity", average: 4, scoreCount: 1, missingScoreCount: 1 },
         { label: "Novelty", average: 5, scoreCount: 1, missingScoreCount: 1 },
       ],
     );
     assert.deepEqual(
       { weightedAverage: second.weightedAverage, rank: second.rank, tied: second.tied },
-      { weightedAverage: 4.5, rank: 1, tied: true },
+      { weightedAverage: 4.5, rank: 2, tied: false },
     );
     assert.deepEqual(
       { weightedAverage: third.weightedAverage, rank: third.rank, tied: third.tied },
-      { weightedAverage: 3.33, rank: 3, tied: false },
+      { weightedAverage: null, rank: null, tied: false },
     );
     assert.ok(!workspace.submissions.some(({ id }) => id === fixture.otherSubmissionId));
 
@@ -347,7 +347,15 @@ describe("evaluation result aggregation", () => {
     assert.ok(reopenedSecond);
     assert.equal(reopenedSecond.completedReviewerCount, 1);
     assert.equal(reopenedSecond.incompleteReviewerCount, 1);
-    assert.equal(reopenedSecond.weightedAverage, 4.5, "reopening retains saved scores in the aggregate");
+    assert.equal(reopenedSecond.weightedAverage, 4.5);
+    assert.deepEqual(
+      reopenedSecond.criteria.map(({ scoreCount, missingScoreCount }) => ({ scoreCount, missingScoreCount })),
+      [
+        { scoreCount: 1, missingScoreCount: 1 },
+        { scoreCount: 1, missingScoreCount: 1 },
+      ],
+      "returning an evaluation to draft excludes its saved scores from the aggregate",
+    );
 
     await assert.rejects(repository.getWorkspace(fixture.eventId, fixture.otherRoundId), /not found for this event/);
     const otherWorkspace = await repository.getWorkspace(fixture.otherEventId);

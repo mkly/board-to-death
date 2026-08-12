@@ -1,3 +1,7 @@
+"use client";
+
+import { useActionState, useTransition } from "react";
+
 import { MailPlus, ShieldCheck, UsersRound } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
@@ -19,12 +23,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { MembershipStatus, OrganizationInvitationStatus, OrganizationMemberRole } from "@/generated/prisma/client";
+import { MembershipStatus, OrganizationInvitationStatus, OrganizationMemberRole } from "@/generated/prisma/browser";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { OrganizationTeamSnapshot } from "@/server/organization-memberships/organization-invitations";
 
 import {
   inviteOrganizationMember,
+  type OrganizationTeamActionState,
   resendOrganizationInvitation,
   revokeOrganizationInvitation,
   setOrganizationMembershipActive,
@@ -35,9 +42,9 @@ interface OrganizationTeamWorkspaceProps {
   readonly currentUserId: string;
   readonly canManage: boolean;
   readonly snapshot: OrganizationTeamSnapshot;
-  readonly notice?: string;
-  readonly error?: string;
 }
+
+const INITIAL_STATE: OrganizationTeamActionState = { status: "idle" };
 
 const roleLabels: Record<OrganizationMemberRole, string> = {
   [OrganizationMemberRole.OWNER]: "Owner",
@@ -53,30 +60,74 @@ function invitationStatus(status: OrganizationInvitationStatus, expiresAt: Date)
   return status.toLowerCase();
 }
 
+function InviteMemberForm({ organizationId }: { readonly organizationId: string }) {
+  const [state, action, pending] = useActionState(inviteOrganizationMember.bind(null, organizationId), INITIAL_STATE);
+  useActionToast(state);
+  return (
+    <form action={action}>
+      <FieldGroup className="md:grid md:grid-cols-[minmax(0,1fr)_12rem_auto] md:items-end">
+        <Field>
+          <FieldLabel htmlFor="organization-invite-email">Email</FieldLabel>
+          <Input
+            id="organization-invite-email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="teammate@example.com"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="organization-invite-role">Role</FieldLabel>
+          <FormSelect
+            defaultValue={OrganizationMemberRole.MEMBER}
+            id="organization-invite-role"
+            name="role"
+            options={[
+              { value: OrganizationMemberRole.MEMBER, label: "Member" },
+              { value: OrganizationMemberRole.OWNER, label: "Owner" },
+            ]}
+          />
+        </Field>
+        <Button disabled={pending} type="submit">
+          {pending ? <Spinner data-icon="inline-start" /> : <MailPlus data-icon="inline-start" />}
+          Send invitation
+        </Button>
+      </FieldGroup>
+    </form>
+  );
+}
+
 interface MembershipActionProps {
   readonly active: boolean;
-  readonly action: () => Promise<never>;
+  readonly action: () => Promise<OrganizationTeamActionState>;
   readonly displayName: string;
   readonly isCurrentUser: boolean;
 }
 
 function MembershipAction({ active, action, displayName, isCurrentUser }: MembershipActionProps) {
+  const [pending, startTransition] = useTransition();
+  const run = () => {
+    startTransition(async () => {
+      actionResultToast(await action());
+    });
+  };
   if (isCurrentUser && active) {
     return <span className="text-muted-foreground text-xs">Current account</span>;
   }
   if (!active) {
     return (
-      <form action={action}>
-        <Button type="submit" size="sm" variant="outline">
-          Restore access
-        </Button>
-      </form>
+      <Button disabled={pending} onClick={run} type="button" size="sm" variant="outline">
+        {pending ? <Spinner data-icon="inline-start" /> : null}
+        Restore access
+      </Button>
     );
   }
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button type="button" size="sm" variant="outline">
+        <Button disabled={pending} type="button" size="sm" variant="outline">
+          {pending ? <Spinner data-icon="inline-start" /> : null}
           Set inactive
         </Button>
       </AlertDialogTrigger>
@@ -89,14 +140,61 @@ function MembershipAction({ active, action, displayName, isCurrentUser }: Member
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <form action={action}>
-            <AlertDialogAction type="submit" variant="destructive">
-              Set inactive
-            </AlertDialogAction>
-          </form>
+          <AlertDialogAction onClick={run} type="button" variant="destructive">
+            Set inactive
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+function InvitationActions({
+  organizationId,
+  invitationId,
+  email,
+}: {
+  readonly organizationId: string;
+  readonly invitationId: string;
+  readonly email: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const resend = () => {
+    startTransition(async () => {
+      actionResultToast(await resendOrganizationInvitation(organizationId, invitationId));
+    });
+  };
+  const revoke = () => {
+    startTransition(async () => {
+      actionResultToast(await revokeOrganizationInvitation(organizationId, invitationId));
+    });
+  };
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button disabled={pending} onClick={resend} type="button" size="sm" variant="outline">
+        {pending ? <Spinner data-icon="inline-start" /> : null}
+        Resend
+      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button disabled={pending} type="button" size="sm" variant="destructive">
+            Revoke
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke this invitation?</AlertDialogTitle>
+            <AlertDialogDescription>The invitation for {email} will no longer be accepted.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={revoke} type="button" variant="destructive">
+              Revoke invitation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -105,10 +203,7 @@ export function OrganizationTeamWorkspace({
   currentUserId,
   canManage,
   snapshot,
-  notice,
-  error,
 }: OrganizationTeamWorkspaceProps) {
-  const inviteAction = inviteOrganizationMember.bind(null, organization.id);
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
@@ -121,18 +216,6 @@ export function OrganizationTeamWorkspace({
         </div>
       </header>
 
-      {notice ? (
-        <Alert>
-          <AlertTitle>Organization team updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Organization team not updated</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
       {!canManage ? (
         <Alert>
           <ShieldCheck />
@@ -150,37 +233,7 @@ export function OrganizationTeamWorkspace({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={inviteAction}>
-              <FieldGroup className="md:grid md:grid-cols-[minmax(0,1fr)_12rem_auto] md:items-end">
-                <Field>
-                  <FieldLabel htmlFor="organization-invite-email">Email</FieldLabel>
-                  <Input
-                    id="organization-invite-email"
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    placeholder="teammate@example.com"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="organization-invite-role">Role</FieldLabel>
-                  <FormSelect
-                    defaultValue={OrganizationMemberRole.MEMBER}
-                    id="organization-invite-role"
-                    name="role"
-                    options={[
-                      { value: OrganizationMemberRole.MEMBER, label: "Member" },
-                      { value: OrganizationMemberRole.OWNER, label: "Owner" },
-                    ]}
-                  />
-                </Field>
-                <Button type="submit">
-                  <MailPlus data-icon="inline-start" />
-                  Send invitation
-                </Button>
-              </FieldGroup>
-            </form>
+            <InviteMemberForm organizationId={organization.id} />
           </CardContent>
         </Card>
       ) : null}
@@ -302,38 +355,11 @@ export function OrganizationTeamWorkspace({
                       {canManage ? (
                         <TableCell>
                           {pending ? (
-                            <div className="flex flex-wrap justify-end gap-2">
-                              <form action={resendOrganizationInvitation.bind(null, organization.id, invitation.id)}>
-                                <Button type="submit" size="sm" variant="outline">
-                                  Resend
-                                </Button>
-                              </form>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button type="button" size="sm" variant="destructive">
-                                    Revoke
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Revoke this invitation?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      The invitation for {invitation.email} will no longer be accepted.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <form
-                                      action={revokeOrganizationInvitation.bind(null, organization.id, invitation.id)}
-                                    >
-                                      <AlertDialogAction type="submit" variant="destructive">
-                                        Revoke invitation
-                                      </AlertDialogAction>
-                                    </form>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
+                            <InvitationActions
+                              email={invitation.email}
+                              invitationId={invitation.id}
+                              organizationId={organization.id}
+                            />
                           ) : null}
                         </TableCell>
                       ) : null}

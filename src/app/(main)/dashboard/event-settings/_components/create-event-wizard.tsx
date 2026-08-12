@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, PencilLine, Sparkles } from "lucide-react";
 
 import { DateTimePicker } from "@/components/date-time-picker";
+import { identifierFromName } from "@/components/derived-identifier-fields";
 import { browserTimezone, TimezoneSelect } from "@/components/timezone-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,14 +83,6 @@ const INITIAL_STATE: WizardState = {
   logo: null,
   background: null,
 };
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "");
-}
 
 function validTimezone(timezone: string): boolean {
   try {
@@ -337,7 +330,7 @@ export function CreateEventWizard({
               aria-invalid={Boolean(errorFor("name"))}
               placeholder="GatherPulse 2027"
               onChange={({ target }) =>
-                update({ name: target.value, slug: state.slugEdited ? state.slug : slugify(target.value) })
+                update({ name: target.value, slug: state.slugEdited ? state.slug : identifierFromName(target.value) })
               }
             />
             <FieldError>{errorFor("name")}</FieldError>

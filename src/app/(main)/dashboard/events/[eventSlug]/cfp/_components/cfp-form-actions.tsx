@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
 import Link from "next/link";
 
 import { Archive, Copy, Ellipsis, LockKeyhole, LockKeyholeOpen } from "lucide-react";
-import { useFormStatus } from "react-dom";
 
 import {
   AlertDialog,
@@ -25,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
+import { actionResultToast } from "@/hooks/use-action-toast";
 import type { CfpFormSummary } from "@/server/cfp/repositories";
 
 import { archiveCfpForm, closeCfpForm, duplicateCfpForm, reopenCfpForm } from "../actions";
@@ -73,17 +73,6 @@ const actionContent: Record<
   },
 };
 
-function SubmitAction({ label, variant }: { readonly label: string; readonly variant: "default" | "destructive" }) {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button type="submit" variant={variant} disabled={pending}>
-      {pending ? <Spinner data-icon="inline-start" /> : null}
-      {pending ? "Updating…" : label}
-    </Button>
-  );
-}
-
 export function CfpFormActions({
   eventSlug,
   form,
@@ -97,12 +86,19 @@ export function CfpFormActions({
   // server action never flip back to "duplicate" while the dialog is still on screen.
   const [selectedAction, setSelectedAction] = useState<FormAction>("duplicate");
   const [confirming, setConfirming] = useState(false);
-  const mutation = formActions[selectedAction].bind(null, eventSlug, form.id);
+  const [pending, startTransition] = useTransition();
   const content = actionContent[selectedAction];
 
   const confirm = (action: FormAction) => {
     setSelectedAction(action);
     setConfirming(true);
+  };
+
+  const runSelectedAction = () => {
+    startTransition(async () => {
+      actionResultToast(await formActions[selectedAction](eventSlug, form.id));
+      setConfirming(false);
+    });
   };
 
   return (
@@ -151,10 +147,11 @@ export function CfpFormActions({
             <AlertDialogDescription>{content.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <form action={mutation}>
-              <SubmitAction label={content.label} variant={content.variant} />
-            </form>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <Button disabled={pending} type="button" variant={content.variant} onClick={runSelectedAction}>
+              {pending ? <Spinner data-icon="inline-start" /> : null}
+              {pending ? "Updating…" : content.label}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

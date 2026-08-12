@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 
 import Link from "next/link";
 
@@ -52,7 +52,9 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { actionResultToast } from "@/hooks/use-action-toast";
 import {
   columnLabel,
   defaultSubmissionColumns,
@@ -430,6 +432,7 @@ function ColumnDialog({
   readonly hasSavedView: boolean;
 }) {
   const [state, formAction, pending] = useActionState(saveSubmissionView, { status: "idle" });
+  const [resetPending, startResetTransition] = useTransition();
   const customLabels = Object.fromEntries(options.customColumns.map(({ id, label }) => [id, label]));
   const available = [
     ...submissionBuiltInColumns.map((column) => ({ ...column, id: column.id as SubmissionColumnId })),
@@ -541,11 +544,19 @@ function ColumnDialog({
         ) : null}
         <DialogFooter>
           {hasSavedView ? (
-            <form action={resetSubmissionView.bind(null, eventSlug)}>
-              <Button type="submit" variant="ghost">
-                Reset saved view
-              </Button>
-            </form>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={resetPending}
+              onClick={() => {
+                startResetTransition(async () => {
+                  actionResultToast(await resetSubmissionView(eventSlug));
+                });
+              }}
+            >
+              {resetPending ? <Spinner data-icon="inline-start" /> : null}
+              {resetPending ? "Resetting…" : "Reset saved view"}
+            </Button>
           ) : null}
           <form action={formAction}>
             <input type="hidden" name="eventSlug" value={eventSlug} />

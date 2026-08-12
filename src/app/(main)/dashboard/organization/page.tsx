@@ -1,18 +1,14 @@
 import { notFound } from "next/navigation";
 
 import { getDashboardShellData } from "@/app/(main)/dashboard/_lib/dashboard-data";
-import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/client";
+import { MembershipStatus, OrganizationMemberRole } from "@/generated/prisma/enums";
 import { getDatabaseClient } from "@/server/database/client";
 import { OrganizationInvitationService } from "@/server/organization-memberships/organization-invitations";
 
 import { OrganizationTeamWorkspace } from "./_components/organization-team-workspace";
 
-interface OrganizationPageProps {
-  readonly searchParams: Promise<{ notice?: string; error?: string }>;
-}
-
-export default async function OrganizationPage({ searchParams }: OrganizationPageProps) {
-  const [query, shell] = await Promise.all([searchParams, getDashboardShellData()]);
+export default async function OrganizationPage() {
+  const shell = await getDashboardShellData();
   if (!shell.activeOrganization) notFound();
 
   const client = getDatabaseClient();
@@ -33,8 +29,6 @@ export default async function OrganizationPage({ searchParams }: OrganizationPag
       currentUserId={shell.user.id}
       canManage={membership.role === OrganizationMemberRole.OWNER}
       snapshot={snapshot}
-      notice={query.notice}
-      error={query.error}
     />
   );
 }

@@ -1,23 +1,12 @@
 import Link from "next/link";
 
-import {
-  AlertCircle,
-  ArrowDownToLine,
-  Cable,
-  CheckCircle2,
-  CircleAlert,
-  RefreshCw,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { ArrowDownToLine, Cable, CheckCircle2, CircleAlert, RefreshCw, UserPlus, Users } from "lucide-react";
 
-import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Pagination,
   PaginationContent,
@@ -30,13 +19,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { SpeakerPreview, SpeakerPreviewAction } from "@/server/integrations";
 import { speakerMappingSources } from "@/server/integrations";
 
-import { saveSpeakerMapping } from "../actions";
+import { SpeakerMappingForm } from "./speaker-mapping-form";
 
 interface SpeakerMappingWorkspaceProps {
   readonly event: { readonly name: string; readonly slug: string };
   readonly preview: SpeakerPreview | null;
-  readonly notice?: string;
-  readonly error?: string;
 }
 
 const sourceLabels = {
@@ -73,7 +60,7 @@ function connectionTitle(connection: SpeakerPreview["connection"]): string {
   return "Accelevents disconnected";
 }
 
-export function SpeakerMappingWorkspace({ event, preview, notice, error }: SpeakerMappingWorkspaceProps) {
+export function SpeakerMappingWorkspace({ event, preview }: SpeakerMappingWorkspaceProps) {
   if (!preview) {
     return (
       <div className="flex flex-col gap-6">
@@ -96,7 +83,6 @@ export function SpeakerMappingWorkspace({ event, preview, notice, error }: Speak
     );
   }
 
-  const saveAction = saveSpeakerMapping.bind(null, event.slug);
   const csvHref = `/dashboard/events/${encodeURIComponent(event.slug)}/integrations/speakers.csv`;
   const summaryCards = [
     { action: "create" as const, icon: UserPlus },
@@ -124,58 +110,18 @@ export function SpeakerMappingWorkspace({ event, preview, notice, error }: Speak
         </Button>
       </header>
 
-      {notice ? (
-        <Alert>
-          <CheckCircle2 />
-          <AlertTitle>Mapping saved</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertCircle />
-          <AlertTitle>Mapping not saved</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <Alert variant={preview.connection === "disconnected" ? "destructive" : "default"}>
         <Cable />
         <AlertTitle>{connectionTitle(preview.connection)}</AlertTitle>
         <AlertDescription>{preview.connectionMessage}</AlertDescription>
       </Alert>
 
-      <form action={saveAction}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Public speaker field mapping</CardTitle>
-            <CardDescription>
-              Mapping version {preview.mappingVersionNumber}. Saving creates a new immutable version and refreshes the
-              preview.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup className="grid gap-4 md:grid-cols-3">
-              {(["email", "firstName", "lastName"] as const).map((field) => (
-                <Field key={field}>
-                  <FieldLabel htmlFor={`speaker-mapping-${field}`}>{actionLabelsForField(field)}</FieldLabel>
-                  <FormSelect
-                    id={`speaker-mapping-${field}`}
-                    name={field}
-                    defaultValue={preview.mapping[field]}
-                    required
-                    options={speakerMappingSources.map((source) => ({ value: source, label: sourceLabels[source] }))}
-                  />
-                  <FieldDescription>Required by the Accelevents speaker contract.</FieldDescription>
-                </Field>
-              ))}
-            </FieldGroup>
-          </CardContent>
-          <CardFooter>
-            <Button type="submit">Save mapping and refresh preview</Button>
-          </CardFooter>
-        </Card>
-      </form>
+      <SpeakerMappingForm
+        eventSlug={event.slug}
+        mapping={preview.mapping}
+        versionNumber={preview.mappingVersionNumber}
+        sourceOptions={speakerMappingSources.map((source) => ({ value: source, label: sourceLabels[source] }))}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {summaryCards.map(({ action, icon: Icon }) => (
@@ -283,10 +229,4 @@ export function SpeakerMappingWorkspace({ event, preview, notice, error }: Speak
       </Card>
     </div>
   );
-}
-
-function actionLabelsForField(field: "email" | "firstName" | "lastName"): string {
-  if (field === "email") return "Remote email";
-  if (field === "firstName") return "Remote first name";
-  return "Remote last name";
 }

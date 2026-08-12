@@ -37,8 +37,6 @@ export default async function ContactsPage({
     jobTitle?: string;
     participatedEventId?: string;
     segment?: string;
-    notice?: string;
-    error?: string;
   }>;
 }) {
   const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
@@ -90,11 +88,9 @@ export default async function ContactsPage({
       }))}
       customFieldDefinitions={definitions.map(inputDefinition)}
       duplicateMatches={duplicateMatches}
-      error={query.error}
       event={event}
       events={shell.events.map(({ id, name }) => ({ id, name }))}
       filters={filters}
-      notice={query.notice}
       people={people}
       segments={segments}
       selectedSegmentId={selectedSegment?.id}

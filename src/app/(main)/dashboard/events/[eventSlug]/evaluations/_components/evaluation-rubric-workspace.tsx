@@ -1,6 +1,10 @@
+"use client";
+
+import { useActionState, useEffect, useState, useTransition } from "react";
+
 import { ArrowDown, ArrowUp, ClipboardCheck, LockKeyhole, Plus } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,17 +21,25 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { EvaluationCriterionRecord, EvaluationRubricPlan } from "@/server/evaluations/rubrics";
 
-import { addDefaultCriteria, createCriterion, moveCriterion, updateCriterion } from "../actions";
+import {
+  addDefaultCriteria,
+  createCriterion,
+  type EvaluationActionState,
+  moveCriterion,
+  updateCriterion,
+} from "../actions";
 
 interface EvaluationRubricWorkspaceProps {
   readonly event: { readonly slug: string };
   readonly plans: readonly EvaluationRubricPlan[];
-  readonly notice?: string;
-  readonly error?: string;
 }
+
+const INITIAL_STATE: EvaluationActionState = { status: "idle" };
 
 function CriterionFields({
   criterion,
@@ -41,22 +53,19 @@ function CriterionFields({
   return (
     <FieldGroup>
       <div className="grid gap-4 md:grid-cols-2">
-        <Field data-disabled={disabled}>
-          <FieldLabel htmlFor={`${idPrefix}-label`}>Label</FieldLabel>
-          <Input id={`${idPrefix}-label`} name="label" defaultValue={criterion?.label} disabled={disabled} required />
-        </Field>
-        <Field data-disabled={disabled}>
-          <FieldLabel htmlFor={`${idPrefix}-key`}>Stable key</FieldLabel>
-          <Input
-            id={`${idPrefix}-key`}
-            name="key"
-            defaultValue={criterion?.key}
-            placeholder="program-fit"
-            disabled={disabled}
-            required
-          />
-          <FieldDescription>Lowercase letters, numbers, and hyphens.</FieldDescription>
-        </Field>
+        <DerivedIdentifierFields
+          disabled={disabled}
+          identifierDescription="Lowercase letters, numbers, and hyphens."
+          identifierId={`${idPrefix}-key`}
+          identifierInitialValue={criterion?.key}
+          identifierLabel="Stable key"
+          identifierName="key"
+          identifierPlaceholder="program-fit"
+          sourceId={`${idPrefix}-label`}
+          sourceInitialValue={criterion?.label}
+          sourceLabel="Label"
+          sourceName="label"
+        />
       </div>
       <Field data-disabled={disabled}>
         <FieldLabel htmlFor={`${idPrefix}-description`}>Reviewer guidance</FieldLabel>
@@ -142,6 +151,18 @@ function CriterionCard({
   readonly reorderable: boolean;
   readonly totalWeight: number;
 }) {
+  const [state, saveAction, saving] = useActionState(
+    updateCriterion.bind(null, eventSlug, criterion.id),
+    INITIAL_STATE,
+  );
+  useActionToast(state);
+  const [moving, startTransition] = useTransition();
+  const busy = saving || moving;
+  const move = (offset: -1 | 1) => {
+    startTransition(async () => {
+      actionResultToast(await moveCriterion(eventSlug, roundId, criterion.id, offset));
+    });
+  };
   const mutable = editable && !criterion.used;
   const percentage = totalWeight > 0 ? Math.round((criterion.weight / totalWeight) * 100) : 0;
   let lockMessage = "Changes apply only to this draft plan version.";
@@ -160,39 +181,38 @@ function CriterionCard({
         </CardDescription>
         {reorderable ? (
           <CardAction className="flex items-center gap-1">
-            <form action={moveCriterion.bind(null, eventSlug, roundId, criterion.id, -1)}>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon-sm"
-                disabled={index === 0}
-                aria-label={`Move ${criterion.label} up`}
-              >
-                <ArrowUp />
-              </Button>
-            </form>
-            <form action={moveCriterion.bind(null, eventSlug, roundId, criterion.id, 1)}>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon-sm"
-                disabled={index === count - 1}
-                aria-label={`Move ${criterion.label} down`}
-              >
-                <ArrowDown />
-              </Button>
-            </form>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={index === 0 || busy}
+              aria-label={`Move ${criterion.label} up`}
+              onClick={() => move(-1)}
+            >
+              <ArrowUp />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={index === count - 1 || busy}
+              aria-label={`Move ${criterion.label} down`}
+              onClick={() => move(1)}
+            >
+              <ArrowDown />
+            </Button>
           </CardAction>
         ) : null}
       </CardHeader>
-      <form action={updateCriterion.bind(null, eventSlug, criterion.id)}>
+      <form action={saveAction}>
         <CardContent>
           <CriterionFields criterion={criterion} idPrefix={criterion.id} disabled={!mutable} />
         </CardContent>
         <CardFooter className="justify-between gap-3">
           <p className="text-muted-foreground text-xs">{lockMessage}</p>
           {mutable ? (
-            <Button type="submit" size="sm">
+            <Button type="submit" size="sm" disabled={busy}>
+              {saving ? <Spinner data-icon="inline-start" /> : null}
               Save criterion
             </Button>
           ) : (
@@ -204,7 +224,54 @@ function CriterionCard({
   );
 }
 
-export function EvaluationRubricWorkspace({ event, plans, notice, error }: EvaluationRubricWorkspaceProps) {
+function AddDefaultRubricButton({ eventSlug, roundId }: { readonly eventSlug: string; readonly roundId: string }) {
+  const [pending, startTransition] = useTransition();
+  const add = () => {
+    startTransition(async () => {
+      actionResultToast(await addDefaultCriteria(eventSlug, roundId));
+    });
+  };
+  return (
+    <Button type="button" variant="outline" size="sm" disabled={pending} onClick={add}>
+      {pending ? <Spinner data-icon="inline-start" /> : <ClipboardCheck data-icon="inline-start" />}
+      Add default rubric
+    </Button>
+  );
+}
+
+function AddCriterionForm({ eventSlug, roundId }: { readonly eventSlug: string; readonly roundId: string }) {
+  const [state, action, pending] = useActionState(createCriterion.bind(null, eventSlug, roundId), INITIAL_STATE);
+  const [formKey, setFormKey] = useState(0);
+  useActionToast(state);
+
+  useEffect(() => {
+    if (state.status === "success") {
+      setFormKey((current) => current + 1);
+    }
+  }, [state]);
+
+  return (
+    <Card size="sm">
+      <form action={action} key={formKey}>
+        <CardHeader>
+          <CardTitle>Add criterion</CardTitle>
+          <CardDescription>Create a scoring dimension for this draft round.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CriterionFields idPrefix={`new-${roundId}`} />
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+            Add criterion
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+export function EvaluationRubricWorkspace({ event, plans }: EvaluationRubricWorkspaceProps) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
@@ -215,20 +282,6 @@ export function EvaluationRubricWorkspace({ event, plans, notice, error }: Evalu
           </p>
         </div>
       </header>
-
-      {notice ? (
-        <Alert>
-          <ClipboardCheck />
-          <AlertTitle>Evaluation workspace updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to update rubric</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
 
       {plans.length === 0 ? (
         <Empty className="min-h-80 border">
@@ -284,12 +337,7 @@ export function EvaluationRubricWorkspace({ event, plans, notice, error }: Evalu
                               </p>
                             </div>
                             {editable && round.criteria.length === 0 ? (
-                              <form action={addDefaultCriteria.bind(null, event.slug, round.id)}>
-                                <Button type="submit" variant="outline" size="sm">
-                                  <ClipboardCheck data-icon="inline-start" />
-                                  Add default rubric
-                                </Button>
-                              </form>
+                              <AddDefaultRubricButton eventSlug={event.slug} roundId={round.id} />
                             ) : null}
                           </div>
                           <div className="grid gap-4 xl:grid-cols-2">
@@ -307,25 +355,7 @@ export function EvaluationRubricWorkspace({ event, plans, notice, error }: Evalu
                               />
                             ))}
                           </div>
-                          {editable ? (
-                            <Card size="sm">
-                              <form action={createCriterion.bind(null, event.slug, round.id)}>
-                                <CardHeader>
-                                  <CardTitle>Add criterion</CardTitle>
-                                  <CardDescription>Create a scoring dimension for this draft round.</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                  <CriterionFields idPrefix={`new-${round.id}`} />
-                                </CardContent>
-                                <CardFooter className="justify-end">
-                                  <Button type="submit" size="sm">
-                                    <Plus data-icon="inline-start" />
-                                    Add criterion
-                                  </Button>
-                                </CardFooter>
-                              </form>
-                            </Card>
-                          ) : null}
+                          {editable ? <AddCriterionForm eventSlug={event.slug} roundId={round.id} /> : null}
                         </section>
                       );
                     })}

@@ -1,3 +1,7 @@
+"use client";
+
+import { useActionState, useEffect, useState, useTransition } from "react";
+
 import {
   Archive,
   ArrowDown,
@@ -11,6 +15,7 @@ import {
   Save,
 } from "lucide-react";
 
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";
 import { FormSelect } from "@/components/form-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -26,18 +31,28 @@ import {
 } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { EvaluationPlanVersionStatus, EvaluationRoundStatus, ReviewerVisibility } from "@/generated/prisma/client";
+import { EvaluationPlanVersionStatus, EvaluationRoundStatus, ReviewerVisibility } from "@/generated/prisma/enums";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { EvaluationPlanWithVersions } from "@/server/evaluations";
 
-import { createPlan, createRound, moveRound, transitionRound, updateRound } from "../actions";
+import {
+  createPlan,
+  createRound,
+  type EvaluationActionState,
+  moveRound,
+  transitionRound,
+  updateRound,
+} from "../actions";
 
 interface EvaluationPlanWorkspaceProps {
   readonly eventSlug: string;
   readonly plans: readonly EvaluationPlanWithVersions[];
 }
+
+const INITIAL_STATE: EvaluationActionState = { status: "idle" };
 
 const visibilityLabels: Record<ReviewerVisibility, string> = {
   IDENTIFIED: "Identified reviewers",
@@ -74,31 +89,22 @@ function RoundFields({
   return (
     <FieldGroup>
       <div className="grid gap-4 md:grid-cols-2">
-        <Field data-disabled={disabled}>
-          <FieldLabel htmlFor={`${idPrefix}-title`}>Round title</FieldLabel>
-          <Input
-            id={`${idPrefix}-title`}
-            name="title"
-            defaultValue={round?.title}
-            placeholder="Committee review"
-            disabled={disabled}
-            maxLength={120}
-            required
-          />
-        </Field>
-        <Field data-disabled={disabled}>
-          <FieldLabel htmlFor={`${idPrefix}-key`}>Stable key</FieldLabel>
-          <Input
-            id={`${idPrefix}-key`}
-            name="key"
-            defaultValue={round?.key}
-            placeholder="committee-review"
-            disabled={disabled}
-            maxLength={80}
-            required
-          />
-          <FieldDescription>Lowercase letters, numbers, and hyphens.</FieldDescription>
-        </Field>
+        <DerivedIdentifierFields
+          disabled={disabled}
+          identifierDescription="Lowercase letters, numbers, and hyphens."
+          identifierId={`${idPrefix}-key`}
+          identifierInitialValue={round?.key}
+          identifierLabel="Stable key"
+          identifierMaxLength={80}
+          identifierName="key"
+          identifierPlaceholder="committee-review"
+          sourceId={`${idPrefix}-title`}
+          sourceInitialValue={round?.title}
+          sourceLabel="Round title"
+          sourceMaxLength={120}
+          sourceName="title"
+          sourcePlaceholder="Committee review"
+        />
       </div>
       <Field data-disabled={disabled}>
         <FieldLabel htmlFor={`${idPrefix}-description`}>Description</FieldLabel>
@@ -147,6 +153,20 @@ function RoundCard({
   readonly rounds: EvaluationPlanWithVersions["versions"][number]["rounds"];
   readonly canOpen: boolean;
 }) {
+  const [state, saveAction, saving] = useActionState(updateRound.bind(null, eventSlug, round.id), INITIAL_STATE);
+  useActionToast(state);
+  const [pending, startTransition] = useTransition();
+  const busy = saving || pending;
+  const move = (offset: -1 | 1) => {
+    startTransition(async () => {
+      actionResultToast(await moveRound(eventSlug, planVersionId, round.id, offset));
+    });
+  };
+  const transition = (toStatus: Exclude<EvaluationRoundStatus, "PLANNED">) => {
+    startTransition(async () => {
+      actionResultToast(await transitionRound(eventSlug, round.id, toStatus));
+    });
+  };
   const isPlanned = round.status === EvaluationRoundStatus.PLANNED;
   const editable = planVersionStatus === EvaluationPlanVersionStatus.DRAFT && isPlanned;
   const canMoveUp = editable && index > 0;
@@ -170,7 +190,7 @@ function RoundCard({
           </Badge>
         </CardAction>
       </CardHeader>
-      <form action={updateRound.bind(null, eventSlug, round.id)}>
+      <form action={saveAction}>
         <CardContent className="flex flex-col gap-5">
           <RoundFields idPrefix={round.id} round={round} disabled={!editable} />
           <div className="flex flex-col gap-2">
@@ -188,64 +208,56 @@ function RoundCard({
         <CardFooter className="flex flex-wrap gap-2">
           {editable ? (
             <>
-              <Button type="submit" variant="outline" size="sm">
-                <Save data-icon="inline-start" />
+              <Button type="submit" variant="outline" size="sm" disabled={busy}>
+                {saving ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
                 Save round
               </Button>
               <Button
-                type="submit"
+                type="button"
                 variant="outline"
                 size="icon-sm"
                 aria-label={`Move ${round.title} up`}
-                disabled={!canMoveUp}
-                formAction={moveRound.bind(null, eventSlug, planVersionId, round.id, -1)}
-                formNoValidate
+                disabled={!canMoveUp || busy}
+                onClick={() => move(-1)}
               >
                 <ArrowUp />
               </Button>
               <Button
-                type="submit"
+                type="button"
                 variant="outline"
                 size="icon-sm"
                 aria-label={`Move ${round.title} down`}
-                disabled={!canMoveDown}
-                formAction={moveRound.bind(null, eventSlug, planVersionId, round.id, 1)}
-                formNoValidate
+                disabled={!canMoveDown || busy}
+                onClick={() => move(1)}
               >
                 <ArrowDown />
               </Button>
               <Button
-                type="submit"
+                type="button"
                 size="sm"
-                disabled={!canOpen}
-                formAction={transitionRound.bind(null, eventSlug, round.id, EvaluationRoundStatus.OPEN)}
-                formNoValidate
+                disabled={!canOpen || busy}
+                onClick={() => transition(EvaluationRoundStatus.OPEN)}
               >
-                <Play data-icon="inline-start" />
+                {pending ? <Spinner data-icon="inline-start" /> : <Play data-icon="inline-start" />}
                 Open round
               </Button>
             </>
           ) : null}
           {round.status === EvaluationRoundStatus.OPEN ? (
-            <Button
-              type="submit"
-              size="sm"
-              formAction={transitionRound.bind(null, eventSlug, round.id, EvaluationRoundStatus.CLOSED)}
-              formNoValidate
-            >
-              <CircleCheck data-icon="inline-start" />
+            <Button type="button" size="sm" disabled={busy} onClick={() => transition(EvaluationRoundStatus.CLOSED)}>
+              {pending ? <Spinner data-icon="inline-start" /> : <CircleCheck data-icon="inline-start" />}
               Close round
             </Button>
           ) : null}
           {round.status === EvaluationRoundStatus.CLOSED ? (
             <Button
-              type="submit"
+              type="button"
               variant="outline"
               size="sm"
-              formAction={transitionRound.bind(null, eventSlug, round.id, EvaluationRoundStatus.ARCHIVED)}
-              formNoValidate
+              disabled={busy}
+              onClick={() => transition(EvaluationRoundStatus.ARCHIVED)}
             >
-              <Archive data-icon="inline-start" />
+              {pending ? <Spinner data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
               Archive round
             </Button>
           ) : null}
@@ -255,6 +267,82 @@ function RoundCard({
               Archived history is immutable.
             </span>
           ) : null}
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+function AddRoundForm({ eventSlug, planVersionId }: { readonly eventSlug: string; readonly planVersionId: string }) {
+  const [state, action, pending] = useActionState(createRound.bind(null, eventSlug, planVersionId), INITIAL_STATE);
+  const [formKey, setFormKey] = useState(0);
+  useActionToast(state);
+
+  useEffect(() => {
+    if (state.status === "success") {
+      setFormKey((current) => current + 1);
+    }
+  }, [state]);
+
+  return (
+    <Card size="sm">
+      <form action={action} key={formKey}>
+        <CardHeader>
+          <CardTitle>Add planned round</CardTitle>
+          <CardDescription>Configure every round and rubric before opening the first one.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RoundFields idPrefix={`new-${planVersionId}`} />
+        </CardContent>
+        <CardFooter className="mt-4">
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+            Add round
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+function CreatePlanForm({ eventSlug }: { readonly eventSlug: string }) {
+  const [state, action, pending] = useActionState(createPlan.bind(null, eventSlug), INITIAL_STATE);
+  useActionToast(state);
+  return (
+    <Card>
+      <form action={action}>
+        <CardHeader>
+          <CardTitle>Create evaluation plan</CardTitle>
+          <CardDescription>The first draft version is created with the plan.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <div className="grid gap-4 md:grid-cols-2">
+              <DerivedIdentifierFields
+                identifierDescription="Lowercase letters, numbers, and hyphens."
+                identifierId="new-plan-key"
+                identifierLabel="Stable key"
+                identifierMaxLength={80}
+                identifierName="key"
+                identifierPlaceholder="main-evaluation"
+                sourceId="new-plan-title"
+                sourceLabel="Plan title"
+                sourceMaxLength={120}
+                sourceName="title"
+                sourcePlaceholder="2027 evaluation plan"
+              />
+            </div>
+            <Field>
+              <FieldLabel htmlFor="new-plan-description">Description</FieldLabel>
+              <Textarea id="new-plan-description" name="description" rows={2} maxLength={500} />
+            </Field>
+          </FieldGroup>
+        </CardContent>
+        <CardFooter className="mt-4">
+          <Button type="submit" disabled={pending}>
+            {pending ? <Spinner data-icon="inline-start" /> : <ClipboardCheck data-icon="inline-start" />}
+            Create plan
+          </Button>
         </CardFooter>
       </form>
     </Card>
@@ -338,27 +426,7 @@ export function EvaluationPlanWorkspace({ eventSlug, plans }: EvaluationPlanWork
                         </div>
                       </div>
                     )}
-                    {editable ? (
-                      <Card size="sm">
-                        <form action={createRound.bind(null, eventSlug, version.id)}>
-                          <CardHeader>
-                            <CardTitle>Add planned round</CardTitle>
-                            <CardDescription>
-                              Configure every round and rubric before opening the first one.
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <RoundFields idPrefix={`new-${version.id}`} />
-                          </CardContent>
-                          <CardFooter className="mt-4">
-                            <Button type="submit" size="sm">
-                              <Plus data-icon="inline-start" />
-                              Add round
-                            </Button>
-                          </CardFooter>
-                        </form>
-                      </Card>
-                    ) : null}
+                    {editable ? <AddRoundForm eventSlug={eventSlug} planVersionId={version.id} /> : null}
                   </section>
                 );
               })}
@@ -367,39 +435,7 @@ export function EvaluationPlanWorkspace({ eventSlug, plans }: EvaluationPlanWork
         ))
       )}
 
-      <Card>
-        <form action={createPlan.bind(null, eventSlug)}>
-          <CardHeader>
-            <CardTitle>Create evaluation plan</CardTitle>
-            <CardDescription>The first draft version is created with the plan.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="new-plan-title">Plan title</FieldLabel>
-                  <Input id="new-plan-title" name="title" placeholder="2027 evaluation plan" maxLength={120} required />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="new-plan-key">Stable key</FieldLabel>
-                  <Input id="new-plan-key" name="key" placeholder="main-evaluation" maxLength={80} required />
-                  <FieldDescription>Lowercase letters, numbers, and hyphens.</FieldDescription>
-                </Field>
-              </div>
-              <Field>
-                <FieldLabel htmlFor="new-plan-description">Description</FieldLabel>
-                <Textarea id="new-plan-description" name="description" rows={2} maxLength={500} />
-              </Field>
-            </FieldGroup>
-          </CardContent>
-          <CardFooter className="mt-4">
-            <Button type="submit">
-              <ClipboardCheck data-icon="inline-start" />
-              Create plan
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+      <CreatePlanForm eventSlug={eventSlug} />
     </section>
   );
 }

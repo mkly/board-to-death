@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   type ContactGroupKind,
@@ -35,6 +35,11 @@ import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 
 const KINDS: readonly ContactGroupKind[] = ["SPONSOR", "EXHIBITOR"];
+
+export interface GroupActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
 
 async function requireAuthorizedEvent(eventSlug: string) {
   return (await requireAuthorizedEventContext(eventSlug)).event;
@@ -74,14 +79,14 @@ function message(error: unknown): string {
   return "The group change could not be saved. Try again.";
 }
 
-function finish(eventSlug: string, notice: string): never {
+function finish(eventSlug: string, notice: string): GroupActionState {
   revalidatePath(path(eventSlug));
   revalidatePath(`/dashboard/events/${encodeURIComponent(eventSlug)}/communications/audience`);
-  redirect(`${path(eventSlug)}?notice=${encodeURIComponent(notice)}`);
+  return { status: "success", message: notice };
 }
 
-function fail(eventSlug: string, error: unknown): never {
-  redirect(`${path(eventSlug)}?error=${encodeURIComponent(message(error))}`);
+function fail(error: unknown): GroupActionState {
+  return { status: "error", message: message(error) };
 }
 
 async function saveCustomFields({
@@ -137,7 +142,11 @@ async function saveCustomFields({
     }
   }
 }
-export async function createTierAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function createTierAction(
+  eventSlug: string,
+  _previousState: GroupActionState,
+  formData: FormData,
+): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await createContactGroupTier(getDatabaseClient(), {
@@ -146,22 +155,31 @@ export async function createTierAction(eventSlug: string, formData: FormData): P
       name: value(formData, "name"),
     });
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, "Tier created.");
 }
 
-export async function renameTierAction(eventSlug: string, tierId: string, formData: FormData): Promise<never> {
+export async function renameTierAction(
+  eventSlug: string,
+  tierId: string,
+  _previousState: GroupActionState,
+  formData: FormData,
+): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await renameContactGroupTier(getDatabaseClient(), event.id, tierId, value(formData, "name"));
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, "Tier renamed.");
 }
 
-export async function moveTierAction(eventSlug: string, tierId: string, direction: "up" | "down"): Promise<never> {
+export async function moveTierAction(
+  eventSlug: string,
+  tierId: string,
+  direction: "up" | "down",
+): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     const client = getDatabaseClient();
@@ -186,22 +204,26 @@ export async function moveTierAction(eventSlug: string, tierId: string, directio
       );
     }
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, "Tier order updated.");
 }
 
-export async function removeTierAction(eventSlug: string, tierId: string): Promise<never> {
+export async function removeTierAction(eventSlug: string, tierId: string): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await removeContactGroupTier(getDatabaseClient(), event.id, tierId);
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, "Tier removed.");
 }
 
-export async function createGroupAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function createGroupAction(
+  eventSlug: string,
+  _previousState: GroupActionState,
+  formData: FormData,
+): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     const client = getDatabaseClient();
@@ -224,12 +246,17 @@ export async function createGroupAction(eventSlug: string, formData: FormData): 
       pathSegment: `groups/${group.id}`,
     });
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, "Group created.");
 }
 
-export async function updateGroupAction(eventSlug: string, groupId: string, formData: FormData): Promise<never> {
+export async function updateGroupAction(
+  eventSlug: string,
+  groupId: string,
+  _previousState: GroupActionState,
+  formData: FormData,
+): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     const client = getDatabaseClient();
@@ -250,7 +277,7 @@ export async function updateGroupAction(eventSlug: string, groupId: string, form
       pathSegment: `groups/${group.id}`,
     });
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, "Group updated.");
 }
@@ -258,8 +285,9 @@ export async function updateGroupAction(eventSlug: string, groupId: string, form
 export async function publishIntakeFormAction(
   eventSlug: string,
   kind: ContactGroupKind,
+  _previousState: GroupActionState,
   formData: FormData,
-): Promise<never> {
+): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await publishContactGroupIntakeForm(getDatabaseClient(), event.id, kind, {
@@ -267,17 +295,17 @@ export async function publishIntakeFormAction(
       description: value(formData, "description"),
     });
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, `${kind === "SPONSOR" ? "Sponsor" : "Exhibitor"} intake form published.`);
 }
 
-export async function closeIntakeFormAction(eventSlug: string, kind: ContactGroupKind): Promise<never> {
+export async function closeIntakeFormAction(eventSlug: string, kind: ContactGroupKind): Promise<GroupActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await closeContactGroupIntakeForm(getDatabaseClient(), event.id, kind);
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, `${kind === "SPONSOR" ? "Sponsor" : "Exhibitor"} intake form closed.`);
 }
@@ -286,7 +314,7 @@ export async function reviewIntakeSubmissionAction(
   eventSlug: string,
   submissionId: string,
   decision: "accept" | "reject",
-): Promise<never> {
+): Promise<GroupActionState> {
   const { event, reviewerId } = await requireAuthorizedEventContext(eventSlug);
   try {
     if (decision === "accept") {
@@ -295,7 +323,7 @@ export async function reviewIntakeSubmissionAction(
       await rejectContactGroupIntakeSubmission(getDatabaseClient(), event.id, submissionId, reviewerId);
     }
   } catch (error) {
-    fail(event.slug, error);
+    return fail(error);
   }
   return finish(event.slug, decision === "accept" ? "Intake submission accepted." : "Intake submission rejected.");
 }

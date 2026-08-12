@@ -11,11 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { FieldLabel } from "@/components/ui/field";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 import { cn } from "@/lib/utils";
+
+import { EmbedHeader, TrackChip, zoneAbbreviation } from "./embed-kit";
+
+const FILTER_LABEL_CLASS = "font-medium text-[11px] text-muted-foreground uppercase tracking-wide";
 
 /**
  * One schedulable unit of the published program. The identifier is the
@@ -30,7 +34,7 @@ export interface ItinerarySession {
   readonly startsAt: string;
   readonly endsAt: string;
   readonly room: string | null;
-  readonly tracks: readonly { readonly id: string; readonly name: string }[];
+  readonly tracks: readonly { readonly id: string; readonly name: string; readonly color?: string | null }[];
   readonly speakers: readonly string[];
 }
 
@@ -70,25 +74,15 @@ function formatClock(value: string, timezone: string): string {
   );
 }
 
-function formatZoneAbbreviation(value: string, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    timeZone: timezone,
-    timeZoneName: "short",
-  }).formatToParts(new Date(value));
-  return parts.find((part) => part.type === "timeZoneName")?.value ?? timezone;
-}
-
 /**
- * Renders the local wall-clock range plus the zone abbreviation for the start
- * instant, so an attendee reading the embed from another region still knows
- * which zone the times belong to.
+ * Renders the local wall-clock range for the session. The zone lives once in
+ * the page header rather than on every row.
  */
 function formatRange(session: ItinerarySession, timezone: string): string {
-  return `${formatDay(session.startsAt, timezone)}, ${formatClock(session.startsAt, timezone)}–${formatClock(
+  return `${formatDay(session.startsAt, timezone)} · ${formatClock(session.startsAt, timezone)}–${formatClock(
     session.endsAt,
     timezone,
-  )} ${formatZoneAbbreviation(session.startsAt, timezone)}`;
+  )}`;
 }
 
 export function sessionsOverlap(first: ItinerarySession, second: ItinerarySession): boolean {
@@ -141,24 +135,24 @@ function matchesSearch(session: ItinerarySession, search: string): boolean {
 
 function SessionSummary({ session, timezone }: { readonly session: ItinerarySession; readonly timezone: string }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-      <p className="font-medium leading-snug">{session.title}</p>
-      <p className="text-muted-foreground text-sm">{formatRange(session, timezone)}</p>
-      <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <p className="font-mono text-muted-foreground text-xs tabular-nums">{formatRange(session, timezone)}</p>
+      <p className="break-words font-medium leading-snug">{session.title}</p>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-sm">
         {session.room ? (
           <span className="inline-flex items-center gap-1">
             <MapPin aria-hidden="true" className="size-3.5" />
             {session.room}
           </span>
         ) : null}
-        {session.tracks.map((track) => (
-          <Badge key={track.id} variant="outline">
-            {track.name}
-          </Badge>
-        ))}
-      </div>
-      {session.speakers.length > 0 ? (
-        <p className="text-muted-foreground text-sm">{session.speakers.join(", ")}</p>
+        {session.speakers.length > 0 ? <span>{session.speakers.join(", ")}</span> : null}
+      </p>
+      {session.tracks.length > 0 ? (
+        <p className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          {session.tracks.map((track) => (
+            <TrackChip color={track.color} key={track.id} name={track.name} />
+          ))}
+        </p>
       ) : null}
     </div>
   );
@@ -176,6 +170,7 @@ export function ItineraryWorkspace({
   const showSearch = enabledFilters.includes("search");
   const showTrack = enabledFilters.includes("track");
   const showDay = enabledFilters.includes("day");
+  const zoneLabel = zoneAbbreviation(sessions[0]?.startsAt ?? new Date().toISOString(), timezone);
 
   const sessionsById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
@@ -344,16 +339,17 @@ export function ItineraryWorkspace({
 
   return (
     <section aria-labelledby="itinerary-title" className="mx-auto flex w-full max-w-5xl flex-col gap-5">
-      <header className="flex flex-col gap-1">
-        <p className="text-muted-foreground text-sm">{eventName}</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-tight" id="itinerary-title">
-          Itinerary
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Choose published sessions to build a personal schedule. Times are shown in {timezone}, and your selection is
-          stored only in this browser.
-        </p>
-      </header>
+      <EmbedHeader
+        eyebrow="Itinerary"
+        title={eventName}
+        titleId="itinerary-title"
+        description={
+          <span>
+            Choose published sessions to build a personal schedule. Times are shown in {zoneLabel}, and your selection
+            is stored only in this browser.
+          </span>
+        }
+      />
 
       {/* Always rendered so assistive technology has a live region to announce into. */}
       <p aria-live="polite" className="sr-only" role="status">
@@ -390,57 +386,63 @@ export function ItineraryWorkspace({
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {filtersVisible ? (
-                <FieldGroup className="rounded-xl border bg-card p-3 sm:flex-row sm:items-end">
-                  {showSearch ? (
-                    <Field>
-                      <FieldLabel htmlFor="itinerary-search">Search sessions</FieldLabel>
-                      <div className="relative">
-                        <Search
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                          className="pl-8"
-                          id="itinerary-search"
-                          onChange={(event) => setSearch(event.currentTarget.value)}
-                          placeholder="Title, speaker, room, or track"
-                          type="search"
-                          value={search}
+                <search>
+                  <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-y py-3">
+                    {showSearch ? (
+                      <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                        <label className={FILTER_LABEL_CLASS} htmlFor="itinerary-search">
+                          Search sessions
+                        </label>
+                        <InputGroup>
+                          <InputGroupInput
+                            id="itinerary-search"
+                            onChange={(event) => setSearch(event.currentTarget.value)}
+                            placeholder="Title, speaker, room, or track"
+                            type="search"
+                            value={search}
+                          />
+                          <InputGroupAddon align="inline-start">
+                            <Search aria-hidden="true" />
+                          </InputGroupAddon>
+                        </InputGroup>
+                      </div>
+                    ) : null}
+                    {showDay && days.length > 1 ? (
+                      <div className="flex flex-col gap-1.5">
+                        <label className={FILTER_LABEL_CLASS} htmlFor="itinerary-day">
+                          Day
+                        </label>
+                        <FormSelect
+                          className="min-w-36"
+                          id="itinerary-day"
+                          onValueChange={setDay}
+                          value={day}
+                          options={[
+                            { value: "", label: "All days" },
+                            ...days.map(([key, startsAt]) => ({ value: key, label: formatDay(startsAt, timezone) })),
+                          ]}
                         />
                       </div>
-                    </Field>
-                  ) : null}
-                  {showDay && days.length > 1 ? (
-                    <Field className="sm:max-w-48">
-                      <FieldLabel htmlFor="itinerary-day">Day</FieldLabel>
-                      <FormSelect
-                        className="w-full"
-                        id="itinerary-day"
-                        onValueChange={setDay}
-                        value={day}
-                        options={[
-                          { value: "", label: "All days" },
-                          ...days.map(([key, startsAt]) => ({ value: key, label: formatDay(startsAt, timezone) })),
-                        ]}
-                      />
-                    </Field>
-                  ) : null}
-                  {showTrack && tracks.length > 0 ? (
-                    <Field className="sm:max-w-48">
-                      <FieldLabel htmlFor="itinerary-track">Track</FieldLabel>
-                      <FormSelect
-                        className="w-full"
-                        id="itinerary-track"
-                        onValueChange={setTrackId}
-                        value={trackId}
-                        options={[
-                          { value: "", label: "All tracks" },
-                          ...tracks.map((track) => ({ value: track.id, label: track.name })),
-                        ]}
-                      />
-                    </Field>
-                  ) : null}
-                </FieldGroup>
+                    ) : null}
+                    {showTrack && tracks.length > 0 ? (
+                      <div className="flex flex-col gap-1.5">
+                        <label className={FILTER_LABEL_CLASS} htmlFor="itinerary-track">
+                          Track
+                        </label>
+                        <FormSelect
+                          className="min-w-36"
+                          id="itinerary-track"
+                          onValueChange={setTrackId}
+                          value={trackId}
+                          options={[
+                            { value: "", label: "All tracks" },
+                            ...tracks.map((track) => ({ value: track.id, label: track.name })),
+                          ]}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </search>
               ) : null}
 
               {visibleSessions.length > 0 ? (
@@ -451,7 +453,10 @@ export function ItineraryWorkspace({
                     return (
                       <li key={session.id}>
                         <FieldLabel
-                          className="w-full cursor-pointer items-start rounded-lg border p-3"
+                          className={cn(
+                            "w-full cursor-pointer items-start rounded-lg border p-3 transition-colors hover:bg-muted/50",
+                            checked && "border-primary/40 bg-primary/5",
+                          )}
                           htmlFor={checkboxId}
                         >
                           <Checkbox
@@ -492,7 +497,7 @@ export function ItineraryWorkspace({
             <CardHeader>
               <CardTitle>My itinerary</CardTitle>
               <CardDescription>
-                {selectedSessions.length === 1 ? "1 session" : `${selectedSessions.length} sessions`} · {timezone}
+                {selectedSessions.length === 1 ? "1 session" : `${selectedSessions.length} sessions`} · {zoneLabel}
               </CardDescription>
               <CardAction>
                 <Button

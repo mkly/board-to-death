@@ -5,11 +5,41 @@ vi.mock("server-only", () => ({}));
 import { createConfiguredMagicLinkSender } from "./magic-link-email";
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("configured magic-link delivery", () => {
+  test("prints the link instead of contacting a provider in development console-only mode", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fetchMock = vi.fn();
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubGlobal("fetch", fetchMock);
+    const send = createConfiguredMagicLinkSender({
+      resendApiKey: "re_test_key",
+      resendFromEmail: "noreply@updates.example.com",
+    });
+
+    await send({ email: "speaker@example.com", url: "http://localhost:3000/portal/summit/auth?token=secret" });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      "[auth] Magic link for speaker@example.com: http://localhost:3000/portal/summit/auth?token=secret",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("does not print a link outside development when delivery is not configured", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.stubEnv("NODE_ENV", "production");
+    const send = createConfiguredMagicLinkSender({});
+
+    await expect(
+      send({ email: "speaker@example.com", url: "https://events.example.com/portal/summit/auth?token=secret" }),
+    ).rejects.toThrow("Magic-link delivery is not configured.");
+    expect(infoSpy).not.toHaveBeenCalled();
+  });
+
   test("sends magic links through Resend when configured", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 200 }),

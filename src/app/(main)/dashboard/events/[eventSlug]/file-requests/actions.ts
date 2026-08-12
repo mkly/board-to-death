@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import type { FileRequestReplacementPolicy, FileRequestTargetKind } from "@/generated/prisma/client";
 import { getDatabaseClient } from "@/server/database/client";
@@ -41,16 +41,9 @@ function indexPath(eventSlug: string): string {
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/file-requests`;
 }
 
-function destination(
-  eventSlug: string,
-  result: { readonly requestId?: string; readonly notice?: string; readonly error?: string },
-): string {
-  const search = new URLSearchParams();
-  if (result.notice) search.set("notice", result.notice);
-  if (result.error) search.set("error", result.error);
-  const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  const requestPath = result.requestId ? `/${result.requestId}` : "";
-  return `${indexPath(eventSlug)}${requestPath}${suffix}`;
+export interface FileRequestActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
 }
 
 function errorMessage(error: unknown): string {
@@ -59,9 +52,14 @@ function errorMessage(error: unknown): string {
   return "The file request could not be saved. Try again.";
 }
 
-function refreshAndRedirect(eventSlug: string, requestId: string | undefined, notice: string): never {
-  revalidatePath(destination(eventSlug, { requestId }));
-  redirect(destination(eventSlug, { requestId, notice }));
+function fail(error: unknown): FileRequestActionState {
+  return { status: "error", message: errorMessage(error) };
+}
+
+function succeed(eventSlug: string, requestId: string | undefined, notice: string): FileRequestActionState {
+  revalidatePath(indexPath(eventSlug));
+  if (requestId) revalidatePath(`${indexPath(eventSlug)}/${requestId}`);
+  return { status: "success", message: notice };
 }
 
 function requiredField(formData: FormData, name: string): string {
@@ -129,7 +127,11 @@ async function issueFulfillmentLinks(eventId: string, assignmentId: string): Pro
   return links.length;
 }
 
-export async function createFileRequestAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function createFileRequestAction(
+  eventSlug: string,
+  _previousState: FileRequestActionState,
+  formData: FormData,
+): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   let requestId: string;
   try {
@@ -145,16 +147,17 @@ export async function createFileRequestAction(eventSlug: string, formData: FormD
     });
     requestId = created.id;
   } catch (error) {
-    redirect(destination(event.slug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(event.slug, requestId, "File request created.");
+  return succeed(event.slug, requestId, "File request created.");
 }
 
 export async function updateFileRequestAction(
   eventSlug: string,
   requestId: string,
+  _previousState: FileRequestActionState,
   formData: FormData,
-): Promise<never> {
+): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await updateFileRequest(getDatabaseClient(), event.id, requestId, {
@@ -167,36 +170,37 @@ export async function updateFileRequestAction(
       replacementPolicy: parseReplacementPolicy(formData),
     });
   } catch (error) {
-    redirect(destination(event.slug, { requestId, error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(event.slug, requestId, "File request updated. New assignments use the new rules.");
+  return succeed(event.slug, requestId, "File request updated. New assignments use the new rules.");
 }
 
-export async function archiveFileRequestAction(eventSlug: string, requestId: string): Promise<never> {
+export async function archiveFileRequestAction(eventSlug: string, requestId: string): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await archiveFileRequest(getDatabaseClient(), event.id, requestId);
   } catch (error) {
-    redirect(destination(event.slug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(event.slug, undefined, "File request archived. It no longer collects files.");
+  return succeed(event.slug, requestId, "File request archived. It no longer collects files.");
 }
 
-export async function restoreFileRequestAction(eventSlug: string, requestId: string): Promise<never> {
+export async function restoreFileRequestAction(eventSlug: string, requestId: string): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await restoreFileRequest(getDatabaseClient(), event.id, requestId);
   } catch (error) {
-    redirect(destination(event.slug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(event.slug, undefined, "File request restored.");
+  return succeed(event.slug, requestId, "File request restored.");
 }
 
 export async function assignFileRequestAction(
   eventSlug: string,
   requestId: string,
+  _previousState: FileRequestActionState,
   formData: FormData,
-): Promise<never> {
+): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   let recipientCount = 0;
   let createdAssignmentId: string | undefined;
@@ -215,9 +219,9 @@ export async function assignFileRequestAction(
         where: { eventId: event.id, id: createdAssignmentId, status: "PENDING", files: { none: {} } },
       });
     }
-    redirect(destination(event.slug, { requestId, error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(
+  return succeed(
     event.slug,
     requestId,
     recipientCount > 0
@@ -230,15 +234,15 @@ export async function resendFulfillmentLinkAction(
   eventSlug: string,
   requestId: string,
   assignmentId: string,
-): Promise<never> {
+): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   let recipientCount = 0;
   try {
     recipientCount = await issueFulfillmentLinks(event.id, assignmentId);
   } catch (error) {
-    redirect(destination(event.slug, { requestId, error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(
+  return succeed(
     event.slug,
     requestId,
     `A fresh fulfillment link was sent to ${recipientCount} contact${recipientCount === 1 ? "" : "s"}.`,
@@ -249,12 +253,12 @@ export async function withdrawAssignmentAction(
   eventSlug: string,
   requestId: string,
   assignmentId: string,
-): Promise<never> {
+): Promise<FileRequestActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await withdrawAssignment(getDatabaseClient(), event.id, assignmentId);
   } catch (error) {
-    redirect(destination(event.slug, { requestId, error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(event.slug, requestId, "Assignment withdrawn.");
+  return succeed(event.slug, requestId, "Assignment withdrawn.");
 }

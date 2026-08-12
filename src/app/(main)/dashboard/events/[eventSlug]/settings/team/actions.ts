@@ -1,7 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
@@ -19,17 +19,23 @@ const inviteSchema = z.object({
   role: z.enum([EventMembershipRole.REVIEWER, EventMembershipRole.ORGANIZER_ADMIN]),
 });
 
+export interface EventTeamActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
 }
 
-function destination(eventSlug: string, result: { readonly notice?: string; readonly error?: string }): string {
-  const query = new URLSearchParams();
-  if (result.notice) query.set("notice", result.notice);
-  if (result.error) query.set("error", result.error);
-  const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/settings/team${suffix}`;
+function succeed(eventSlug: string, notice: string): EventTeamActionState {
+  revalidatePath(`/dashboard/events/${encodeURIComponent(eventSlug)}/settings/team`);
+  return { status: "success", message: notice };
+}
+
+function fail(error: unknown): EventTeamActionState {
+  return { status: "error", message: errorMessage(error) };
 }
 
 function errorMessage(error: unknown): string {
@@ -62,66 +68,62 @@ async function magicLinkDelivery(): Promise<InvitationDelivery> {
   };
 }
 
-export async function inviteEventMember(eventSlug: string, formData: FormData): Promise<never> {
+export async function inviteEventMember(
+  eventSlug: string,
+  _previousState: EventTeamActionState,
+  formData: FormData,
+): Promise<EventTeamActionState> {
   const parsed = inviteSchema.safeParse({
     email: field(formData, "email").trim().toLowerCase(),
     displayName: field(formData, "displayName"),
     role: field(formData, "role"),
   });
   if (!parsed.success) {
-    redirect(destination(eventSlug, { error: parsed.error.issues[0]?.message ?? "Review the invitation." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the invitation." };
   }
 
-  let result: { readonly notice?: string; readonly error?: string };
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EventInvitationService(getDatabaseClient()).invite(
       { eventId: event.id, ...parsed.data },
       await magicLinkDelivery(),
     );
-    result = { notice: `Invitation sent to ${parsed.data.email}.` };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(eventSlug, result));
+  return succeed(eventSlug, `Invitation sent to ${parsed.data.email}.`);
 }
 
-export async function resendEventInvitation(eventSlug: string, invitationId: string): Promise<never> {
-  let result: { readonly notice?: string; readonly error?: string };
+export async function resendEventInvitation(eventSlug: string, invitationId: string): Promise<EventTeamActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EventInvitationService(getDatabaseClient()).resend(event.id, invitationId, await magicLinkDelivery());
-    result = { notice: "Invitation sent again with a fresh link." };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(eventSlug, result));
+  return succeed(eventSlug, "Invitation sent again with a fresh link.");
 }
 
-export async function revokeEventInvitation(eventSlug: string, invitationId: string): Promise<never> {
-  let result: { readonly notice?: string; readonly error?: string };
+export async function revokeEventInvitation(eventSlug: string, invitationId: string): Promise<EventTeamActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EventInvitationService(getDatabaseClient()).revoke(event.id, invitationId);
-    result = { notice: "Pending invitation revoked." };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(eventSlug, result));
+  return succeed(eventSlug, "Pending invitation revoked.");
 }
 
 export async function setEventMembershipActive(
   eventSlug: string,
   membershipId: string,
   active: boolean,
-): Promise<never> {
-  let result: { readonly notice?: string; readonly error?: string };
+): Promise<EventTeamActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EventInvitationService(getDatabaseClient()).setMembershipActive(event.id, membershipId, active);
-    result = { notice: active ? "Event access restored." : "Event access set to inactive." };
   } catch (error) {
-    result = { error: errorMessage(error) };
+    return fail(error);
   }
-  redirect(destination(eventSlug, result));
+  return succeed(eventSlug, active ? "Event access restored." : "Event access set to inactive.");
 }

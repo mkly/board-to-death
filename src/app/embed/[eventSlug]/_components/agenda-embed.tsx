@@ -2,14 +2,11 @@
 
 import { useMemo, useState } from "react";
 
-import { CalendarDays, Clock3, MapPin, Search, Tags, Users } from "lucide-react";
+import { CalendarDays, MapPin, Monitor, Moon, Search, Sun } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -17,6 +14,7 @@ import type { EmbedConfiguration, EmbedTheme } from "@/lib/published-embeds/conf
 import { cn } from "@/lib/utils";
 
 import { EmbedFrameBridge } from "../../_components/embed-frame-bridge";
+import { EmbedHeader, TrackChip, TrackDot, zoneAbbreviation } from "./embed-kit";
 
 interface AgendaEmbedPlacement {
   readonly id: string;
@@ -28,7 +26,7 @@ interface AgendaEmbedPlacement {
   readonly startsAt: string;
   readonly endsAt: string;
   readonly room: { readonly id: string; readonly name: string };
-  readonly tracks: readonly { readonly id: string; readonly name: string }[];
+  readonly tracks: readonly { readonly id: string; readonly name: string; readonly color?: string | null }[];
   readonly speakers: readonly { readonly id: string; readonly name: string }[];
 }
 
@@ -37,9 +35,9 @@ interface AgendaEmbedData {
     readonly name: string;
     readonly timezone: string;
     readonly location: string | null;
-  };
+  } | null;
   readonly rooms: readonly { readonly id: string; readonly name: string }[];
-  readonly tracks: readonly { readonly id: string; readonly name: string }[];
+  readonly tracks: readonly { readonly id: string; readonly name: string; readonly color?: string | null }[];
   readonly placements: readonly AgendaEmbedPlacement[];
 }
 
@@ -50,22 +48,33 @@ interface AgendaEmbedProps {
   readonly publishedAt: string;
 }
 
-const THEME_LABELS: Readonly<Record<EmbedTheme, string>> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
-};
+const THEME_OPTIONS: readonly { readonly value: EmbedTheme; readonly label: string; readonly Icon: typeof Sun }[] = [
+  { value: "system", label: "System theme", Icon: Monitor },
+  { value: "light", label: "Light theme", Icon: Sun },
+  { value: "dark", label: "Dark theme", Icon: Moon },
+];
 
 function dayKey(value: string, timezone: string): string {
   return Temporal.Instant.from(value).toZonedDateTimeISO(timezone).toPlainDate().toString();
 }
 
-function dateLabel(value: string, timezone: string): string {
+function dayLabel(value: string, timezone: string): string {
+  return new Intl.DateTimeFormat("en", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: timezone,
+  }).format(new Date(value));
+}
+
+function dayOptionLabel(value: string, timezone: string): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "full", timeZone: timezone }).format(new Date(value));
 }
 
 function timeLabel(value: string, timezone: string): string {
-  return new Intl.DateTimeFormat("en", { timeStyle: "short", timeZone: timezone }).format(new Date(value));
+  return new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit", timeZone: timezone }).format(
+    new Date(value),
+  );
 }
 
 function matchesSearch(placement: AgendaEmbedPlacement, query: string): boolean {
@@ -89,9 +98,12 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
   const [trackId, setTrackId] = useState("all");
   const [day, setDay] = useState("all");
   const enabledFilters = useMemo(() => new Set(configuration.filters), [configuration.filters]);
+  const compact = configuration.density === "compact";
+  const timezone = event?.timezone ?? "America/Los_Angeles";
+  const zoneLabel = zoneAbbreviation(placements[0]?.startsAt ?? publishedAt, timezone);
   const days = useMemo(
-    () => [...new Set(placements.map((placement) => dayKey(placement.startsAt, event.timezone)))],
-    [event.timezone, placements],
+    () => [...new Set(placements.map((placement) => dayKey(placement.startsAt, timezone)))],
+    [timezone, placements],
   );
   const visiblePlacements = useMemo(() => {
     const filtered = placements.filter(
@@ -99,7 +111,7 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
         (!enabledFilters.has("search") || search === "" || matchesSearch(placement, search)) &&
         (!enabledFilters.has("room") || roomId === "all" || placement.room.id === roomId) &&
         (!enabledFilters.has("track") || trackId === "all" || placement.tracks.some((track) => track.id === trackId)) &&
-        (!enabledFilters.has("day") || day === "all" || dayKey(placement.startsAt, event.timezone) === day),
+        (!enabledFilters.has("day") || day === "all" || dayKey(placement.startsAt, timezone) === day),
     );
     const bySessionId = new Map(filtered.map((placement) => [placement.sessionId, placement]));
     return filtered.toSorted((left, right) => {
@@ -115,17 +127,17 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
       if (right.parentSessionId === null) return 1;
       return left.startsAt.localeCompare(right.startsAt);
     });
-  }, [day, enabledFilters, event.timezone, placements, roomId, search, trackId]);
+  }, [day, enabledFilters, timezone, placements, roomId, search, trackId]);
   const groupedPlacements = useMemo(
     () =>
       visiblePlacements.reduce<Map<string, AgendaEmbedPlacement[]>>((groups, placement) => {
-        const key = dayKey(placement.startsAt, event.timezone);
+        const key = dayKey(placement.startsAt, timezone);
         const entries = groups.get(key) ?? [];
         entries.push(placement);
         groups.set(key, entries);
         return groups;
       }, new Map()),
-    [event.timezone, visiblePlacements],
+    [timezone, visiblePlacements],
   );
   const clearFilters = () => {
     setSearch("");
@@ -138,7 +150,7 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
     <main
       className={cn(
         "min-h-64 bg-background text-foreground",
-        configuration.density === "compact" ? "p-3 sm:p-4" : "p-4 sm:p-6",
+        compact ? "p-3 sm:p-4" : "p-4 sm:p-6",
         theme === "dark" && "dark",
         theme === "light" && "light",
       )}
@@ -146,138 +158,149 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
       data-embed-theme={theme}
     >
       <EmbedFrameBridge instance={instance} />
-      <div className={cn("mx-auto flex max-w-5xl flex-col", configuration.density === "compact" ? "gap-3" : "gap-5")}>
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="text-muted-foreground text-sm">Published agenda</p>
-            <h1 className="font-heading font-semibold text-2xl tracking-tight">{event.name}</h1>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-sm">
-              <span>{event.timezone}</span>
-              {event.location ? (
+      <div className={cn("mx-auto flex max-w-3xl flex-col", compact ? "gap-4" : "gap-6")}>
+        <EmbedHeader
+          eyebrow="Agenda"
+          title={event?.name ?? "Event agenda"}
+          description={
+            <>
+              {event?.location ? (
                 <span className="inline-flex items-center gap-1">
-                  <MapPin aria-hidden="true" />
+                  <MapPin aria-hidden="true" className="size-3.5" />
                   {event.location}
                 </span>
               ) : null}
-            </div>
-          </div>
-          <Field className="w-auto shrink-0">
-            <FieldLabel className="sr-only">Color theme</FieldLabel>
-            <ToggleGroup
-              type="single"
-              value={theme}
-              onValueChange={(value) => {
-                if (value) setTheme(value as EmbedTheme);
-              }}
-              variant="outline"
-              size="sm"
-              aria-label="Color theme"
-            >
-              {(Object.keys(THEME_LABELS) as EmbedTheme[]).map((value) => (
-                <ToggleGroupItem key={value} value={value} aria-label={`${THEME_LABELS[value]} theme`}>
-                  {THEME_LABELS[value]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </Field>
-        </header>
+              <span>Times in {zoneLabel}</span>
+            </>
+          }
+        >
+          <ToggleGroup
+            type="single"
+            value={theme}
+            onValueChange={(value) => {
+              if (value) setTheme(value as EmbedTheme);
+            }}
+            variant="outline"
+            size="sm"
+            aria-label="Color theme"
+          >
+            {THEME_OPTIONS.map(({ value, label, Icon }) => (
+              <ToggleGroupItem key={value} value={value} aria-label={label} title={label}>
+                <Icon aria-hidden="true" className="size-4" />
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </EmbedHeader>
 
         {configuration.filters.length > 0 ? (
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>Find a session</CardTitle>
-              <CardDescription>Filter times shown in {event.timezone}.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <search>
-                <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {enabledFilters.has("search") ? (
-                    <Field className={cn(configuration.filters.length > 1 && "sm:col-span-2 lg:col-span-1")}>
-                      <FieldLabel htmlFor="agenda-search">Search</FieldLabel>
-                      <div className="relative">
-                        <Search
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                          id="agenda-search"
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder="Title, speaker, room…"
-                          className="pl-8"
-                        />
-                      </div>
-                    </Field>
-                  ) : null}
-                  {enabledFilters.has("day") ? (
-                    <Field>
-                      <FieldLabel htmlFor="agenda-day">Day</FieldLabel>
-                      <Select value={day} onValueChange={setDay}>
-                        <SelectTrigger id="agenda-day" className="w-full">
-                          <SelectValue placeholder="All days" />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          <SelectGroup>
-                            <SelectItem value="all">All days</SelectItem>
-                            {days.map((value) => {
-                              const placement = placements.find(
-                                (candidate) => dayKey(candidate.startsAt, event.timezone) === value,
-                              );
-                              return placement ? (
-                                <SelectItem key={value} value={value}>
-                                  {dateLabel(placement.startsAt, event.timezone)}
-                                </SelectItem>
-                              ) : null;
-                            })}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  ) : null}
-                  {enabledFilters.has("room") ? (
-                    <Field>
-                      <FieldLabel htmlFor="agenda-room">Room</FieldLabel>
-                      <Select value={roomId} onValueChange={setRoomId}>
-                        <SelectTrigger id="agenda-room" className="w-full">
-                          <SelectValue placeholder="All rooms" />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          <SelectGroup>
-                            <SelectItem value="all">All rooms</SelectItem>
-                            {rooms.map((room) => (
-                              <SelectItem key={room.id} value={room.id}>
-                                {room.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  ) : null}
-                  {enabledFilters.has("track") ? (
-                    <Field>
-                      <FieldLabel htmlFor="agenda-track">Track</FieldLabel>
-                      <Select value={trackId} onValueChange={setTrackId}>
-                        <SelectTrigger id="agenda-track" className="w-full">
-                          <SelectValue placeholder="All tracks" />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          <SelectGroup>
-                            <SelectItem value="all">All tracks</SelectItem>
-                            {tracks.map((track) => (
-                              <SelectItem key={track.id} value={track.id}>
-                                {track.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  ) : null}
-                </FieldGroup>
-              </search>
-            </CardContent>
-          </Card>
+          <search>
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-y py-3">
+              {enabledFilters.has("search") ? (
+                <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                  <label
+                    className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide"
+                    htmlFor="agenda-search"
+                  >
+                    Search
+                  </label>
+                  <div className="relative">
+                    <Search
+                      aria-hidden="true"
+                      className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                      id="agenda-search"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Title, speaker, room…"
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {enabledFilters.has("day") ? (
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide"
+                    htmlFor="agenda-day"
+                  >
+                    Day
+                  </label>
+                  <Select value={day} onValueChange={setDay}>
+                    <SelectTrigger id="agenda-day" className="min-w-32">
+                      <SelectValue placeholder="All days" />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectItem value="all">All days</SelectItem>
+                        {days.map((value) => {
+                          const placement = placements.find(
+                            (candidate) => dayKey(candidate.startsAt, timezone) === value,
+                          );
+                          return placement ? (
+                            <SelectItem key={value} value={value}>
+                              {dayOptionLabel(placement.startsAt, timezone)}
+                            </SelectItem>
+                          ) : null;
+                        })}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {enabledFilters.has("room") ? (
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide"
+                    htmlFor="agenda-room"
+                  >
+                    Room
+                  </label>
+                  <Select value={roomId} onValueChange={setRoomId}>
+                    <SelectTrigger id="agenda-room" className="min-w-32">
+                      <SelectValue placeholder="All rooms" />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectItem value="all">All rooms</SelectItem>
+                        {rooms.map((room) => (
+                          <SelectItem key={room.id} value={room.id}>
+                            {room.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {enabledFilters.has("track") ? (
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide"
+                    htmlFor="agenda-track"
+                  >
+                    Track
+                  </label>
+                  <Select value={trackId} onValueChange={setTrackId}>
+                    <SelectTrigger id="agenda-track" className="min-w-36">
+                      <SelectValue placeholder="All tracks" />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectItem value="all">All tracks</SelectItem>
+                        {tracks.map((track) => (
+                          <SelectItem key={track.id} value={track.id}>
+                            <TrackDot color={track.color} />
+                            {track.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+          </search>
         ) : null}
 
         <p className="sr-only" aria-live="polite">
@@ -285,120 +308,143 @@ export function AgendaEmbed({ configuration, data, instance, publishedAt }: Agen
         </p>
 
         {placements.length === 0 ? (
-          <Card>
-            <CardContent>
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CalendarDays />
-                  </EmptyMedia>
-                  <EmptyTitle>No published sessions</EmptyTitle>
-                  <EmptyDescription>The organizer has not added any sessions to this agenda.</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            </CardContent>
-          </Card>
+          <Empty className="border border-dashed">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CalendarDays />
+              </EmptyMedia>
+              <EmptyTitle>No published sessions</EmptyTitle>
+              <EmptyDescription>The organizer has not added any sessions to this agenda.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : null}
 
         {placements.length > 0 && visiblePlacements.length === 0 ? (
-          <Card>
-            <CardContent>
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Search />
-                  </EmptyMedia>
-                  <EmptyTitle>No sessions match</EmptyTitle>
-                  <EmptyDescription>Try another search, day, room, or track.</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button type="button" variant="outline" onClick={clearFilters}>
-                    Clear filters
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            </CardContent>
-          </Card>
+          <Empty className="border border-dashed">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Search />
+              </EmptyMedia>
+              <EmptyTitle>No sessions match</EmptyTitle>
+              <EmptyDescription>Try another search, day, room, or track.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button type="button" variant="outline" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            </EmptyContent>
+          </Empty>
         ) : null}
 
         {visiblePlacements.length > 0 ? (
-          <div className={cn("flex flex-col", configuration.density === "compact" ? "gap-4" : "gap-6")}>
+          <div className={cn("flex flex-col", compact ? "gap-5" : "gap-8")}>
             {[...groupedPlacements.entries()].map(([key, entries]) => (
-              <section key={key} className="flex flex-col gap-3" aria-labelledby={`agenda-day-${key}`}>
-                <div className="flex items-center gap-2">
-                  <CalendarDays aria-hidden="true" />
-                  <h2 id={`agenda-day-${key}`} className="font-heading font-medium text-lg">
-                    {dateLabel(entries[0]?.startsAt ?? key, event.timezone)}
+              <section key={key} className="flex flex-col" aria-labelledby={`agenda-day-${key}`}>
+                <div className="flex items-baseline justify-between gap-3 border-b pb-2">
+                  <h2 id={`agenda-day-${key}`} className="font-bold font-heading text-lg tracking-tight">
+                    {dayLabel(entries[0]?.startsAt ?? key, timezone)}
                   </h2>
+                  <p className="font-mono text-muted-foreground text-xs tabular-nums">
+                    {entries.length} {entries.length === 1 ? "session" : "sessions"}
+                  </p>
                 </div>
-                <ol className="grid list-none gap-3 md:grid-cols-2">
-                  {entries.map((placement) => (
-                    <li key={placement.id}>
-                      <Card
+                <ol className="list-none">
+                  {entries.map((placement, index) => {
+                    const previous = entries[index - 1];
+                    const showTime = !previous || previous.startsAt !== placement.startsAt;
+                    const isSubsession = placement.parentSessionId !== null;
+                    return (
+                      <li
+                        key={placement.id}
                         id={`session-${placement.sessionId}`}
-                        size={configuration.density === "compact" ? "sm" : "default"}
-                        className={cn("h-full scroll-mt-4", placement.parentSessionId && "ml-4")}
                         data-parent-session={placement.parentSessionId ?? undefined}
+                        className="group grid scroll-mt-4 grid-cols-[3.25rem_0.75rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[4.25rem_0.75rem_minmax(0,1fr)] sm:gap-x-4"
                       >
-                        <CardHeader>
-                          <CardTitle>
-                            <a href={`#session-${placement.sessionId}`} className="underline-offset-4 hover:underline">
+                        <div className={cn("text-right", compact ? "pt-3.5" : "pt-4.5")}>
+                          {showTime ? (
+                            <>
+                              <time
+                                className="block font-mono font-semibold text-foreground text-sm tabular-nums leading-tight"
+                                dateTime={placement.startsAt}
+                              >
+                                {timeLabel(placement.startsAt, timezone)}
+                              </time>
+                              <time
+                                className="block font-mono text-muted-foreground text-xs tabular-nums"
+                                dateTime={placement.endsAt}
+                              >
+                                {timeLabel(placement.endsAt, timezone)}
+                              </time>
+                            </>
+                          ) : null}
+                        </div>
+                        <div aria-hidden="true" className="relative flex justify-center">
+                          <span className="absolute inset-y-0 w-px bg-border group-last:h-6" />
+                          <TrackDot
+                            color={placement.tracks[0]?.color}
+                            className={cn(
+                              "relative ring-4 ring-background",
+                              compact ? "mt-4" : "mt-5",
+                              isSubsession ? "size-1.5" : "size-2.5",
+                            )}
+                          />
+                        </div>
+                        <div className={cn("flex flex-col gap-1.5", compact ? "py-3" : "py-4")}>
+                          {isSubsession && placement.parentSessionTitle ? (
+                            <p className="text-muted-foreground text-xs">Part of {placement.parentSessionTitle}</p>
+                          ) : null}
+                          <h3
+                            className={cn(
+                              "font-heading font-semibold leading-snug",
+                              isSubsession ? "text-sm" : "text-base",
+                            )}
+                          >
+                            <a
+                              href={`#session-${placement.sessionId}`}
+                              className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
                               {placement.title}
                             </a>
-                          </CardTitle>
-                          {placement.parentSessionTitle ? (
-                            <Badge variant="outline" className="w-fit">
-                              Subsession of {placement.parentSessionTitle}
-                            </Badge>
-                          ) : null}
-                          <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          </h3>
+                          <p className="flex flex-wrap items-center gap-x-2 text-muted-foreground text-sm">
                             <span className="inline-flex items-center gap-1">
-                              <Clock3 aria-hidden="true" />
-                              <time dateTime={placement.startsAt}>{timeLabel(placement.startsAt, event.timezone)}</time>
-                              <span aria-hidden="true">–</span>
-                              <time dateTime={placement.endsAt}>{timeLabel(placement.endsAt, event.timezone)}</time>
-                            </span>
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin aria-hidden="true" />
+                              <MapPin aria-hidden="true" className="size-3.5" />
                               {placement.room.name}
                             </span>
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                          {placement.description ? <p>{placement.description}</p> : null}
-                          {placement.speakers.length > 0 ? (
-                            <div className="flex items-start gap-2 text-muted-foreground text-sm">
-                              <Users aria-hidden="true" />
-                              <span>{placement.speakers.map(({ name }) => name).join(", ")}</span>
-                            </div>
+                            {placement.speakers.length > 0 ? (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span>{placement.speakers.map(({ name }) => name).join(", ")}</span>
+                              </>
+                            ) : null}
+                          </p>
+                          {placement.description ? (
+                            <p className="text-muted-foreground text-sm leading-relaxed">{placement.description}</p>
                           ) : null}
                           {placement.tracks.length > 0 ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Tags aria-hidden="true" />
+                            <p className="mt-0.5 flex flex-wrap gap-1.5">
                               {placement.tracks.map((track) => (
-                                <Badge key={track.id} variant="outline">
-                                  {track.name}
-                                </Badge>
+                                <TrackChip key={track.id} name={track.name} color={track.color} />
                               ))}
-                            </div>
+                            </p>
                           ) : null}
-                        </CardContent>
-                      </Card>
-                    </li>
-                  ))}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ol>
               </section>
             ))}
           </div>
         ) : null}
 
-        <footer className="text-muted-foreground text-xs">
+        <footer className="border-t pt-3 text-muted-foreground text-xs">
           Published{" "}
           <time dateTime={publishedAt}>
             {new Intl.DateTimeFormat("en", {
               dateStyle: "medium",
               timeStyle: "short",
-              timeZone: event.timezone,
+              timeZone: timezone,
             }).format(new Date(publishedAt))}
           </time>
         </footer>

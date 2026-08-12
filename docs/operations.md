@@ -86,9 +86,56 @@ organization or an active organizer membership on the event.
 Its integration configuration points at `local://adapters/accelevents/board-to-death-demo`, a deterministic local
 adapter reference used only by the fixture, not a production credential.
 
+### Tabletop Guild demo organization
+
+The seed also creates a fuller demo organization, **Tabletop Guild** (slug `tabletop-guild`, IDs under the
+`20000000-…` UUID prefix), with two events:
+
+- **`protospiel-summit-2026`** — a post-CFP conference (Portland, Oct 16–19 2026) exercising most of the product:
+  rooms, tracks, and CFP categories; a closed CFP with eight submissions covering every status from draft to
+  confirmed; a two-round evaluation plan (closed blind screening, open identified final round) with reviewers, a
+  program committee, completed and draft evaluations, a round advancement, and decisions; four program sessions
+  (three promoted from submissions plus a manual keynote) with agenda placements and a published program snapshot;
+  speaker task assignments in three states, communication templates, a reminder rule, and a message delivery with
+  one delivered and one hard-bounced recipient; a speaker resource page; sponsor and exhibitor tiers, groups, and a
+  published exhibitor intake form with pending and accepted submissions; file requests against a group and a
+  submission; custom fields; a speaker-sourcing pipeline with an interest form, four stages, and three prospects; a
+  participant portal, a saved session report, and a submissions-pipeline dashboard.
+- **`winter-playtest-nights-2026`** — an early-stage meetup (Seattle, Dec 4–5 2026) with an open published CFP, one
+  submitted proposal, and a sourcing prospect assigned to it from the summit's pipeline.
+
+Unlike the representative fixture, this seed **does create login-capable users**. Five `user` rows are seeded with
+verified emails, so anyone who can receive (or read the dev-server log for) a magic link can sign in as them:
+
+| Email | Name | Org role |
+| --- | --- | --- |
+| `mike@tabletopguild.test` | Mike Lay | Owner |
+| `priya@tabletopguild.test` | Priya Raman | Owner |
+| `marcus@tabletopguild.test` | Marcus Webb | Member |
+| `elena@tabletopguild.test` | Elena Vasquez | Member |
+| `tomas@tabletopguild.test` | Tomás Ferreira | Member |
+
+Mike, Priya, and Marcus hold `ORGANIZER_ADMIN` event memberships on the summit (Mike and Marcus also on the
+playtest event); Elena and Tomás are `REVIEWER`s on the summit. In development the magic-link URL is printed to the
+dev-server console (`[auth] Magic link for <email>: <url>`), so no mailbox is needed. Because these are real,
+verified accounts, do not run this seed against a production database unless you intend those emails to grant demo
+access there. The other seeded people (`*@example.test` speakers, contacts, and prospects) have no dashboard user
+accounts.
+
+The speaker portal does not use dashboard accounts at all: `/portal/{eventSlug}/sign-in` emails a short-lived,
+event-scoped link to any address that matches an event speaker record. The seeded summit speakers therefore work as
+portal logins — enter, for example, `amara.osei@example.test` at `/portal/protospiel-summit-2026/sign-in` and use the
+magic-link URL from the dev-server console to see the speaker's own submissions, onboarding tasks, profile, and
+files. Sponsors, exhibitors, applicants, and prospects have no login of any kind by design; they are reached through
+contact records and the public CFP, interest, and intake forms.
+
+Rerunning the seed deletes and recreates both demo events and the organization's members, invitations, and people,
+so manual changes inside the demo org are discarded on reseed.
+
 Seeding is not part of `runtime:migrate` or application startup — it only runs when invoked explicitly (`npm run
 runtime:seed` in production, `npm run db:seed` otherwise). Running it against a database that already has real event
-data is safe as long as nothing else uses the `board-to-death-demo` slug.
+data is safe as long as nothing else uses the `board-to-death-demo`, `protospiel-summit-2026`, or
+`winter-playtest-nights-2026` slugs or the `tabletop-guild` organization slug.
 
 ## Integration adapters and credentials
 

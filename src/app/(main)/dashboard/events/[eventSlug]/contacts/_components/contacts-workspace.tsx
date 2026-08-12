@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import {
   BookmarkPlus,
@@ -71,6 +72,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { DirectorySegmentRecord } from "@/server/contacts/directory-segments";
 import type {
   DirectoryDuplicateMatch,
@@ -103,11 +105,9 @@ interface ContactsWorkspaceProps {
   readonly contacts: readonly ContactRecord[];
   readonly customFieldDefinitions: readonly CustomFieldInputDefinition[];
   readonly duplicateMatches: readonly DirectoryDuplicateMatch[];
-  readonly error?: string;
   readonly event: DashboardEvent;
   readonly events: readonly { readonly id: string; readonly name: string }[];
   readonly filters: DirectoryPeopleFilters;
-  readonly notice?: string;
   readonly people: readonly DirectoryPersonSummary[];
   readonly segments: readonly DirectorySegmentRecord[];
   readonly selectedSegmentId?: string;
@@ -166,7 +166,8 @@ function DuplicateMergeCard({
   readonly match: DirectoryDuplicateMatch;
 }) {
   const [first, second] = match.people;
-  const mergeAction = mergeDirectoryPeopleAction.bind(null, eventSlug);
+  const [state, mergeAction] = useActionState(mergeDirectoryPeopleAction.bind(null, eventSlug), INITIAL_STATE);
+  useActionToast(state);
   const reason = match.reasons.map((value) => (value === "email" ? "same email" : "same name")).join(" and ");
 
   return (
@@ -386,8 +387,22 @@ function SaveSegmentDialog({
   readonly filters: DirectoryPeopleFilters;
   readonly disabled: boolean;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState(saveDirectorySegmentAction.bind(null, eventSlug), INITIAL_STATE);
+  useActionToast(state);
+  useEffect(() => {
+    if (state.status !== "success") return;
+    setOpen(false);
+    if (state.recordId) {
+      router.push(
+        `/dashboard/events/${encodeURIComponent(eventSlug)}/contacts?segment=${encodeURIComponent(state.recordId)}`,
+      );
+    }
+  }, [state, router, eventSlug]);
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button disabled={disabled} type="button" variant="outline">
           <BookmarkPlus data-icon="inline-start" />
@@ -395,7 +410,7 @@ function SaveSegmentDialog({
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form action={saveDirectorySegmentAction.bind(null, eventSlug)} className="flex flex-col gap-4">
+        <form action={formAction} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Save dynamic segment</DialogTitle>
             <DialogDescription>
@@ -413,14 +428,34 @@ function SaveSegmentDialog({
             </Field>
           </FieldGroup>
           <DialogFooter>
-            <Button type="submit">
-              <BookmarkPlus data-icon="inline-start" />
-              Save segment
+            <Button disabled={pending} type="submit">
+              {pending ? <Spinner data-icon="inline-start" /> : <BookmarkPlus data-icon="inline-start" />}
+              {pending ? "Saving…" : "Save segment"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LinkPersonButton({ eventSlug, personId }: { readonly eventSlug: string; readonly personId: string }) {
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <Button
+      disabled={pending}
+      size="sm"
+      type="button"
+      onClick={() =>
+        startTransition(async () => {
+          actionResultToast(await linkDirectoryPersonAction(eventSlug, personId));
+        })
+      }
+    >
+      {pending ? <Spinner data-icon="inline-start" /> : <UserPlus data-icon="inline-start" />}
+      Add to event
+    </Button>
   );
 }
 
@@ -527,11 +562,9 @@ export function ContactsWorkspace({
   contacts,
   customFieldDefinitions,
   duplicateMatches,
-  error,
   event,
   events,
   filters,
-  notice,
   people,
   segments,
   selectedSegmentId,
@@ -548,19 +581,6 @@ export function ContactsWorkspace({
           Reuse organization contacts across events while keeping each event&apos;s details independent.
         </p>
       </header>
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>Directory updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to link contact</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
 
       {duplicateMatches.length > 0 ? (
         <Card>
@@ -663,12 +683,7 @@ export function ContactsWorkspace({
                         {linked ? (
                           <Badge variant="secondary">In this event</Badge>
                         ) : (
-                          <form action={linkDirectoryPersonAction.bind(null, event.slug, person.id)}>
-                            <Button size="sm" type="submit">
-                              <UserPlus data-icon="inline-start" />
-                              Add to event
-                            </Button>
-                          </form>
+                          <LinkPersonButton eventSlug={event.slug} personId={person.id} />
                         )}
                       </TableCell>
                     </TableRow>

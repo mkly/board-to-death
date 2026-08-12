@@ -45,16 +45,10 @@ async function loadTargets(
 
 export default async function FileRequestDetailPage({
   params,
-  searchParams,
 }: {
   readonly params: Promise<{ eventSlug: string; requestId: string }>;
-  readonly searchParams: Promise<{ notice?: string; error?: string }>;
 }) {
-  const [{ eventSlug, requestId }, messages, shell] = await Promise.all([
-    params,
-    searchParams,
-    getDashboardShellData(),
-  ]);
+  const [{ eventSlug, requestId }, shell] = await Promise.all([params, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
 
   if (!event) notFound();
@@ -89,10 +83,8 @@ export default async function FileRequestDetailPage({
   return (
     <FileRequestDetail
       assignments={assignments}
-      error={messages.error}
       event={event}
       files={files}
-      notice={messages.notice}
       request={request}
       targets={targets.filter((target) => !assigned.has(target.id))}
       version={version}

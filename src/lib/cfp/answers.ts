@@ -205,11 +205,7 @@ export function validateCfpAnswers(
   values: Readonly<Record<string, unknown>>,
 ): CfpAnswerValidationResult {
   const questions = definition.sections.flatMap((section) => section.questions);
-  const questionIds = new Set(questions.map(({ id }) => id));
   const errors: Record<string, string[]> = {};
-  for (const questionId of Object.keys(values)) {
-    if (!questionIds.has(questionId)) addError(errors, questionId, "This question is not part of the published form.");
-  }
   const visibleIds = visibleCfpQuestionIds(definition, values);
   const answers = questions.flatMap((question): CfpNormalizedAnswer[] => {
     if (!visibleIds.has(question.id)) return [];

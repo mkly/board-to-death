@@ -13,7 +13,7 @@ import { SyncStatusWorkspace } from "./_components/sync-status-workspace";
 
 interface IntegrationsPageProps {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ page?: string; notice?: string; error?: string }>;
+  readonly searchParams: Promise<{ page?: string }>;
 }
 
 export default async function IntegrationsPage({ params, searchParams }: IntegrationsPageProps) {
@@ -78,12 +78,7 @@ export default async function IntegrationsPage({ params, searchParams }: Integra
           deliveredAt: delivery.deliveredAt?.toISOString() ?? null,
         }))}
       />
-      <SpeakerMappingWorkspace
-        event={{ name: event.name, slug: event.slug }}
-        preview={speakerPreview}
-        notice={query.notice}
-        error={query.error}
-      />
+      <SpeakerMappingWorkspace event={{ name: event.name, slug: event.slug }} preview={speakerPreview} />
       <SessionMappingPreview
         event={{ name: event.name, slug: event.slug }}
         connected={Boolean(sessions.configuration)}

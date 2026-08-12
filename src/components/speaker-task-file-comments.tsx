@@ -1,10 +1,16 @@
+"use client";
+
+import { useActionState } from "react";
+
 import { MessageSquare } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { SpeakerTaskFileCommentAuthorRole } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 export interface SpeakerTaskFileCommentView {
   readonly id: string;
@@ -14,6 +20,13 @@ export interface SpeakerTaskFileCommentView {
   readonly createdAt: Date;
 }
 
+export interface SpeakerTaskFileCommentActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+const INITIAL_STATE: SpeakerTaskFileCommentActionState = { status: "idle" };
+
 export function SpeakerTaskFileComments({
   comments,
   formAction,
@@ -21,10 +34,15 @@ export function SpeakerTaskFileComments({
   timezone,
 }: {
   readonly comments: readonly SpeakerTaskFileCommentView[];
-  readonly formAction: (formData: FormData) => Promise<void>;
+  readonly formAction: (
+    previousState: SpeakerTaskFileCommentActionState,
+    formData: FormData,
+  ) => Promise<SpeakerTaskFileCommentActionState>;
   readonly inputId: string;
   readonly timezone: string;
 }) {
+  const [state, submitAction, pending] = useActionState(formAction, INITIAL_STATE);
+  useActionToast(state);
   const formatter = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -56,7 +74,7 @@ export function SpeakerTaskFileComments({
           ))}
         </ol>
       )}
-      <form action={formAction}>
+      <form action={submitAction}>
         <FieldGroup>
           <Field>
             <FieldLabel className="sr-only" htmlFor={inputId}>
@@ -64,8 +82,9 @@ export function SpeakerTaskFileComments({
             </FieldLabel>
             <Textarea id={inputId} maxLength={2000} name="comment" placeholder="Add a comment…" required rows={2} />
           </Field>
-          <Button className="w-fit" size="sm" type="submit">
-            Add comment
+          <Button className="w-fit" disabled={pending} size="sm" type="submit">
+            {pending ? <Spinner data-icon="inline-start" /> : null}
+            {pending ? "Adding…" : "Add comment"}
           </Button>
         </FieldGroup>
       </form>

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { z } from "zod";
 
@@ -195,7 +195,10 @@ function contactsPath(eventSlug: string): string {
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/contacts`;
 }
 
-export async function linkDirectoryPersonAction(eventSlug: string, personId: string): Promise<never> {
+export async function linkDirectoryPersonAction(
+  eventSlug: string,
+  personId: string,
+): Promise<ContactRecordMutationState> {
   const shell = await getDashboardShellData();
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event || shell.activeEvent?.id !== event.id) notFound();
@@ -204,14 +207,18 @@ export async function linkDirectoryPersonAction(eventSlug: string, personId: str
     await linkDirectoryPersonToEvent(getDatabaseClient(), event.id, personId);
   } catch (error) {
     const message = error instanceof RepositoryError ? error.message : "The directory contact could not be linked.";
-    redirect(`${contactsPath(event.slug)}?error=${encodeURIComponent(message)}`);
+    return { status: "error", message };
   }
 
   revalidatePath(contactsPath(event.slug));
-  redirect(`${contactsPath(event.slug)}?notice=${encodeURIComponent("Contact added from the directory.")}`);
+  return { status: "success", message: "Contact added from the directory." };
 }
 
-export async function mergeDirectoryPeopleAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function mergeDirectoryPeopleAction(
+  eventSlug: string,
+  _previousState: ContactRecordMutationState,
+  formData: FormData,
+): Promise<ContactRecordMutationState> {
   const shell = await getDashboardShellData();
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event || shell.activeEvent?.id !== event.id) notFound();
@@ -221,22 +228,19 @@ export async function mergeDirectoryPeopleAction(eventSlug: string, formData: Fo
     secondPersonId: stringValue(formData, "secondPersonId"),
     primaryPersonId: stringValue(formData, "primaryPersonId"),
   });
-  let errorMessage: string | null = parsed.success ? null : "Choose a valid primary person for this merge.";
-  if (parsed.success) {
-    const duplicatePersonId =
-      parsed.data.primaryPersonId === parsed.data.firstPersonId
-        ? parsed.data.secondPersonId
-        : parsed.data.firstPersonId;
-    try {
-      await mergeDirectoryPeople(getDatabaseClient(), event.id, parsed.data.primaryPersonId, duplicatePersonId);
-    } catch (error) {
-      errorMessage = error instanceof RepositoryError ? error.message : "The duplicate people could not be merged.";
-    }
+  if (!parsed.success) return { status: "error", message: "Choose a valid primary person for this merge." };
+
+  const duplicatePersonId =
+    parsed.data.primaryPersonId === parsed.data.firstPersonId ? parsed.data.secondPersonId : parsed.data.firstPersonId;
+  try {
+    await mergeDirectoryPeople(getDatabaseClient(), event.id, parsed.data.primaryPersonId, duplicatePersonId);
+  } catch (error) {
+    const message = error instanceof RepositoryError ? error.message : "The duplicate people could not be merged.";
+    return { status: "error", message };
   }
 
-  if (errorMessage) redirect(`${contactsPath(event.slug)}?error=${encodeURIComponent(errorMessage)}`);
   revalidatePath(contactsPath(event.slug));
-  redirect(`${contactsPath(event.slug)}?notice=${encodeURIComponent("Duplicate people merged into one record.")}`);
+  return { status: "success", message: "Duplicate people merged into one record." };
 }
 
 const directorySegmentSchema = z.object({
@@ -247,7 +251,11 @@ const directorySegmentSchema = z.object({
   eventId: z.union([z.literal(""), z.uuid("The selected event is invalid.")]),
 });
 
-export async function saveDirectorySegmentAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function saveDirectorySegmentAction(
+  eventSlug: string,
+  _previousState: ContactRecordMutationState,
+  formData: FormData,
+): Promise<ContactRecordMutationState> {
   const shell = await getDashboardShellData();
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event || shell.activeEvent?.id !== event.id) notFound();
@@ -260,9 +268,7 @@ export async function saveDirectorySegmentAction(eventSlug: string, formData: Fo
     eventId: stringValue(formData, "participatedEventId"),
   });
   if (!parsed.success) {
-    redirect(
-      `${contactsPath(event.slug)}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid segment.")}`,
-    );
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid segment." };
   }
 
   let segmentId = "";
@@ -280,10 +286,9 @@ export async function saveDirectorySegmentAction(eventSlug: string, formData: Fo
     segmentId = segment.id;
   } catch (error) {
     const message = error instanceof RepositoryError ? error.message : "The segment could not be saved.";
-    redirect(`${contactsPath(event.slug)}?error=${encodeURIComponent(message)}`);
+    return { status: "error", message };
   }
 
   revalidatePath(contactsPath(event.slug));
-  const destination = new URLSearchParams({ segment: segmentId, notice: "Segment saved." });
-  redirect(`${contactsPath(event.slug)}?${destination.toString()}`);
+  return { status: "success", message: "Segment saved.", recordId: segmentId };
 }

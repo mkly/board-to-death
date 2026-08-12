@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { EventType } from "@/generated/prisma/client";
+import { EventType } from "@/generated/prisma/enums";
 
 import type { EventSettingsSnapshot, MutationResult } from "../types";
 
@@ -25,6 +25,13 @@ const push = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("../actions", () => actionMocks);
+vi.mock("./create-event-wizard", () => ({
+  CreateEventWizard: ({ action }: { readonly action: (formData: FormData) => Promise<void> }) => (
+    <button type="button" onClick={() => void action(new FormData())}>
+      Create event
+    </button>
+  ),
+}));
 
 import { EventSettingsWorkspace } from "./event-settings-workspace";
 
@@ -128,7 +135,7 @@ describe("EventSettingsWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New event" }));
     await act(async () => {
-      fireEvent.submit(screen.getByRole("button", { name: "Create event" }).closest("form") as HTMLFormElement);
+      fireEvent.click(screen.getByRole("button", { name: "Create event" }));
     });
 
     await waitFor(() =>

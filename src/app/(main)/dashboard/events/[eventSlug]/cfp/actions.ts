@@ -35,12 +35,13 @@ async function requireAuthorizedEvent(eventSlug: string): Promise<AuthorizedCfpE
   };
 }
 
-function destination(eventSlug: string, result: { readonly notice?: string; readonly error?: string }): string {
-  const search = new URLSearchParams();
-  if (result.notice) search.set("notice", result.notice);
-  if (result.error) search.set("error", result.error);
-  const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/cfp${suffix}`;
+export interface CfpActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+function cfpPath(eventSlug: string): string {
+  return `/dashboard/events/${encodeURIComponent(eventSlug)}/cfp`;
 }
 
 function errorMessage(error: unknown): string {
@@ -49,12 +50,12 @@ function errorMessage(error: unknown): string {
   return "The CFP form could not be updated. Try again.";
 }
 
-function refreshAndRedirect(eventSlug: string, notice: string): never {
-  revalidatePath(destination(eventSlug, {}));
-  redirect(destination(eventSlug, { notice }));
+function succeed(eventSlug: string, message: string): CfpActionState {
+  revalidatePath(cfpPath(eventSlug));
+  return { status: "success", message };
 }
 
-export async function createCfpFormDraft(eventSlug: string): Promise<never> {
+export async function createCfpFormDraft(eventSlug: string): Promise<CfpActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
 
   const client = getDatabaseClient();
@@ -116,20 +117,20 @@ export async function createCfpFormDraft(eventSlug: string): Promise<never> {
       },
     });
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return { status: "error", message: errorMessage(error) };
   }
 
   redirect(`/dashboard/events/${encodeURIComponent(event.slug)}/cfp/forms/${created.formId}/setup`);
 }
 
-export async function duplicateCfpForm(eventSlug: string, formId: string): Promise<never> {
+export async function duplicateCfpForm(eventSlug: string, formId: string): Promise<CfpActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await new CfpFormRepository(getDatabaseClient()).duplicate(event.id, formId, `draft-${randomUUID()}`);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return { status: "error", message: errorMessage(error) };
   }
-  return refreshAndRedirect(event.slug, "CFP form duplicated as a new draft.");
+  return succeed(event.slug, "CFP form duplicated as a new draft.");
 }
 
 async function transitionCfpForm(
@@ -137,7 +138,7 @@ async function transitionCfpForm(
   formId: string,
   status: CfpPolicyStatus,
   notice: string,
-): Promise<never> {
+): Promise<CfpActionState> {
   const event = await requireAuthorizedEvent(eventSlug);
   try {
     await new CfpPolicyRepository(getDatabaseClient()).transitionByForm(
@@ -147,19 +148,19 @@ async function transitionCfpForm(
       event.administratorId,
     );
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return { status: "error", message: errorMessage(error) };
   }
-  return refreshAndRedirect(event.slug, notice);
+  return succeed(event.slug, notice);
 }
 
-export async function closeCfpForm(eventSlug: string, formId: string): Promise<never> {
+export async function closeCfpForm(eventSlug: string, formId: string): Promise<CfpActionState> {
   return transitionCfpForm(eventSlug, formId, CfpPolicyStatus.CLOSED, "CFP form closed.");
 }
 
-export async function reopenCfpForm(eventSlug: string, formId: string): Promise<never> {
+export async function reopenCfpForm(eventSlug: string, formId: string): Promise<CfpActionState> {
   return transitionCfpForm(eventSlug, formId, CfpPolicyStatus.PUBLISHED, "CFP form reopened.");
 }
 
-export async function archiveCfpForm(eventSlug: string, formId: string): Promise<never> {
+export async function archiveCfpForm(eventSlug: string, formId: string): Promise<CfpActionState> {
   return transitionCfpForm(eventSlug, formId, CfpPolicyStatus.ARCHIVED, "CFP form archived.");
 }

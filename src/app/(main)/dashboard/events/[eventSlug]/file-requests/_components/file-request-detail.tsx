@@ -1,26 +1,22 @@
 import Link from "next/link";
 
-import { Archive, ArchiveRestore, ArrowLeft, Download, FileUp, Send } from "lucide-react";
+import { ArrowLeft, Download, FileUp } from "lucide-react";
 
-import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { FileRequestVersion } from "@/generated/prisma/client";
 import type { AssignmentWithContext, FileRequestWithVersion } from "@/server/files/repositories";
 import type { StoredFileRecord } from "@/server/files/request-files";
 
 import {
-  archiveFileRequestAction,
-  assignFileRequestAction,
-  resendFulfillmentLinkAction,
-  restoreFileRequestAction,
-  withdrawAssignmentAction,
-} from "../actions";
+  ArchiveToggleButton,
+  AssignRequestForm,
+  ResendLinkButton,
+  WithdrawAssignmentButton,
+} from "./file-request-action-buttons";
 import { FileRequestFormSheet } from "./file-request-form-sheet";
 import { contentTypeLabel, formatBytes, TARGET_KIND_LABELS } from "./file-request-options";
 
@@ -58,8 +54,6 @@ export function FileRequestDetail({
   assignments,
   files,
   targets,
-  notice,
-  error,
 }: {
   readonly event: { readonly name: string; readonly slug: string };
   readonly request: FileRequestWithVersion;
@@ -67,8 +61,6 @@ export function FileRequestDetail({
   readonly assignments: readonly AssignmentWithContext[];
   readonly files: readonly AssignmentFiles[];
   readonly targets: readonly AssignableTarget[];
-  readonly notice?: string;
-  readonly error?: string;
 }) {
   const indexHref = `/dashboard/events/${encodeURIComponent(event.slug)}/file-requests`;
   const filesByAssignment = new Map(files.map((entry) => [entry.assignmentId, entry.files]));
@@ -120,33 +112,9 @@ export function FileRequestDetail({
               replacementPolicy: version.replacementPolicy,
             }}
           />
-          <form
-            action={
-              archived
-                ? restoreFileRequestAction.bind(null, event.slug, request.id)
-                : archiveFileRequestAction.bind(null, event.slug, request.id)
-            }
-          >
-            <Button type="submit" variant="outline">
-              {archived ? <ArchiveRestore data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
-              {archived ? "Restore" : "Archive"}
-            </Button>
-          </form>
+          <ArchiveToggleButton archived={archived} eventSlug={event.slug} requestId={request.id} />
         </div>
       </header>
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>File request updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to update this file request</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -208,31 +176,13 @@ export function FileRequestDetail({
               Every eligible target already has an assignment for this request.
             </p>
           ) : (
-            <form
-              action={assignFileRequestAction.bind(null, event.slug, request.id)}
-              className="flex flex-col gap-3 sm:flex-row sm:items-end"
-            >
-              <input name="targetKind" type="hidden" value={request.targetKind} />
-              <Field className="sm:max-w-sm">
-                <FieldLabel htmlFor="assign-target">Target</FieldLabel>
-                <FormSelect
-                  className="w-full"
-                  disabled={archived}
-                  id="assign-target"
-                  name="targetId"
-                  required
-                  placeholder="Choose a target…"
-                  options={targets.map((target) => ({
-                    value: target.id,
-                    label: `${target.label} — ${target.description}`,
-                  }))}
-                />
-                <FieldDescription>The assignment captures today's upload rules.</FieldDescription>
-              </Field>
-              <Button disabled={archived} type="submit">
-                Assign
-              </Button>
-            </form>
+            <AssignRequestForm
+              archived={archived}
+              eventSlug={event.slug}
+              requestId={request.id}
+              targetKind={request.targetKind}
+              targets={targets}
+            />
           )}
         </CardContent>
       </Card>
@@ -312,20 +262,17 @@ export function FileRequestDetail({
                         {assignment.status === "WITHDRAWN" ? null : (
                           <div className="flex justify-end gap-2">
                             {assignment.target.kind === "CONTACT" || assignment.target.kind === "GROUP" ? (
-                              <form
-                                action={resendFulfillmentLinkAction.bind(null, event.slug, request.id, assignment.id)}
-                              >
-                                <Button size="sm" type="submit" variant="outline">
-                                  <Send data-icon="inline-start" />
-                                  Resend link
-                                </Button>
-                              </form>
+                              <ResendLinkButton
+                                assignmentId={assignment.id}
+                                eventSlug={event.slug}
+                                requestId={request.id}
+                              />
                             ) : null}
-                            <form action={withdrawAssignmentAction.bind(null, event.slug, request.id, assignment.id)}>
-                              <Button size="sm" type="submit" variant="outline">
-                                Withdraw
-                              </Button>
-                            </form>
+                            <WithdrawAssignmentButton
+                              assignmentId={assignment.id}
+                              eventSlug={event.slug}
+                              requestId={request.id}
+                            />
                           </div>
                         )}
                       </TableCell>

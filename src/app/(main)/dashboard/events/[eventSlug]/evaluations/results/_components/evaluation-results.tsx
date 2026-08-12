@@ -1,14 +1,19 @@
-import { ChartNoAxesCombinedIcon, CircleAlertIcon, CircleCheckIcon, MoveRightIcon, SendIcon } from "lucide-react";
+"use client";
+
+import { useState, useTransition } from "react";
+
+import { ChartNoAxesCombinedIcon, CircleCheckIcon, MoveRightIcon, SendIcon } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CfpSubmissionStatus, EvaluationDecisionOutcome } from "@/generated/prisma/client";
+import { CfpSubmissionStatus, EvaluationDecisionOutcome } from "@/generated/prisma/enums";
+import { actionResultToast } from "@/hooks/use-action-toast";
 import type { EvaluationResultsWorkspace, EvaluationSubmissionResult } from "@/server/evaluations/results";
 
 import {
@@ -21,8 +26,6 @@ import {
 interface EvaluationResultsProps {
   readonly event: { readonly name: string; readonly slug: string };
   readonly workspace: EvaluationResultsWorkspace;
-  readonly notice?: string;
-  readonly error?: string;
 }
 
 function scoreLabel(score: number | null): string {
@@ -46,13 +49,29 @@ function ProgressionAction({
       <span className="text-muted-foreground text-xs">{hasNextRound ? "Complete reviews first" : "Final round"}</span>
     );
   }
+  return <AdvanceButton eventSlug={eventSlug} roundId={roundId} submissionId={submission.id} />;
+}
+
+function AdvanceButton({
+  eventSlug,
+  roundId,
+  submissionId,
+}: {
+  readonly eventSlug: string;
+  readonly roundId: string;
+  readonly submissionId: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const advance = () => {
+    startTransition(async () => {
+      actionResultToast(await advanceEvaluationSubmission(eventSlug, roundId, submissionId));
+    });
+  };
   return (
-    <form action={advanceEvaluationSubmission.bind(null, eventSlug, roundId, submission.id)}>
-      <Button type="submit" size="sm">
-        <MoveRightIcon data-icon="inline-start" />
-        Advance
-      </Button>
-    </form>
+    <Button type="button" size="sm" disabled={pending} onClick={advance}>
+      {pending ? <Spinner data-icon="inline-start" /> : <MoveRightIcon data-icon="inline-start" />}
+      Advance
+    </Button>
   );
 }
 
@@ -86,6 +105,16 @@ function DecisionAction({
   readonly hasNextRound: boolean;
 }) {
   const expectedDecisionNumber = submission.decision?.decisionNumber ?? 0;
+  const [pendingOutcome, setPendingOutcome] = useState<EvaluationDecisionOutcome | null>(null);
+  const [pending, startTransition] = useTransition();
+  const decide = (outcome: EvaluationDecisionOutcome) => {
+    setPendingOutcome(outcome);
+    startTransition(async () => {
+      actionResultToast(
+        await recordEvaluationDecision(eventSlug, roundId, submission.id, outcome, expectedDecisionNumber),
+      );
+    });
+  };
   if (submission.availableDecisionOutcomes.length === 0) {
     if (submission.decision) {
       return (
@@ -115,21 +144,17 @@ function DecisionAction({
       ) : null}
       <div className="flex flex-wrap gap-1">
         {submission.availableDecisionOutcomes.map((outcome) => (
-          <form
+          <Button
             key={outcome}
-            action={recordEvaluationDecision.bind(
-              null,
-              eventSlug,
-              roundId,
-              submission.id,
-              outcome,
-              expectedDecisionNumber,
-            )}
+            type="button"
+            size="xs"
+            variant={decisionButtonVariant(outcome)}
+            disabled={pending}
+            onClick={() => decide(outcome)}
           >
-            <Button type="submit" size="xs" variant={decisionButtonVariant(outcome)}>
-              {decisionActionLabels[outcome]}
-            </Button>
-          </form>
+            {pending && pendingOutcome === outcome ? <Spinner data-icon="inline-start" /> : null}
+            {decisionActionLabels[outcome]}
+          </Button>
         ))}
       </div>
     </div>
@@ -145,27 +170,54 @@ function SpeakerInvitationAction({
   readonly roundId: string;
   readonly submission: EvaluationSubmissionResult;
 }) {
+  const [pending, startTransition] = useTransition();
   if (submission.status === CfpSubmissionStatus.CONFIRMED) {
     return <Badge variant="secondary">All speakers confirmed</Badge>;
   }
   if (submission.status !== CfpSubmissionStatus.ACCEPTED) return null;
 
+  const invite = () => {
+    startTransition(async () => {
+      actionResultToast(await inviteAcceptedSpeakers(eventSlug, roundId, submission.id));
+    });
+  };
   return (
     <div className="flex min-w-36 flex-col items-start gap-2">
       <Badge variant="outline">
         {submission.confirmedParticipantCount}/{submission.participantCount} confirmed
       </Badge>
-      <form action={inviteAcceptedSpeakers.bind(null, eventSlug, roundId, submission.id)}>
-        <Button type="submit" size="xs" variant="outline">
-          <SendIcon data-icon="inline-start" />
-          {submission.confirmedParticipantCount > 0 ? "Reissue invites" : "Invite speakers"}
-        </Button>
-      </form>
+      <Button type="button" size="xs" variant="outline" disabled={pending} onClick={invite}>
+        {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
+        {submission.confirmedParticipantCount > 0 ? "Reissue invites" : "Invite speakers"}
+      </Button>
     </div>
   );
 }
 
-export function EvaluationResults({ event, workspace, notice, error }: EvaluationResultsProps) {
+function CloseRoundButton({
+  eventSlug,
+  roundId,
+  canClose,
+}: {
+  readonly eventSlug: string;
+  readonly roundId: string;
+  readonly canClose: boolean;
+}) {
+  const [pending, startTransition] = useTransition();
+  const close = () => {
+    startTransition(async () => {
+      actionResultToast(await closeEvaluationRound(eventSlug, roundId));
+    });
+  };
+  return (
+    <Button type="button" variant="outline" disabled={!canClose || pending} onClick={close}>
+      {pending ? <Spinner data-icon="inline-start" /> : <CircleCheckIcon data-icon="inline-start" />}
+      Close round
+    </Button>
+  );
+}
+
+export function EvaluationResults({ event, workspace }: EvaluationResultsProps) {
   const completedReviews = workspace.submissions.reduce(
     (total, submission) => total + submission.completedReviewerCount,
     0,
@@ -208,21 +260,6 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
         ) : null}
       </header>
 
-      {notice ? (
-        <Alert>
-          <CircleCheckIcon />
-          <AlertTitle>Evaluation workflow updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <CircleAlertIcon />
-          <AlertTitle>Evaluation workflow not updated</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
       {workspace.workflow && workspace.selectedRoundId ? (
         <Card>
           <CardHeader>
@@ -248,12 +285,11 @@ export function EvaluationResults({ event, workspace, notice, error }: Evaluatio
                   ? "Every active reviewer assignment is complete."
                   : `${workspace.workflow.incompleteAssignmentCount} active reviewer assignments remain incomplete.`}
               </span>
-              <form action={closeEvaluationRound.bind(null, event.slug, workspace.selectedRoundId)}>
-                <Button type="submit" variant="outline" disabled={!workspace.workflow.canClose}>
-                  <CircleCheckIcon data-icon="inline-start" />
-                  Close round
-                </Button>
-              </form>
+              <CloseRoundButton
+                eventSlug={event.slug}
+                roundId={workspace.selectedRoundId}
+                canClose={workspace.workflow.canClose}
+              />
             </CardFooter>
           ) : null}
         </Card>

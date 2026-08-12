@@ -1,8 +1,7 @@
 import Link from "next/link";
 
-import { ArchiveRestore, Download, FileUp } from "lucide-react";
+import { Download, FileUp } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,8 +12,8 @@ import { cn } from "@/lib/utils";
 import type { FileRequestWithVersion } from "@/server/files/repositories";
 import type { EventFileLibraryEntry } from "@/server/files/request-files";
 
-import { restoreFileRequestAction } from "../actions";
 import { EventFilesLibrary } from "./event-files-library";
+import { RestoreRequestButton } from "./file-request-action-buttons";
 import { FileRequestFormSheet } from "./file-request-form-sheet";
 import { contentTypeLabel, formatBytes, TARGET_KIND_LABELS } from "./file-request-options";
 
@@ -50,15 +49,11 @@ export function FileRequestsIndex({
   requests,
   files,
   activeTab,
-  notice,
-  error,
 }: {
   readonly event: { readonly name: string; readonly slug: string };
   readonly requests: readonly FileRequestWithVersion[];
   readonly files: readonly EventFileLibraryEntry[];
   readonly activeTab: string;
-  readonly notice?: string;
-  readonly error?: string;
 }) {
   const counts = new Map(
     TABS.map((tab) => [
@@ -97,19 +92,6 @@ export function FileRequestsIndex({
           <FileRequestFormSheet eventSlug={event.slug} />
         </div>
       </header>
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>File requests updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to update file requests</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
 
       <nav aria-label="File request types" className="flex flex-wrap gap-1 border-b">
         {TABS.map((tab) => (
@@ -204,12 +186,7 @@ export function FileRequestsIndex({
                         </TableCell>
                         <TableCell className="text-right">
                           {request.archivedAt ? (
-                            <form action={restoreFileRequestAction.bind(null, event.slug, request.id)}>
-                              <Button size="sm" type="submit" variant="outline">
-                                <ArchiveRestore data-icon="inline-start" />
-                                Restore
-                              </Button>
-                            </form>
+                            <RestoreRequestButton eventSlug={event.slug} requestId={request.id} />
                           ) : (
                             <Button asChild size="sm" variant="outline">
                               <Link href={requestHref(event.slug, request.id)}>Manage</Link>

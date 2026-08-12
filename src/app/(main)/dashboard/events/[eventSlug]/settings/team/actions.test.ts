@@ -12,12 +12,8 @@ const mocks = vi.hoisted(() => ({
 
 const database = { event: { findUnique: mocks.findEvent } };
 
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
-vi.mock("next/navigation", () => ({
-  redirect: vi.fn((path: string) => {
-    throw new Error(`NEXT_REDIRECT:${path}`);
-  }),
-}));
 vi.mock("@/server/auth/admin-access", () => ({ isAuthorizedAdminSession: mocks.isAuthorizedAdminSession }));
 vi.mock("@/server/auth/auth", () => ({
   auth: { api: { getSession: mocks.getSession, signInMagicLink: mocks.signInMagicLink } },
@@ -55,7 +51,10 @@ describe("event invitation magic links", () => {
     formData.set("displayName", "Invitee");
     formData.set("role", "REVIEWER");
 
-    await expect(inviteEventMember("event-one", formData)).rejects.toThrow("NEXT_REDIRECT:");
+    await expect(inviteEventMember("event-one", { status: "idle" }, formData)).resolves.toEqual({
+      status: "success",
+      message: "Invitation sent to invitee@example.test.",
+    });
 
     expect(mocks.provisionUser).toHaveBeenCalledWith(database, {
       email: "invitee@example.test",
@@ -67,7 +66,10 @@ describe("event invitation magic links", () => {
   });
 
   test("provisions a missing invitee before resending a magic link", async () => {
-    await expect(resendEventInvitation("event-one", "invitation-id")).rejects.toThrow("NEXT_REDIRECT:");
+    await expect(resendEventInvitation("event-one", "invitation-id")).resolves.toEqual({
+      status: "success",
+      message: "Invitation sent again with a fresh link.",
+    });
 
     expect(mocks.provisionUser).toHaveBeenCalledWith(database, {
       email: "invitee@example.test",

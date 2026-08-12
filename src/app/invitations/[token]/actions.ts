@@ -9,7 +9,16 @@ import { getDatabaseClient } from "@/server/database/client";
 import { EventInvitationService } from "@/server/event-memberships";
 import { RepositoryError } from "@/server/events/repositories";
 
-export async function acceptEventInvitation(token: string): Promise<never> {
+export interface InvitationActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+export async function acceptEventInvitation(
+  token: string,
+  _previousState: InvitationActionState,
+  _formData: FormData,
+): Promise<InvitationActionState> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/auth/v1/login");
 
@@ -21,9 +30,9 @@ export async function acceptEventInvitation(token: string): Promise<never> {
       error instanceof RepositoryError
         ? error.message
         : "The invitation could not be accepted. Ask the organizer for a new link.";
-    redirect(`/invitations/${encodeURIComponent(token)}?error=${encodeURIComponent(message)}`);
+    return { status: "error", message };
   }
 
-  if (accepted.role === EventMembershipRole.REVIEWER) redirect("/reviews?invited=1");
-  redirect(`/dashboard/events/${encodeURIComponent(accepted.eventSlug)}/settings/team?notice=Invitation+accepted.`);
+  if (accepted.role === EventMembershipRole.REVIEWER) redirect("/reviews");
+  redirect(`/dashboard/events/${encodeURIComponent(accepted.eventSlug)}/settings/team`);
 }

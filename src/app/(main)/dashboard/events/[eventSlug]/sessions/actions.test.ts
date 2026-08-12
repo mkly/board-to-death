@@ -5,7 +5,7 @@ import {
   CustomFieldEntityType,
   CustomFieldType,
   ProgramSessionContentApprovalStatus,
-} from "@/generated/prisma/client";
+} from "@/generated/prisma/enums";
 import { customFieldFormPrefix } from "@/lib/custom-fields";
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
 }));
 
+vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 vi.mock("@/config/runtime-env.server", () => ({
@@ -40,6 +41,9 @@ vi.mock("@/server/custom-fields/repositories", async (importOriginal) => {
 });
 vi.mock("@/server/database/client", () => ({
   getDatabaseClient: () => ({ event: { findFirst: mocks.findEvent } }),
+}));
+vi.mock("@/server/infrastructure/configured-file-storage", () => ({
+  getConfiguredFileStorage: () => ({ put: vi.fn() }),
 }));
 vi.mock("@/server/infrastructure", () => ({
   contentDisposition: vi.fn(),

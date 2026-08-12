@@ -2,17 +2,20 @@
 
 import { useMemo, useState } from "react";
 
-import { ExternalLink, Users } from "lucide-react";
+import { ExternalLink, Search, Users } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
 import { cn } from "@/lib/utils";
+
+import { EmbedHeader } from "./embed-kit";
+
+const FILTER_LABEL_CLASS = "font-medium text-[11px] text-muted-foreground uppercase tracking-wide";
 
 export interface PublishedSpeakerGalleryItem {
   readonly id: string;
@@ -75,46 +78,54 @@ export function PublishedSpeakerGallery({
 
   return (
     <section aria-labelledby="speaker-gallery-title" className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <header className="flex flex-col gap-1">
-        <p className="text-muted-foreground text-sm">{eventName}</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-tight" id="speaker-gallery-title">
-          Speaker gallery
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Meet the people behind the published program and explore their sessions.
-        </p>
-      </header>
+      <EmbedHeader
+        eyebrow="Speakers"
+        title={eventName}
+        titleId="speaker-gallery-title"
+        description="Meet the people behind the published program and explore their sessions."
+      />
 
       {showSearch || showOrganization ? (
-        <FieldGroup className="rounded-xl border bg-card p-3 sm:flex-row sm:items-end">
-          {showSearch ? (
-            <Field>
-              <FieldLabel htmlFor="speaker-gallery-search">Search speakers</FieldLabel>
-              <Input
-                id="speaker-gallery-search"
-                onChange={(event) => setSearch(event.currentTarget.value)}
-                placeholder="Name, organization, or session"
-                type="search"
-                value={search}
-              />
-            </Field>
-          ) : null}
-          {showOrganization ? (
-            <Field className="sm:max-w-64">
-              <FieldLabel htmlFor="speaker-gallery-organization">Organization</FieldLabel>
-              <FormSelect
-                className="w-full"
-                id="speaker-gallery-organization"
-                onValueChange={setOrganization}
-                value={organization}
-                options={[
-                  { value: "", label: "All organizations" },
-                  ...organizations.map((option) => ({ value: option, label: option })),
-                ]}
-              />
-            </Field>
-          ) : null}
-        </FieldGroup>
+        <search>
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-y py-3">
+            {showSearch ? (
+              <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="speaker-gallery-search">
+                  Search speakers
+                </label>
+                <InputGroup>
+                  <InputGroupInput
+                    id="speaker-gallery-search"
+                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    placeholder="Name, organization, or session"
+                    type="search"
+                    value={search}
+                  />
+                  <InputGroupAddon align="inline-start">
+                    <Search aria-hidden="true" />
+                  </InputGroupAddon>
+                </InputGroup>
+              </div>
+            ) : null}
+            {showOrganization ? (
+              <div className="flex flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="speaker-gallery-organization">
+                  Organization
+                </label>
+                <FormSelect
+                  className="min-w-48"
+                  id="speaker-gallery-organization"
+                  onValueChange={setOrganization}
+                  value={organization}
+                  options={[
+                    { value: "", label: "All organizations" },
+                    ...organizations.map((option) => ({ value: option, label: option })),
+                  ]}
+                />
+              </div>
+            ) : null}
+          </div>
+        </search>
       ) : null}
 
       <p aria-live="polite" className="sr-only" role="status">
@@ -129,12 +140,12 @@ export function PublishedSpeakerGallery({
           {visibleSpeakers.map((speaker) => (
             <li className="min-w-0" key={speaker.id}>
               <Card className="h-full" size={density === "compact" ? "sm" : "default"}>
-                <CardHeader className="items-center text-center">
-                  <Avatar aria-label={`${speaker.name} profile image`} className="size-20" role="img">
+                <CardHeader className="grid grid-cols-[auto_1fr] items-center gap-x-3">
+                  <Avatar aria-label={`${speaker.name} profile image`} className="row-span-2 size-14" role="img">
                     {speaker.photoHref ? <AvatarImage alt="" src={speaker.photoHref} /> : null}
                     <AvatarFallback aria-hidden="true">{speaker.initials}</AvatarFallback>
                   </Avatar>
-                  <CardTitle className="min-w-0 break-words">{speaker.name}</CardTitle>
+                  <CardTitle className="min-w-0 break-words font-heading">{speaker.name}</CardTitle>
                   <CardDescription className="min-w-0 break-words">
                     {[speaker.jobTitle, speaker.organization].filter(Boolean).join(" at ") || "Event speaker"}
                     {speaker.pronouns ? ` · ${speaker.pronouns}` : ""}
@@ -179,7 +190,7 @@ export function PublishedSpeakerGallery({
           ))}
         </ul>
       ) : (
-        <Empty className="border">
+        <Empty className="border border-dashed">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Users aria-hidden="true" />

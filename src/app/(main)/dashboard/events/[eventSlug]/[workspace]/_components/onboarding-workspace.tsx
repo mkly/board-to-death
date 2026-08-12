@@ -1,38 +1,32 @@
 import type { ReactNode } from "react";
 
-import Link from "next/link";
-
-import { BellOff, BellRing, CalendarClock, Check, ClipboardCheck, RotateCcw, UserPlus, UserX } from "lucide-react";
+import { BellOff, ClipboardCheck } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
-import { FormSelect } from "@/components/form-select";
 import { SpeakerTaskFileComments } from "@/components/speaker-task-file-comments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import type { Prisma } from "@/generated/prisma/client";
 import { getDatabaseClient } from "@/server/database/client";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
 import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
 
+import { commentOnSpeakerTaskFile } from "../actions";
 import {
-  activateSpeakerTaskReminderRule,
-  approveSpeakerTask,
-  assignSpeakerTasks,
-  cancelSpeakerTaskReminderRule,
-  commentOnSpeakerTaskFile,
-  requestSpeakerTaskRevision,
-  saveSpeakerTaskReminderRule,
-  setSpeakerTaskReminderOptOut,
-  updateSpeakerTaskDueDate,
-  withdrawSpeakerTask,
-} from "../actions";
+  ApproveTaskButton,
+  AssignmentDueDateForm,
+  AssignTasksForm,
+  ReminderOptOutButton,
+  ReminderRuleActivateButton,
+  ReminderRuleCancelButton,
+  ReminderRuleCreateForm,
+  ReminderRuleEditForm,
+  RevisionRequestForm,
+  WithdrawTaskButton,
+} from "./onboarding-forms";
 
 interface OnboardingWorkspaceProps {
   readonly event: {
@@ -122,10 +116,14 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
   ]);
   const activeAssignments = assignments.filter(({ status }) => status !== "WITHDRAWN");
   const completedAssignments = assignments.filter(({ status }) => status === "APPROVED");
-  const assignAction = assignSpeakerTasks.bind(null, event.slug);
   const eligibleReminderSpeakers = new Map(
     reminderCandidates.map((candidate) => [candidate.speakerId, speakerName(candidate.speaker.profileVersions)]),
   );
+  const definitionOptions = definitions.flatMap((definition) => {
+    const latest = definition.versions.at(-1);
+    return latest ? [{ value: definition.id, label: latest.title }] : [];
+  });
+  const templateOptions = templates.map((template) => ({ value: template.id, label: template.name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -163,77 +161,12 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
         </Card>
       </div>
 
-      <form action={assignAction}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Assign a task</CardTitle>
-            <CardDescription>
-              Select one speaker or an accepted-speaker cohort. Existing active assignments are skipped.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {definitions.length === 0 || speakers.length === 0 ? (
-              <Empty className="border">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <UserPlus />
-                  </EmptyMedia>
-                  <EmptyTitle>Nothing to assign yet</EmptyTitle>
-                  <EmptyDescription>
-                    <Link href={`/dashboard/onboarding-tasks?event=${event.id}&create=1`}>Add a task definition</Link>{" "}
-                    and accept at least one speaker before assigning onboarding work.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="definitionId">Task</FieldLabel>
-                  <FormSelect
-                    id="definitionId"
-                    name="definitionId"
-                    required
-                    className="w-full"
-                    options={definitions.flatMap((definition) => {
-                      const latest = definition.versions.at(-1);
-                      return latest ? [{ value: definition.id, label: latest.title }] : [];
-                    })}
-                  />
-                  <FieldDescription>The latest definition version is assigned.</FieldDescription>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="assignmentDueAt">Due date</FieldLabel>
-                  <Input id="assignmentDueAt" name="dueAt" type="date" />
-                  <FieldDescription>Leave blank to use the task definition&apos;s default deadline.</FieldDescription>
-                </Field>
-                <FieldSet>
-                  <FieldLegend variant="label">Speakers</FieldLegend>
-                  <FieldDescription>Select every accepted speaker who should receive this task.</FieldDescription>
-                  <FieldGroup data-slot="checkbox-group" className="grid gap-3 sm:grid-cols-2">
-                    {speakers.map((speaker) => {
-                      const name = speakerName(speaker.profileVersions);
-                      return (
-                        <Field key={speaker.id} orientation="horizontal">
-                          <Checkbox id={`speaker-${speaker.id}`} name="speakerIds" value={speaker.id} />
-                          <FieldLabel htmlFor={`speaker-${speaker.id}`} className="font-normal">
-                            {name}
-                          </FieldLabel>
-                        </Field>
-                      );
-                    })}
-                  </FieldGroup>
-                </FieldSet>
-              </FieldGroup>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" disabled={definitions.length === 0 || speakers.length === 0}>
-              <UserPlus data-icon="inline-start" />
-              Assign selected
-            </Button>
-          </CardFooter>
-        </Card>
-      </form>
+      <AssignTasksForm
+        definitionOptions={definitionOptions}
+        eventId={event.id}
+        eventSlug={event.slug}
+        speakers={speakers.map((speaker) => ({ id: speaker.id, name: speakerName(speaker.profileVersions) }))}
+      />
 
       <Card>
         <CardHeader>
@@ -255,43 +188,7 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
               </EmptyHeader>
             </Empty>
           ) : (
-            <form action={saveSpeakerTaskReminderRule.bind(null, event.slug, null)}>
-              <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_10rem_10rem_auto] lg:items-end">
-                <Field>
-                  <FieldLabel htmlFor="new-reminder-name">Rule name</FieldLabel>
-                  <Input id="new-reminder-name" name="name" placeholder="One week before" required />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="new-reminder-template">Email template</FieldLabel>
-                  <FormSelect
-                    id="new-reminder-template"
-                    name="templateId"
-                    required
-                    options={templates.map((template) => ({ value: template.id, label: template.name }))}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="new-reminder-days">Days before</FieldLabel>
-                  <Input
-                    id="new-reminder-days"
-                    name="daysBeforeDue"
-                    type="number"
-                    min="0"
-                    step="1"
-                    defaultValue="7"
-                    required
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="new-reminder-time">Send time</FieldLabel>
-                  <Input id="new-reminder-time" name="sendAt" type="time" defaultValue="09:00" required />
-                </Field>
-                <Button type="submit" variant="outline">
-                  <BellRing data-icon="inline-start" />
-                  Add rule
-                </Button>
-              </FieldGroup>
-            </form>
+            <ReminderRuleCreateForm eventSlug={event.slug} templateOptions={templateOptions} />
           )}
 
           {reminderRules.length > 0 ? (
@@ -310,76 +207,24 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
               </TableHeader>
               <TableBody>
                 {reminderRules.map((rule) => {
-                  const saveAction = saveSpeakerTaskReminderRule.bind(null, event.slug, rule.id);
-                  const activateAction = activateSpeakerTaskReminderRule.bind(null, event.slug, rule.id);
-                  const cancelAction = cancelSpeakerTaskReminderRule.bind(null, event.slug, rule.id);
                   const cancelled = rule.cancelledAt !== null;
                   const status = reminderRuleStatus(rule.enabledAt, rule.cancelledAt);
                   return (
                     <TableRow key={rule.id}>
                       <TableCell colSpan={6}>
                         <div className="flex flex-col gap-3">
-                          <form
-                            action={saveAction}
-                            className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_8rem_8rem_auto] lg:items-end"
-                          >
-                            <Field>
-                              <FieldLabel htmlFor={`reminder-name-${rule.id}`} className="sr-only">
-                                Rule name
-                              </FieldLabel>
-                              <Input
-                                id={`reminder-name-${rule.id}`}
-                                name="name"
-                                defaultValue={rule.name}
-                                disabled={cancelled}
-                                required
-                              />
-                            </Field>
-                            <Field>
-                              <FieldLabel htmlFor={`reminder-template-${rule.id}`} className="sr-only">
-                                Email template
-                              </FieldLabel>
-                              <FormSelect
-                                id={`reminder-template-${rule.id}`}
-                                name="templateId"
-                                defaultValue={rule.templateId}
-                                disabled={cancelled}
-                                required
-                                options={templates.map((template) => ({ value: template.id, label: template.name }))}
-                              />
-                            </Field>
-                            <Field>
-                              <FieldLabel htmlFor={`reminder-days-${rule.id}`} className="sr-only">
-                                Days before
-                              </FieldLabel>
-                              <Input
-                                id={`reminder-days-${rule.id}`}
-                                name="daysBeforeDue"
-                                type="number"
-                                min="0"
-                                step="1"
-                                defaultValue={rule.daysBeforeDue}
-                                disabled={cancelled}
-                                required
-                              />
-                            </Field>
-                            <Field>
-                              <FieldLabel htmlFor={`reminder-time-${rule.id}`} className="sr-only">
-                                Send time
-                              </FieldLabel>
-                              <Input
-                                id={`reminder-time-${rule.id}`}
-                                name="sendAt"
-                                type="time"
-                                defaultValue={minuteValue(rule.sendAtMinute)}
-                                disabled={cancelled}
-                                required
-                              />
-                            </Field>
-                            <Button type="submit" size="sm" variant="outline" disabled={cancelled}>
-                              Save changes
-                            </Button>
-                          </form>
+                          <ReminderRuleEditForm
+                            eventSlug={event.slug}
+                            rule={{
+                              id: rule.id,
+                              name: rule.name,
+                              templateId: rule.templateId,
+                              daysBeforeDue: rule.daysBeforeDue,
+                              sendAtValue: minuteValue(rule.sendAtMinute),
+                              cancelled,
+                            }}
+                            templateOptions={templateOptions}
+                          />
                           <div className="flex flex-wrap items-center gap-3 text-sm">
                             <span>
                               {rule.daysBeforeDue} days before at {minuteValue(rule.sendAtMinute)}
@@ -390,19 +235,9 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                             </span>
                             <Badge variant={status.variant}>{status.label}</Badge>
                             {!rule.enabledAt && !cancelled ? (
-                              <form action={activateAction}>
-                                <Button type="submit" size="sm">
-                                  Activate
-                                </Button>
-                              </form>
+                              <ReminderRuleActivateButton eventSlug={event.slug} ruleId={rule.id} />
                             ) : null}
-                            {!cancelled ? (
-                              <form action={cancelAction}>
-                                <Button type="submit" size="sm" variant="destructive">
-                                  Cancel
-                                </Button>
-                              </form>
-                            ) : null}
+                            {!cancelled ? <ReminderRuleCancelButton eventSlug={event.slug} ruleId={rule.id} /> : null}
                           </div>
                         </div>
                       </TableCell>
@@ -454,16 +289,6 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                   const terminalDueDate = assignment.dueAt
                     ? dueDateValue(assignment.dueAt, event.timezone)
                     : "No due date";
-                  const dueAction = updateSpeakerTaskDueDate.bind(null, event.slug, assignment.id);
-                  const withdrawAction = withdrawSpeakerTask.bind(null, event.slug, assignment.id);
-                  const optOutAction = setSpeakerTaskReminderOptOut.bind(
-                    null,
-                    event.slug,
-                    assignment.id,
-                    !assignment.remindersOptedOut,
-                  );
-                  const approveAction = approveSpeakerTask.bind(null, event.slug, assignment.id);
-                  const revisionAction = requestSpeakerTaskRevision.bind(null, event.slug, assignment.id);
                   const latestSubmission = assignment.submissions.at(-1);
                   const response = latestSubmission?.response;
                   const responseObject = objectValue(response);
@@ -521,23 +346,12 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                         {terminal ? (
                           terminalDueDate
                         ) : (
-                          <form action={dueAction} className="flex items-center gap-2">
-                            <Field>
-                              <FieldLabel htmlFor={`due-${assignment.id}`} className="sr-only">
-                                Due date for {name}
-                              </FieldLabel>
-                              <Input
-                                id={`due-${assignment.id}`}
-                                name="dueAt"
-                                type="date"
-                                defaultValue={dueDateValue(assignment.dueAt, event.timezone)}
-                              />
-                            </Field>
-                            <Button type="submit" size="sm" variant="outline" aria-label={`Save due date for ${name}`}>
-                              <CalendarClock data-icon="inline-start" />
-                              Save
-                            </Button>
-                          </form>
+                          <AssignmentDueDateForm
+                            assignmentId={assignment.id}
+                            defaultValue={dueDateValue(assignment.dueAt, event.timezone)}
+                            eventSlug={event.slug}
+                            speakerName={name}
+                          />
                         )}
                       </TableCell>
                       <TableCell>
@@ -545,48 +359,24 @@ export async function OnboardingWorkspace({ event }: OnboardingWorkspaceProps) {
                           <div className="flex flex-wrap justify-end gap-2">
                             {assignment.status === "SUBMITTED" ? (
                               <>
-                                <form action={approveAction}>
-                                  <Button type="submit" size="sm">
-                                    <Check data-icon="inline-start" />
-                                    Approve
-                                  </Button>
-                                </form>
-                                <form action={revisionAction} className="flex min-w-64 flex-col gap-2">
-                                  <Field>
-                                    <FieldLabel htmlFor={`feedback-${assignment.id}`} className="sr-only">
-                                      Revision feedback for {name}
-                                    </FieldLabel>
-                                    <Textarea
-                                      id={`feedback-${assignment.id}`}
-                                      name="feedback"
-                                      placeholder="Explain what needs to change"
-                                      rows={2}
-                                      required
-                                    />
-                                  </Field>
-                                  <Button type="submit" size="sm" variant="outline" className="self-end">
-                                    <RotateCcw data-icon="inline-start" />
-                                    Request revision
-                                  </Button>
-                                </form>
+                                <ApproveTaskButton assignmentId={assignment.id} eventSlug={event.slug} />
+                                <RevisionRequestForm
+                                  assignmentId={assignment.id}
+                                  eventSlug={event.slug}
+                                  speakerName={name}
+                                />
                               </>
                             ) : null}
-                            <form action={optOutAction}>
-                              <Button type="submit" size="sm" variant="outline">
-                                {assignment.remindersOptedOut ? "Resume reminders" : "Pause reminders"}
-                              </Button>
-                            </form>
-                            <form action={withdrawAction}>
-                              <Button
-                                type="submit"
-                                size="sm"
-                                variant="destructive"
-                                aria-label={`Withdraw task for ${name}`}
-                              >
-                                <UserX data-icon="inline-start" />
-                                Withdraw
-                              </Button>
-                            </form>
+                            <ReminderOptOutButton
+                              assignmentId={assignment.id}
+                              eventSlug={event.slug}
+                              optedOut={assignment.remindersOptedOut}
+                            />
+                            <WithdrawTaskButton
+                              assignmentId={assignment.id}
+                              eventSlug={event.slug}
+                              speakerName={name}
+                            />
                           </div>
                         )}
                       </TableCell>

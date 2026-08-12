@@ -7,12 +7,16 @@ import { Temporal } from "temporal-polyfill";
 
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
-import { AuthorizationError } from "@/server/authorization/policy";
 import { getDatabaseClient } from "@/server/database/client";
 import { RepositoryError } from "@/server/events/repositories";
 import { addSpeakerTaskFileComment } from "@/server/speakers/file-comments";
 import { SpeakerOnboardingRepository } from "@/server/speakers/onboarding";
 import { SpeakerTaskReminderRepository } from "@/server/speakers/reminders";
+
+export interface OnboardingActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
 
 function fieldValue(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -49,32 +53,14 @@ function timeField(formData: FormData, name: string): number {
 
 async function requireAdminEvent(eventSlug: string) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) {
-    throw new AuthorizationError("unauthenticated");
-  }
+  if (!session || !(await isAuthorizedAdminSession(session, { slug: eventSlug }))) return null;
 
   const event = await getDatabaseClient().event.findUnique({
     where: { slug: eventSlug },
     select: { id: true, slug: true, timezone: true },
   });
-  if (!event) throw new AuthorizationError("not-found");
+  if (!event) return null;
   return { ...event, userId: session.user.id };
-}
-
-export async function commentOnSpeakerTaskFile(
-  eventSlug: string,
-  submissionId: string,
-  formData: FormData,
-): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  await addSpeakerTaskFileComment(
-    getDatabaseClient(),
-    event.id,
-    submissionId,
-    { role: "ORGANIZER", userId: event.userId },
-    fieldValue(formData, "comment"),
-  );
-  revalidateOnboarding(event.slug);
 }
 
 function revalidateOnboarding(eventSlug: string): void {
@@ -82,99 +68,155 @@ function revalidateOnboarding(eventSlug: string): void {
   revalidatePath(`/portal/${eventSlug}`);
 }
 
-export async function assignSpeakerTasks(eventSlug: string, formData: FormData): Promise<void> {
+async function runMutation(
+  eventSlug: string,
+  operation: (event: NonNullable<Awaited<ReturnType<typeof requireAdminEvent>>>) => Promise<string>,
+): Promise<OnboardingActionState> {
   const event = await requireAdminEvent(eventSlug);
-  const speakerIds = formData.getAll("speakerIds").filter((value): value is string => typeof value === "string");
-  await new SpeakerOnboardingRepository(getDatabaseClient()).assignCohort({
-    eventId: event.id,
-    definitionId: fieldValue(formData, "definitionId"),
-    speakerIds,
-    dueAt: eventDueDate(fieldValue(formData, "dueAt"), event.timezone),
+  if (!event) return { status: "error", message: "This event is not available." };
+  try {
+    const message = await operation(event);
+    revalidateOnboarding(event.slug);
+    return { status: "success", message };
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
+}
+
+export async function commentOnSpeakerTaskFile(
+  eventSlug: string,
+  submissionId: string,
+  _previousState: OnboardingActionState,
+  formData: FormData,
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    await addSpeakerTaskFileComment(
+      getDatabaseClient(),
+      event.id,
+      submissionId,
+      { role: "ORGANIZER", userId: event.userId },
+      fieldValue(formData, "comment"),
+    );
+    return "Comment added.";
   });
-  revalidateOnboarding(event.slug);
+}
+
+export async function assignSpeakerTasks(
+  eventSlug: string,
+  _previousState: OnboardingActionState,
+  formData: FormData,
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    const speakerIds = formData.getAll("speakerIds").filter((value): value is string => typeof value === "string");
+    await new SpeakerOnboardingRepository(getDatabaseClient()).assignCohort({
+      eventId: event.id,
+      definitionId: fieldValue(formData, "definitionId"),
+      speakerIds,
+      dueAt: eventDueDate(fieldValue(formData, "dueAt"), event.timezone),
+    });
+    return "Selected speakers assigned.";
+  });
 }
 
 export async function updateSpeakerTaskDueDate(
   eventSlug: string,
   assignmentId: string,
+  _previousState: OnboardingActionState,
   formData: FormData,
-): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  const dueAt = eventDueDate(fieldValue(formData, "dueAt"), event.timezone) ?? null;
-  await new SpeakerOnboardingRepository(getDatabaseClient()).updateDueDate(event.id, assignmentId, dueAt);
-  revalidateOnboarding(event.slug);
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    const dueAt = eventDueDate(fieldValue(formData, "dueAt"), event.timezone) ?? null;
+    await new SpeakerOnboardingRepository(getDatabaseClient()).updateDueDate(event.id, assignmentId, dueAt);
+    return "Due date saved.";
+  });
 }
 
-export async function withdrawSpeakerTask(eventSlug: string, assignmentId: string): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  await new SpeakerOnboardingRepository(getDatabaseClient()).withdraw(
-    event.id,
-    assignmentId,
-    "Withdrawn by an administrator.",
-  );
-  revalidateOnboarding(event.slug);
+export async function withdrawSpeakerTask(eventSlug: string, assignmentId: string): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    await new SpeakerOnboardingRepository(getDatabaseClient()).withdraw(
+      event.id,
+      assignmentId,
+      "Withdrawn by an administrator.",
+    );
+    return "Task withdrawn.";
+  });
 }
 
-export async function approveSpeakerTask(eventSlug: string, assignmentId: string): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  await new SpeakerOnboardingRepository(getDatabaseClient()).review(event.id, assignmentId, "APPROVED");
-  revalidateOnboarding(event.slug);
+export async function approveSpeakerTask(eventSlug: string, assignmentId: string): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    await new SpeakerOnboardingRepository(getDatabaseClient()).review(event.id, assignmentId, "APPROVED");
+    return "Task approved.";
+  });
 }
 
 export async function requestSpeakerTaskRevision(
   eventSlug: string,
   assignmentId: string,
+  _previousState: OnboardingActionState,
   formData: FormData,
-): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  const feedback = fieldValue(formData, "feedback").trim();
-  if (feedback === "") throw new RepositoryError("invalid-input", "Revision feedback is required.");
-  await new SpeakerOnboardingRepository(getDatabaseClient()).review(
-    event.id,
-    assignmentId,
-    "REVISION_REQUESTED",
-    feedback,
-  );
-  revalidateOnboarding(event.slug);
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    const feedback = fieldValue(formData, "feedback").trim();
+    if (feedback === "") throw new RepositoryError("invalid-input", "Revision feedback is required.");
+    await new SpeakerOnboardingRepository(getDatabaseClient()).review(
+      event.id,
+      assignmentId,
+      "REVISION_REQUESTED",
+      feedback,
+    );
+    return "Revision requested.";
+  });
 }
 
 export async function saveSpeakerTaskReminderRule(
   eventSlug: string,
   ruleId: string | null,
+  _previousState: OnboardingActionState,
   formData: FormData,
-): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  const repository = new SpeakerTaskReminderRepository(getDatabaseClient());
-  const input = {
-    eventId: event.id,
-    templateId: fieldValue(formData, "templateId"),
-    name: fieldValue(formData, "name"),
-    daysBeforeDue: integerField(formData, "daysBeforeDue"),
-    sendAtMinute: timeField(formData, "sendAt"),
-  };
-  if (ruleId) await repository.update({ ...input, ruleId });
-  else await repository.create(input);
-  revalidateOnboarding(event.slug);
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    const repository = new SpeakerTaskReminderRepository(getDatabaseClient());
+    const input = {
+      eventId: event.id,
+      templateId: fieldValue(formData, "templateId"),
+      name: fieldValue(formData, "name"),
+      daysBeforeDue: integerField(formData, "daysBeforeDue"),
+      sendAtMinute: timeField(formData, "sendAt"),
+    };
+    if (ruleId) {
+      await repository.update({ ...input, ruleId });
+      return "Reminder rule saved.";
+    }
+    await repository.create(input);
+    return "Reminder rule added.";
+  });
 }
 
-export async function activateSpeakerTaskReminderRule(eventSlug: string, ruleId: string): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  await new SpeakerTaskReminderRepository(getDatabaseClient()).activate(event.id, ruleId);
-  revalidateOnboarding(event.slug);
+export async function activateSpeakerTaskReminderRule(
+  eventSlug: string,
+  ruleId: string,
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    await new SpeakerTaskReminderRepository(getDatabaseClient()).activate(event.id, ruleId);
+    return "Reminder rule activated.";
+  });
 }
 
-export async function cancelSpeakerTaskReminderRule(eventSlug: string, ruleId: string): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  await new SpeakerTaskReminderRepository(getDatabaseClient()).cancel(event.id, ruleId);
-  revalidateOnboarding(event.slug);
+export async function cancelSpeakerTaskReminderRule(eventSlug: string, ruleId: string): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    await new SpeakerTaskReminderRepository(getDatabaseClient()).cancel(event.id, ruleId);
+    return "Reminder rule cancelled.";
+  });
 }
 
 export async function setSpeakerTaskReminderOptOut(
   eventSlug: string,
   assignmentId: string,
   optedOut: boolean,
-): Promise<void> {
-  const event = await requireAdminEvent(eventSlug);
-  await new SpeakerTaskReminderRepository(getDatabaseClient()).setAssignmentOptOut(event.id, assignmentId, optedOut);
-  revalidateOnboarding(event.slug);
+): Promise<OnboardingActionState> {
+  return runMutation(eventSlug, async (event) => {
+    await new SpeakerTaskReminderRepository(getDatabaseClient()).setAssignmentOptOut(event.id, assignmentId, optedOut);
+    return optedOut ? "Reminders paused for this assignment." : "Reminders resumed for this assignment.";
+  });
 }

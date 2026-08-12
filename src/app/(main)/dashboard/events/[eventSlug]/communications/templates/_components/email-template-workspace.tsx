@@ -7,6 +7,7 @@ import Link from "next/link";
 import { FilePlus2, Save } from "lucide-react";
 
 import { SanitizedMarkdown } from "@/components/content/sanitized-markdown";
+import { useDerivedIdentifierChanges } from "@/components/derived-identifier-fields";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -119,6 +120,12 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
   const updateDraft = (field: keyof DraftTemplate, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
   };
+  const nameAndKeyChanges = useDerivedIdentifierChanges({
+    identifier: draft.key,
+    onIdentifierChange: (value) => updateDraft("key", value),
+    onSourceChange: (value) => updateDraft("name", value),
+    resetKey: draft.id || "new",
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -198,7 +205,7 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
                       id="template-name"
                       name="name"
                       value={draft.name}
-                      onChange={(event) => updateDraft("name", event.target.value)}
+                      onChange={(event) => nameAndKeyChanges.changeSource(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "name")) || undefined}
                       placeholder="Speaker welcome"
                       required
@@ -211,7 +218,7 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
                       id="template-key"
                       name="key"
                       value={draft.key}
-                      onChange={(event) => updateDraft("key", event.target.value)}
+                      onChange={(event) => nameAndKeyChanges.changeIdentifier(event.target.value)}
                       aria-invalid={Boolean(firstError(state, "key")) || undefined}
                       placeholder="speaker-welcome"
                       disabled={draft.id !== ""}

@@ -57,15 +57,18 @@ describe("PublishedSessionList", () => {
     expect(screen.getByRole("combobox", { name: "Track" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Format" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Location" })).toBeTruthy();
-    expect(screen.getAllByText("Talk (30 min)")).toHaveLength(2);
+    expect(screen.getAllByText("Talk (30 min)")).toHaveLength(1);
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Track" }), { target: { value: "platform" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Track" }));
+    fireEvent.click(screen.getByRole("option", { name: "Platform & Infra" }));
     expect(visibleTitles()).toEqual(["Taming CI", "Docs that answer back"]);
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Format" }), { target: { value: "Talk (30 min)" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Format" }));
+    fireEvent.click(screen.getByRole("option", { name: "Talk (30 min)" }));
     expect(visibleTitles()).toEqual(["Taming CI"]);
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Location" }), { target: { value: "main" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Location" }));
+    fireEvent.click(screen.getByRole("option", { name: "Main Stage" }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search sessions" }), { target: { value: "Priya" } });
     expect(visibleTitles()).toEqual(["Taming CI"]);
 

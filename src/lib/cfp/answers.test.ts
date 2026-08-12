@@ -151,7 +151,7 @@ describe("validateCfpAnswers", () => {
     );
   });
 
-  it("returns per-question errors for malformed and out-of-contract values", () => {
+  it("returns per-question errors for malformed values", () => {
     const result = validateCfpAnswers(definition, {
       ...validAnswers(),
       title: "x",
@@ -162,24 +162,25 @@ describe("validateCfpAnswers", () => {
       slides: "javascript:alert(1)",
       email: "not-an-email",
       available: "2026-02-31",
-      injected: "do not trust me",
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(Object.keys(result.errors)).toEqual(
-        expect.arrayContaining([
-          "title",
-          "format",
-          "topics",
-          "recording",
-          "duration",
-          "slides",
-          "email",
-          "available",
-          "injected",
-        ]),
+        expect.arrayContaining(["title", "format", "topics", "recording", "duration", "slides", "email", "available"]),
       );
+    }
+  });
+
+  it("ignores answers for questions outside the current definition", () => {
+    const result = validateCfpAnswers(definition, {
+      ...validAnswers(),
+      "removed-question": "Preserve this in an older revision",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.answers).not.toContainEqual(expect.objectContaining({ questionId: "removed-question" }));
     }
   });
 });

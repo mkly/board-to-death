@@ -1,9 +1,8 @@
 "use client";
 
-import { useId } from "react";
+import { useActionState, useEffect, useId, useState } from "react";
 
 import { FileText, FileUp, Info, Pencil, Plus, Users } from "lucide-react";
-import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
@@ -22,8 +21,9 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { FileRequestReplacementPolicy, FileRequestTargetKind } from "@/generated/prisma/client";
+import { useActionToast } from "@/hooks/use-action-toast";
 
-import { createFileRequestAction, updateFileRequestAction } from "../actions";
+import { createFileRequestAction, type FileRequestActionState, updateFileRequestAction } from "../actions";
 import { CONTENT_TYPE_OPTIONS, TARGET_KIND_DESCRIPTIONS, TARGET_KIND_LABELS } from "./file-request-options";
 
 export interface FileRequestFormValues {
@@ -40,16 +40,7 @@ export interface FileRequestFormValues {
 const TARGET_KIND_ICONS = { CONTACT: Users, GROUP: FileText, SUBMISSION: FileUp } as const;
 const TARGET_KINDS: readonly FileRequestTargetKind[] = ["CONTACT", "GROUP", "SUBMISSION"];
 
-function SubmitButton({ label }: { readonly label: string }) {
-  const { pending } = useFormStatus();
-
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Spinner data-icon="inline-start" /> : null}
-      {pending ? "Saving…" : label}
-    </Button>
-  );
-}
+const INITIAL_STATE: FileRequestActionState = { status: "idle" };
 
 function TargetKindCards({ selected }: { readonly selected: FileRequestTargetKind }) {
   return (
@@ -94,14 +85,21 @@ export function FileRequestFormSheet({
 }) {
   const fieldId = useId();
   const editing = request !== undefined;
-  const action = editing
-    ? updateFileRequestAction.bind(null, eventSlug, request.id)
-    : createFileRequestAction.bind(null, eventSlug);
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState(
+    editing ? updateFileRequestAction.bind(null, eventSlug, request.id) : createFileRequestAction.bind(null, eventSlug),
+    INITIAL_STATE,
+  );
+  useActionToast(state);
+  useEffect(() => {
+    if (state.status === "success") setOpen(false);
+  }, [state]);
   const allowed = new Set(request?.allowedContentTypes ?? ["application/pdf"]);
   const triggerLabel = label ?? (editing ? "Edit" : "Add");
+  const submitLabel = editing ? "Save file request" : "Create file request";
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button variant={editing ? "outline" : "default"}>
           {editing ? <Pencil data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
@@ -118,7 +116,7 @@ export function FileRequestFormSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <form action={action} className="flex min-h-0 flex-1 flex-col">
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col">
           <div className="flex flex-col gap-4 px-4">
             <div className="flex gap-2.5 rounded-lg border bg-muted/50 p-3">
               <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -244,7 +242,10 @@ export function FileRequestFormSheet({
                 Cancel
               </Button>
             </SheetClose>
-            <SubmitButton label={editing ? "Save file request" : "Create file request"} />
+            <Button type="submit" disabled={pending}>
+              {pending ? <Spinner data-icon="inline-start" /> : null}
+              {pending ? "Saving…" : submitLabel}
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>

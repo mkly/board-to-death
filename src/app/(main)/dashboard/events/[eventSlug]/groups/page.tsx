@@ -33,7 +33,7 @@ export default async function GroupsPage({
   searchParams,
 }: {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ kind?: string; tier?: string; sort?: string; notice?: string; error?: string }>;
+  readonly searchParams: Promise<{ kind?: string; tier?: string; sort?: string }>;
 }) {
   const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
   const authorizedEvent = findAuthorizedEvent(shell.events, eventSlug);
@@ -77,7 +77,6 @@ export default async function GroupsPage({
           name: `${contact.givenName} ${contact.familyName}`,
           email: contact.email,
         }))}
-        error={query.error}
         event={event}
         customFieldDefinitions={customFieldDefinitions.map(inputDefinition)}
         filters={{ kind, tierId, sortBy }}
@@ -87,7 +86,6 @@ export default async function GroupsPage({
             .filter(({ groupId }) => groupId === group.id)
             .map(({ id, definitionId, value }) => ({ id, definitionId, value })),
         }))}
-        notice={query.notice}
         tiers={tiers}
       />
       <GroupIntakeWorkspace event={event} forms={intakeForms} submissions={intakeSubmissions} />

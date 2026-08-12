@@ -192,29 +192,19 @@ function EventForm({
     >
       <FieldGroup>
         <div className="grid gap-5 md:grid-cols-2">
-          <Field data-invalid={Boolean(firstError(errors, "name"))}>
-            <FieldLabel htmlFor="event-name">Event name</FieldLabel>
-            <Input
-              id="event-name"
-              name="name"
-              defaultValue={event?.name}
-              aria-invalid={Boolean(firstError(errors, "name"))}
-              required
-            />
-            <FieldError>{firstError(errors, "name")}</FieldError>
-          </Field>
-          <Field data-invalid={Boolean(firstError(errors, "slug"))}>
-            <FieldLabel htmlFor="event-slug">Slug</FieldLabel>
-            <Input
-              id="event-slug"
-              name="slug"
-              defaultValue={event?.slug}
-              aria-invalid={Boolean(firstError(errors, "slug"))}
-              required
-            />
-            <FieldDescription>Lowercase letters, numbers, and single hyphens.</FieldDescription>
-            <FieldError>{firstError(errors, "slug")}</FieldError>
-          </Field>
+          <DerivedIdentifierFields
+            identifierDescription="Lowercase letters, numbers, and single hyphens."
+            identifierError={firstError(errors, "slug")}
+            identifierId="event-slug"
+            identifierInitialValue={event?.slug}
+            identifierLabel="Slug"
+            identifierName="slug"
+            sourceError={firstError(errors, "name")}
+            sourceId="event-name"
+            sourceInitialValue={event?.name}
+            sourceLabel="Event name"
+            sourceName="name"
+          />
           <Field>
             <FieldLabel htmlFor="event-type">Type</FieldLabel>
             <Select name="type" defaultValue={event?.type ?? "CONFERENCE"}>
@@ -796,3 +786,5 @@ export function EventSettingsWorkspace({
     </div>
   );
 }
+
+import { DerivedIdentifierFields } from "@/components/derived-identifier-fields";

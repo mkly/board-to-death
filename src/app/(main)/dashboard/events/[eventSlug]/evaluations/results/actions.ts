@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
 import { getRuntimeConfig } from "@/config/runtime-env.server";
-import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/prisma/client";
+import { EvaluationDecisionOutcome, EvaluationRoundStatus } from "@/generated/prisma/enums";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { createConfiguredMagicLinkSender } from "@/server/auth/magic-link-email";
@@ -53,15 +52,17 @@ const sendConfirmationLink = createConfiguredMagicLinkSender({
   },
 });
 
-function destination(
-  eventSlug: string,
-  roundId: string,
-  result: { readonly notice?: string; readonly error?: string },
-): string {
-  const search = new URLSearchParams({ round: roundId });
-  if (result.notice) search.set("notice", result.notice);
-  if (result.error) search.set("error", result.error);
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/evaluations/results?${search.toString()}`;
+export interface EvaluationResultsActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+function succeed(notice: string): EvaluationResultsActionState {
+  return { status: "success", message: notice };
+}
+
+function fail(error: unknown): EvaluationResultsActionState {
+  return { status: "error", message: errorMessage(error) };
 }
 
 async function requireAdminEvent(eventSlug: string) {
@@ -104,9 +105,9 @@ export async function recordEvaluationDecision(
   submissionId: string,
   outcome: EvaluationDecisionOutcome,
   expectedDecisionNumber: number,
-): Promise<never> {
+): Promise<EvaluationResultsActionState> {
   const parsed = decisionSchema.safeParse({ eventSlug, roundId, submissionId, outcome, expectedDecisionNumber });
-  if (!parsed.success) redirect(destination(eventSlug, roundId, { error: "The decision request was invalid." }));
+  if (!parsed.success) return { status: "error", message: "The decision request was invalid." };
   let notificationQueued = true;
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
@@ -137,21 +138,23 @@ export async function recordEvaluationDecision(
     });
     refresh(event.slug);
   } catch (error) {
-    redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
+    return fail(error);
   }
-  redirect(
-    destination(eventSlug, roundId, {
-      notice: notificationQueued
-        ? decisionNotices[outcome]
-        : `${decisionNotices[outcome]} The applicant notification could not be queued.`,
-    }),
+  return succeed(
+    notificationQueued
+      ? decisionNotices[outcome]
+      : `${decisionNotices[outcome]} The applicant notification could not be queued.`,
   );
 }
 
-export async function inviteAcceptedSpeakers(eventSlug: string, roundId: string, submissionId: string): Promise<never> {
+export async function inviteAcceptedSpeakers(
+  eventSlug: string,
+  roundId: string,
+  submissionId: string,
+): Promise<EvaluationResultsActionState> {
   const parsed = actionSchema.safeParse({ eventSlug, roundId, submissionId });
   if (!parsed.success || !parsed.data.submissionId) {
-    redirect(destination(eventSlug, roundId, { error: "The speaker invitation request was invalid." }));
+    return { status: "error", message: "The speaker invitation request was invalid." };
   }
   let invitationCount = 0;
   try {
@@ -172,12 +175,10 @@ export async function inviteAcceptedSpeakers(eventSlug: string, roundId: string,
     invitationCount = invitations.length;
     refresh(event.slug);
   } catch (error) {
-    redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
+    return fail(error);
   }
-  redirect(
-    destination(eventSlug, roundId, {
-      notice: `Invitation${invitationCount === 1 ? "" : "s"} sent to ${invitationCount} speaker${invitationCount === 1 ? "" : "s"}.`,
-    }),
+  return succeed(
+    `Invitation${invitationCount === 1 ? "" : "s"} sent to ${invitationCount} speaker${invitationCount === 1 ? "" : "s"}.`,
   );
 }
 
@@ -185,10 +186,10 @@ export async function advanceEvaluationSubmission(
   eventSlug: string,
   roundId: string,
   submissionId: string,
-): Promise<never> {
+): Promise<EvaluationResultsActionState> {
   const parsed = actionSchema.safeParse({ eventSlug, roundId, submissionId });
   if (!parsed.success || !parsed.data.submissionId) {
-    redirect(destination(eventSlug, roundId, { error: "The progression request was invalid." }));
+    return { status: "error", message: "The progression request was invalid." };
   }
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
@@ -200,14 +201,14 @@ export async function advanceEvaluationSubmission(
     });
     refresh(event.slug);
   } catch (error) {
-    redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
+    return fail(error);
   }
-  redirect(destination(eventSlug, roundId, { notice: "Submission advanced to the next evaluation round." }));
+  return succeed("Submission advanced to the next evaluation round.");
 }
 
-export async function closeEvaluationRound(eventSlug: string, roundId: string): Promise<never> {
+export async function closeEvaluationRound(eventSlug: string, roundId: string): Promise<EvaluationResultsActionState> {
   const parsed = actionSchema.safeParse({ eventSlug, roundId });
-  if (!parsed.success) redirect(destination(eventSlug, roundId, { error: "The close-round request was invalid." }));
+  if (!parsed.success) return { status: "error", message: "The close-round request was invalid." };
   try {
     const { event, actorId } = await requireAdminEvent(parsed.data.eventSlug);
     await new EvaluationPlanRepository(getDatabaseClient()).transition(
@@ -218,7 +219,7 @@ export async function closeEvaluationRound(eventSlug: string, roundId: string): 
     );
     refresh(event.slug);
   } catch (error) {
-    redirect(destination(eventSlug, roundId, { error: errorMessage(error) }));
+    return fail(error);
   }
-  redirect(destination(eventSlug, roundId, { notice: "Evaluation round closed." }));
+  return succeed("Evaluation round closed.");
 }

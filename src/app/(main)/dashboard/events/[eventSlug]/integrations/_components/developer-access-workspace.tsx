@@ -1,13 +1,12 @@
 import { format } from "date-fns";
-import { Ban, KeyRound, RadioTower, RefreshCw } from "lucide-react";
+import { KeyRound, RadioTower } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-import { disableWebhook, retryDueWebhooks, revokeApiToken } from "../actions";
+import { DisableWebhookButton, RetryDueWebhooksButton, RevokeTokenButton } from "./developer-access-buttons";
 import { ApiTokenForm, WebhookEndpointForm } from "./developer-access-forms";
 
 interface TokenView {
@@ -144,16 +143,7 @@ export function DeveloperAccessWorkspace({ event, tokens, endpoints, deliveries 
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {token.revokedAt ? null : (
-                          <form action={revokeApiToken}>
-                            <input type="hidden" name="eventSlug" value={event.slug} />
-                            <input type="hidden" name="tokenId" value={token.id} />
-                            <Button type="submit" variant="outline" size="sm">
-                              <Ban data-icon="inline-start" />
-                              Revoke
-                            </Button>
-                          </form>
-                        )}
+                        {token.revokedAt ? null : <RevokeTokenButton eventSlug={event.slug} tokenId={token.id} />}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -205,14 +195,7 @@ export function DeveloperAccessWorkspace({ event, tokens, endpoints, deliveries 
                       </TableCell>
                       <TableCell className="text-right">
                         {endpoint.disabledAt ? null : (
-                          <form action={disableWebhook}>
-                            <input type="hidden" name="eventSlug" value={event.slug} />
-                            <input type="hidden" name="endpointId" value={endpoint.id} />
-                            <Button type="submit" variant="outline" size="sm">
-                              <Ban data-icon="inline-start" />
-                              Disable
-                            </Button>
-                          </form>
+                          <DisableWebhookButton endpointId={endpoint.id} eventSlug={event.slug} />
                         )}
                       </TableCell>
                     </TableRow>
@@ -274,13 +257,7 @@ export function DeveloperAccessWorkspace({ event, tokens, endpoints, deliveries 
           )}
         </CardContent>
         <CardFooter>
-          <form action={retryDueWebhooks}>
-            <input type="hidden" name="eventSlug" value={event.slug} />
-            <Button type="submit" variant="outline">
-              <RefreshCw data-icon="inline-start" />
-              Retry due deliveries
-            </Button>
-          </form>
+          <RetryDueWebhooksButton eventSlug={event.slug} />
         </CardFooter>
       </Card>
     </section>

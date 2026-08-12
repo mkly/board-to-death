@@ -8,14 +8,8 @@ import { getDashboardShellData } from "../../../_lib/dashboard-data";
 import { findAuthorizedEvent } from "../../../_lib/dashboard-shell";
 import { CfpFormsIndex } from "./_components/cfp-forms-index";
 
-export default async function CfpFormsPage({
-  params,
-  searchParams,
-}: {
-  readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ notice?: string; error?: string }>;
-}) {
-  const [{ eventSlug }, messages, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
+export default async function CfpFormsPage({ params }: { readonly params: Promise<{ eventSlug: string }> }) {
+  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
 
   if (!event) notFound();
@@ -25,5 +19,5 @@ export default async function CfpFormsPage({
 
   const forms = await new CfpFormRepository(getDatabaseClient()).list(event.id);
 
-  return <CfpFormsIndex event={event} forms={forms} notice={messages.notice} error={messages.error} />;
+  return <CfpFormsIndex event={event} forms={forms} />;
 }

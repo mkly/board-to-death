@@ -2,11 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
-import { EvaluationRoundStatus, ReviewerVisibility } from "@/generated/prisma/client";
+import { EvaluationRoundStatus, ReviewerVisibility } from "@/generated/prisma/enums";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getDatabaseClient } from "@/server/database/client";
@@ -45,6 +44,11 @@ const criterionSchema = z
     path: ["maximum"],
   });
 
+export interface EvaluationActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
@@ -65,18 +69,13 @@ async function requireAdminEvent(
   return { ...event, actorId: session.user.id };
 }
 
-function destination(eventSlug: string, result: { readonly notice?: string; readonly error?: string }): string {
-  const search = new URLSearchParams();
-  if (result.notice) search.set("notice", result.notice);
-  if (result.error) search.set("error", result.error);
-  const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/evaluations${suffix}`;
+function succeed(eventSlug: string, notice: string): EvaluationActionState {
+  revalidatePath(`/dashboard/events/${encodeURIComponent(eventSlug)}/evaluations`);
+  return { status: "success", message: notice };
 }
 
-function refreshAndRedirect(eventSlug: string, notice: string): never {
-  const path = destination(eventSlug, {});
-  revalidatePath(path);
-  redirect(destination(eventSlug, { notice }));
+function fail(error: unknown): EvaluationActionState {
+  return { status: "error", message: errorMessage(error) };
 }
 
 function errorMessage(error: unknown): string {
@@ -85,25 +84,34 @@ function errorMessage(error: unknown): string {
   return "The evaluation workspace could not be updated. Try again.";
 }
 
-export async function createPlan(eventSlug: string, formData: FormData): Promise<never> {
+export async function createPlan(
+  eventSlug: string,
+  _previousState: EvaluationActionState,
+  formData: FormData,
+): Promise<EvaluationActionState> {
   const parsed = planSchema.safeParse({
     key: field(formData, "key"),
     title: field(formData, "title"),
     description: field(formData, "description"),
   });
   if (!parsed.success) {
-    redirect(destination(eventSlug, { error: parsed.error.issues[0]?.message ?? "Review the plan details." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the plan details." };
   }
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EvaluationPlanRepository(getDatabaseClient()).create(event.id, parsed.data);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Evaluation plan created.");
+  return succeed(eventSlug, "Evaluation plan created.");
 }
 
-export async function createRound(eventSlug: string, planVersionId: string, formData: FormData): Promise<never> {
+export async function createRound(
+  eventSlug: string,
+  planVersionId: string,
+  _previousState: EvaluationActionState,
+  formData: FormData,
+): Promise<EvaluationActionState> {
   const parsed = roundSchema.safeParse({
     key: field(formData, "key"),
     title: field(formData, "title"),
@@ -111,7 +119,7 @@ export async function createRound(eventSlug: string, planVersionId: string, form
     reviewerVisibility: field(formData, "reviewerVisibility"),
   });
   if (!parsed.success) {
-    redirect(destination(eventSlug, { error: parsed.error.issues[0]?.message ?? "Review the round details." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the round details." };
   }
   try {
     const event = await requireAdminEvent(eventSlug);
@@ -121,12 +129,17 @@ export async function createRound(eventSlug: string, planVersionId: string, form
       ...parsed.data,
     });
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Planned round added.");
+  return succeed(eventSlug, "Planned round added.");
 }
 
-export async function updateRound(eventSlug: string, roundId: string, formData: FormData): Promise<never> {
+export async function updateRound(
+  eventSlug: string,
+  roundId: string,
+  _previousState: EvaluationActionState,
+  formData: FormData,
+): Promise<EvaluationActionState> {
   const parsed = roundSchema.safeParse({
     key: field(formData, "key"),
     title: field(formData, "title"),
@@ -134,15 +147,15 @@ export async function updateRound(eventSlug: string, roundId: string, formData: 
     reviewerVisibility: field(formData, "reviewerVisibility"),
   });
   if (!parsed.success) {
-    redirect(destination(eventSlug, { error: parsed.error.issues[0]?.message ?? "Review the round details." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the round details." };
   }
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EvaluationPlanRepository(getDatabaseClient()).updateRound(event.id, roundId, parsed.data);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Planned round saved.");
+  return succeed(eventSlug, "Planned round saved.");
 }
 
 export async function moveRound(
@@ -150,7 +163,7 @@ export async function moveRound(
   planVersionId: string,
   roundId: string,
   offset: -1 | 1,
-): Promise<never> {
+): Promise<EvaluationActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     const repository = new EvaluationPlanRepository(getDatabaseClient());
@@ -166,28 +179,28 @@ export async function moveRound(
     [orderedIds[index], orderedIds[nextIndex]] = [orderedIds[nextIndex] ?? "", orderedIds[index] ?? ""];
     await repository.reorder(event.id, planVersionId, orderedIds);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Round order updated.");
+  return succeed(eventSlug, "Round order updated.");
 }
 
 export async function transitionRound(
   eventSlug: string,
   roundId: string,
   toStatus: Exclude<EvaluationRoundStatus, "PLANNED">,
-): Promise<never> {
+): Promise<EvaluationActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EvaluationPlanRepository(getDatabaseClient()).transition(event.id, roundId, toStatus, {
       actorId: event.actorId,
     });
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
   let notice = "Round archived.";
   if (toStatus === EvaluationRoundStatus.OPEN) notice = "Round opened and reviewer visibility snapshotted.";
   else if (toStatus === EvaluationRoundStatus.CLOSED) notice = "Round closed.";
-  return refreshAndRedirect(eventSlug, notice);
+  return succeed(eventSlug, notice);
 }
 
 function parsedCriterion(formData: FormData) {
@@ -202,42 +215,52 @@ function parsedCriterion(formData: FormData) {
   });
 }
 
-export async function createCriterion(eventSlug: string, roundId: string, formData: FormData): Promise<never> {
+export async function createCriterion(
+  eventSlug: string,
+  roundId: string,
+  _previousState: EvaluationActionState,
+  formData: FormData,
+): Promise<EvaluationActionState> {
   const parsed = parsedCriterion(formData);
   if (!parsed.success) {
-    redirect(destination(eventSlug, { error: parsed.error.issues[0]?.message ?? "Review the criterion details." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the criterion details." };
   }
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EvaluationRubricRepository(getDatabaseClient()).add(event.id, roundId, parsed.data);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Rubric criterion added.");
+  return succeed(eventSlug, "Rubric criterion added.");
 }
 
-export async function updateCriterion(eventSlug: string, criterionId: string, formData: FormData): Promise<never> {
+export async function updateCriterion(
+  eventSlug: string,
+  criterionId: string,
+  _previousState: EvaluationActionState,
+  formData: FormData,
+): Promise<EvaluationActionState> {
   const parsed = parsedCriterion(formData);
   if (!parsed.success) {
-    redirect(destination(eventSlug, { error: parsed.error.issues[0]?.message ?? "Review the criterion details." }));
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Review the criterion details." };
   }
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EvaluationRubricRepository(getDatabaseClient()).update(event.id, criterionId, parsed.data);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Rubric criterion saved.");
+  return succeed(eventSlug, "Rubric criterion saved.");
 }
 
-export async function addDefaultCriteria(eventSlug: string, roundId: string): Promise<never> {
+export async function addDefaultCriteria(eventSlug: string, roundId: string): Promise<EvaluationActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     await new EvaluationRubricRepository(getDatabaseClient()).addDefaults(event.id, roundId);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Default 1-to-5 rubric added.");
+  return succeed(eventSlug, "Default 1-to-5 rubric added.");
 }
 
 export async function moveCriterion(
@@ -245,7 +268,7 @@ export async function moveCriterion(
   roundId: string,
   criterionId: string,
   offset: -1 | 1,
-): Promise<never> {
+): Promise<EvaluationActionState> {
   try {
     const event = await requireAdminEvent(eventSlug);
     const repository = new EvaluationRubricRepository(getDatabaseClient());
@@ -264,7 +287,7 @@ export async function moveCriterion(
     [orderedIds[index], orderedIds[nextIndex]] = [orderedIds[nextIndex] ?? "", orderedIds[index] ?? ""];
     await repository.reorder(event.id, roundId, orderedIds);
   } catch (error) {
-    redirect(destination(eventSlug, { error: errorMessage(error) }));
+    return fail(error);
   }
-  return refreshAndRedirect(eventSlug, "Criterion order updated.");
+  return succeed(eventSlug, "Criterion order updated.");
 }

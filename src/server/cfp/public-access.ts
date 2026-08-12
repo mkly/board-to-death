@@ -58,18 +58,22 @@ export class CfpPublicAccessRepository {
     this.client = client;
   }
 
-  async findByPublicId(publicId: string): Promise<CfpPublicAccessLookup> {
-    // publicId is a Postgres uuid column, so a non-UUID path segment would
-    // make the driver reject the query (22P02) and surface a 500 instead of
-    // the not-found page every other unresolvable identifier gets.
-    if (!UUID_PATTERN.test(publicId)) {
-      return { status: "unknown" };
-    }
-
-    const policy = await this.client.cfpPolicy.findUnique({
-      where: { publicId },
+  async findByPublicId(publicIdOrEventSlug: string): Promise<CfpPublicAccessLookup> {
+    const isPublicId = UUID_PATTERN.test(publicIdOrEventSlug);
+    const policy = await this.client.cfpPolicy.findFirst({
+      where: isPublicId
+        ? { publicId: publicIdOrEventSlug }
+        : {
+            event: { slug: publicIdOrEventSlug },
+            publishedFormVersionId: { not: null },
+            status: CfpPolicyStatus.PUBLISHED,
+          },
+      // An event can own multiple CFP forms. Its friendly slug resolves to
+      // the most recently updated active publication; UUID links remain exact.
+      orderBy: isPublicId ? undefined : [{ updatedAt: "desc" }, { id: "asc" }],
       select: {
         id: true,
+        publicId: true,
         status: true,
         event: {
           select: { id: true, name: true, slug: true, timezone: true, theme: true, startsAt: true, location: true },
@@ -165,7 +169,7 @@ export class CfpPublicAccessRepository {
 
     return {
       status: "open",
-      publicId,
+      publicId: policy.publicId,
       policyId: policy.id,
       draftPolicy: policyVersion.draftPolicy ?? CfpDraftPolicy.DISABLED,
       event: {

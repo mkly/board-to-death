@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
@@ -36,6 +35,11 @@ import {
 import { PublishedProgramRepository } from "@/server/published-program";
 
 import { randomUUID } from "node:crypto";
+
+export interface SpeakerMappingActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
 
 export interface SessionMappingMutationState {
   readonly status: "idle" | "success" | "error";
@@ -73,28 +77,26 @@ async function authorizedEvent(eventSlug: string) {
   return getDatabaseClient().event.findUnique({ where: { slug: eventSlug }, select: { id: true, slug: true } });
 }
 
-function destination(eventSlug: string, key: "notice" | "error", message: string): string {
-  const query = new URLSearchParams({ [key]: message });
-  return `/dashboard/events/${encodeURIComponent(eventSlug)}/integrations?${query}`;
-}
-
-export async function saveSpeakerMapping(eventSlug: string, formData: FormData): Promise<never> {
+export async function saveSpeakerMapping(
+  eventSlug: string,
+  _previousState: SpeakerMappingActionState,
+  formData: FormData,
+): Promise<SpeakerMappingActionState> {
   const parsed = speakerMappingSchema.safeParse({
     email: formData.get("email"),
     firstName: formData.get("firstName"),
     lastName: formData.get("lastName"),
   });
-  if (!parsed.success) redirect(destination(eventSlug, "error", "Choose a valid local source for every field."));
+  if (!parsed.success) return { status: "error", message: "Choose a valid local source for every field." };
   const event = await authorizedEvent(eventSlug);
-  if (!event) redirect(destination(eventSlug, "error", "This event is not available."));
+  if (!event) return { status: "error", message: "This event is not available." };
 
   try {
     const version = await new SpeakerMappingRepository(getDatabaseClient()).save(event.id, parsed.data);
-    const path = `/dashboard/events/${encodeURIComponent(event.slug)}/integrations`;
-    revalidatePath(path);
-    redirect(destination(event.slug, "notice", `Speaker mapping version ${version} saved.`));
+    revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+    return { status: "success", message: `Speaker mapping version ${version} saved.` };
   } catch (error) {
-    if (error instanceof RepositoryError) redirect(destination(event.slug, "error", error.message));
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
     throw error;
   }
 }
@@ -126,11 +128,17 @@ export async function issueApiToken(
   return { status: "success", message: "Copy this token now. It will not be shown again.", secret: issued.secret };
 }
 
-export async function revokeApiToken(formData: FormData): Promise<void> {
-  const event = await authorizedEvent(value(formData, "eventSlug"));
-  if (!event) return;
-  await new ApiTokenService(getDatabaseClient()).revoke(event.id, value(formData, "tokenId"));
+export async function revokeApiToken(eventSlug: string, tokenId: string): Promise<DeveloperAccessActionState> {
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  try {
+    await new ApiTokenService(getDatabaseClient()).revoke(event.id, tokenId);
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
   revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+  return { status: "success", message: "API token revoked." };
 }
 
 export async function createWebhookEndpoint(
@@ -164,18 +172,30 @@ export async function createWebhookEndpoint(
   };
 }
 
-export async function disableWebhook(formData: FormData): Promise<void> {
-  const event = await authorizedEvent(value(formData, "eventSlug"));
-  if (!event) return;
-  await disableWebhookEndpoint(getDatabaseClient(), event.id, value(formData, "endpointId"));
+export async function disableWebhook(eventSlug: string, endpointId: string): Promise<DeveloperAccessActionState> {
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  try {
+    await disableWebhookEndpoint(getDatabaseClient(), event.id, endpointId);
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
   revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+  return { status: "success", message: "Webhook endpoint disabled." };
 }
 
-export async function retryDueWebhooks(formData: FormData): Promise<void> {
-  const event = await authorizedEvent(value(formData, "eventSlug"));
-  if (!event) return;
-  await processDueWebhookDeliveries(getDatabaseClient(), { eventId: event.id });
+export async function retryDueWebhooks(eventSlug: string): Promise<DeveloperAccessActionState> {
+  const event = await authorizedEvent(eventSlug);
+  if (!event) return { status: "error", message: "This event is not available." };
+  try {
+    await processDueWebhookDeliveries(getDatabaseClient(), { eventId: event.id });
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
   revalidatePath(`/dashboard/events/${encodeURIComponent(event.slug)}/integrations`);
+  return { status: "success", message: "Due webhook deliveries retried." };
 }
 
 function validationErrors(error: z.ZodError): Readonly<Record<string, readonly string[]>> {

@@ -12,11 +12,10 @@ import { EvaluationRubricWorkspace } from "./_components/evaluation-rubric-works
 
 interface EvaluationRubricPageProps {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ notice?: string; error?: string }>;
 }
 
-export default async function EvaluationRubricPage({ params, searchParams }: EvaluationRubricPageProps) {
-  const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
+export default async function EvaluationRubricPage({ params }: EvaluationRubricPageProps) {
+  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event) notFound();
 
@@ -40,12 +39,7 @@ export default async function EvaluationRubricPage({ params, searchParams }: Eva
       </header>
       <EvaluationPlanWorkspace eventSlug={event.slug} plans={plans} />
       <Separator />
-      <EvaluationRubricWorkspace
-        event={{ slug: event.slug }}
-        plans={rubricPlans}
-        notice={query.notice}
-        error={query.error}
-      />
+      <EvaluationRubricWorkspace event={{ slug: event.slug }} plans={rubricPlans} />
     </div>
   );
 }

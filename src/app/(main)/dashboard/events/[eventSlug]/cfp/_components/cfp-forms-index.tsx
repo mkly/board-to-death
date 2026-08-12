@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { CircleIcon, ClipboardList, Users } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -28,13 +27,9 @@ function formSetupHref(eventSlug: string, formId: string): string {
 export function CfpFormsIndex({
   event,
   forms,
-  notice,
-  error,
 }: {
   readonly event: { readonly name: string; readonly slug: string; readonly timezone: string };
   readonly forms: readonly CfpFormSummary[];
-  readonly notice?: string;
-  readonly error?: string;
 }) {
   return (
     <div className="flex flex-col gap-8">
@@ -50,19 +45,6 @@ export function CfpFormsIndex({
         </div>
         <CreateFormButton eventSlug={event.slug} />
       </header>
-
-      {notice ? (
-        <Alert>
-          <AlertTitle>CFP updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Unable to update CFP</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
 
       <Card className="shadow-sm">
         <CardHeader>

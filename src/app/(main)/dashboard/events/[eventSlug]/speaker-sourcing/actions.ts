@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { z } from "zod";
 
@@ -34,27 +33,36 @@ async function authorizedContext(eventSlug: string) {
   return { event, actorLabel: session.user.name || session.user.email };
 }
 
-function finish(eventSlug: string, kind: "notice" | "error", message: string): never {
-  redirect(`${sourcingPath(eventSlug)}?${kind}=${encodeURIComponent(message)}`);
+export interface SpeakerSourcingActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
+function failure(message: string): SpeakerSourcingActionState {
+  return { status: "error", message };
 }
 
 async function runMutation(
   eventSlug: string,
   operation: (context: NonNullable<Awaited<ReturnType<typeof authorizedContext>>>) => Promise<string>,
-): Promise<never> {
+): Promise<SpeakerSourcingActionState> {
   const context = await authorizedContext(eventSlug);
-  if (!context) finish(eventSlug, "error", "This event is not available.");
+  if (!context) return failure("This event is not available.");
   try {
     const message = await operation(context);
     revalidatePath(sourcingPath(eventSlug));
-    finish(eventSlug, "notice", message);
+    return { status: "success", message };
   } catch (error) {
-    if (error instanceof RepositoryError) finish(eventSlug, "error", error.message);
+    if (error instanceof RepositoryError) return failure(error.message);
     throw error;
   }
 }
 
-export async function createInterestFormAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function createInterestFormAction(
+  eventSlug: string,
+  _previousState: SpeakerSourcingActionState,
+  formData: FormData,
+): Promise<SpeakerSourcingActionState> {
   return runMutation(eventSlug, async ({ event }) => {
     await new SpeakerSourcingRepository(getDatabaseClient()).createInterestForm({
       eventId: event.id,
@@ -65,9 +73,13 @@ export async function createInterestFormAction(eventSlug: string, formData: Form
   });
 }
 
-export async function enrollProspectAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function enrollProspectAction(
+  eventSlug: string,
+  _previousState: SpeakerSourcingActionState,
+  formData: FormData,
+): Promise<SpeakerSourcingActionState> {
   const personId = uuid.safeParse(stringValue(formData, "personId"));
-  if (!personId.success) finish(eventSlug, "error", "Select a directory person to enroll.");
+  if (!personId.success) return failure("Select a directory person to enroll.");
   return runMutation(eventSlug, async ({ event, actorLabel }) => {
     await new SpeakerSourcingRepository(getDatabaseClient()).enrollManual({
       eventId: event.id,
@@ -78,12 +90,17 @@ export async function enrollProspectAction(eventSlug: string, formData: FormData
   });
 }
 
-export async function moveProspectAction(eventSlug: string, prospectId: string, formData: FormData): Promise<never> {
+export async function moveProspectAction(
+  eventSlug: string,
+  prospectId: string,
+  _previousState: SpeakerSourcingActionState,
+  formData: FormData,
+): Promise<SpeakerSourcingActionState> {
   const ids = z.object({ prospectId: uuid, stageId: uuid }).safeParse({
     prospectId,
     stageId: stringValue(formData, "stageId"),
   });
-  if (!ids.success) finish(eventSlug, "error", "Select a valid prospect stage.");
+  if (!ids.success) return failure("Select a valid prospect stage.");
   return runMutation(eventSlug, async ({ event, actorLabel }) => {
     await new SpeakerSourcingRepository(getDatabaseClient()).moveProspect(
       event.id,
@@ -95,9 +112,14 @@ export async function moveProspectAction(eventSlug: string, prospectId: string, 
   });
 }
 
-export async function addProspectNoteAction(eventSlug: string, prospectId: string, formData: FormData): Promise<never> {
+export async function addProspectNoteAction(
+  eventSlug: string,
+  prospectId: string,
+  _previousState: SpeakerSourcingActionState,
+  formData: FormData,
+): Promise<SpeakerSourcingActionState> {
   const parsedId = uuid.safeParse(prospectId);
-  if (!parsedId.success) finish(eventSlug, "error", "The selected prospect is invalid.");
+  if (!parsedId.success) return failure("The selected prospect is invalid.");
   return runMutation(eventSlug, async ({ event, actorLabel }) => {
     await new SpeakerSourcingRepository(getDatabaseClient()).addNote(
       event.id,
@@ -109,16 +131,20 @@ export async function addProspectNoteAction(eventSlug: string, prospectId: strin
   });
 }
 
-export async function assignProspectAction(eventSlug: string, prospectId: string): Promise<never> {
+export async function assignProspectAction(eventSlug: string, prospectId: string): Promise<SpeakerSourcingActionState> {
   const parsedId = uuid.safeParse(prospectId);
-  if (!parsedId.success) finish(eventSlug, "error", "The selected prospect is invalid.");
+  if (!parsedId.success) return failure("The selected prospect is invalid.");
   return runMutation(eventSlug, async ({ event, actorLabel }) => {
     await new SpeakerSourcingRepository(getDatabaseClient()).assignToEvent(event.id, parsedId.data, actorLabel);
     return `Prospect assigned to ${event.name} and added to event contacts.`;
   });
 }
 
-export async function configureStagesAction(eventSlug: string, formData: FormData): Promise<never> {
+export async function configureStagesAction(
+  eventSlug: string,
+  _previousState: SpeakerSourcingActionState,
+  formData: FormData,
+): Promise<SpeakerSourcingActionState> {
   const stageIds = formData.getAll("stageId").filter((value): value is string => typeof value === "string");
   const stageNames = formData.getAll("stageName").filter((value): value is string => typeof value === "string");
   const stagePositions = formData
@@ -129,7 +155,7 @@ export async function configureStagesAction(eventSlug: string, formData: FormDat
     new Set(stagePositions).size !== stagePositions.length ||
     stagePositions.some((position) => !Number.isInteger(position) || position < 0 || position >= stageIds.length)
   ) {
-    finish(eventSlug, "error", "Choose a unique position for every pipeline stage.");
+    return failure("Choose a unique position for every pipeline stage.");
   }
   const stages = stageIds
     .map((id, index) => ({ id, name: stageNames[index] ?? "", position: stagePositions[index] }))

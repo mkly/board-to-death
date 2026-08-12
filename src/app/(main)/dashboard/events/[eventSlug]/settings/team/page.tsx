@@ -9,13 +9,12 @@ import { EventTeamWorkspace } from "./_components/event-team-workspace";
 
 interface EventTeamPageProps {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ notice?: string; error?: string }>;
 }
 
-export default async function EventTeamPage({ params, searchParams }: EventTeamPageProps) {
-  const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
+export default async function EventTeamPage({ params }: EventTeamPageProps) {
+  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event) notFound();
   const snapshot = await new EventInvitationService(getDatabaseClient()).list(event.id);
-  return <EventTeamWorkspace event={event} snapshot={snapshot} notice={query.notice} error={query.error} />;
+  return <EventTeamWorkspace event={event} snapshot={snapshot} />;
 }

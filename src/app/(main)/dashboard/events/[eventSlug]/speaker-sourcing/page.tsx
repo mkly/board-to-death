@@ -10,11 +10,10 @@ import { SpeakerSourcingWorkspace } from "./_components/speaker-sourcing-workspa
 
 interface SpeakerSourcingPageProps {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ notice?: string; error?: string }>;
 }
 
-export default async function SpeakerSourcingPage({ params, searchParams }: SpeakerSourcingPageProps) {
-  const [{ eventSlug }, query, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
+export default async function SpeakerSourcingPage({ params }: SpeakerSourcingPageProps) {
+  const [{ eventSlug }, shell] = await Promise.all([params, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
   if (!event) notFound();
 
@@ -30,10 +29,8 @@ export default async function SpeakerSourcingPage({ params, searchParams }: Spea
   return (
     <SpeakerSourcingWorkspace
       availablePeople={people.filter(({ id }) => !enrolledPersonIds.has(id))}
-      error={query.error}
       event={{ id: event.id, name: event.name, slug: event.slug }}
       forms={forms}
-      notice={query.notice}
       stages={stages}
     />
   );

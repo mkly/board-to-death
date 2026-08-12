@@ -347,7 +347,7 @@ test("next config loads for production builds without server credentials and war
   const result = runNodeModule(
     `
       import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
-      import loadConfig from "./next.config.mjs";
+      import loadConfig from "./next.config.mts";
       loadConfig(PHASE_PRODUCTION_BUILD);
     `,
     { ...productionProcessEnvironment, NODE_ENV: "production" },

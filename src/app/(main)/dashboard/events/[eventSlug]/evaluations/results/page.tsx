@@ -9,11 +9,7 @@ import { EvaluationResults } from "./_components/evaluation-results";
 
 interface EvaluationResultsPageProps {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{
-    round?: string | string[];
-    notice?: string | string[];
-    error?: string | string[];
-  }>;
+  readonly searchParams: Promise<{ round?: string | string[] }>;
 }
 
 export default async function EvaluationResultsPage({ params, searchParams }: EvaluationResultsPageProps) {
@@ -31,14 +27,7 @@ export default async function EvaluationResultsPage({ params, searchParams }: Ev
   const requestedRound = typeof query.round === "string" ? query.round : undefined;
   try {
     const workspace = await new EvaluationResultsRepository(getDatabaseClient()).getWorkspace(event.id, requestedRound);
-    return (
-      <EvaluationResults
-        event={{ name: event.name, slug: event.slug }}
-        workspace={workspace}
-        notice={typeof query.notice === "string" ? query.notice : undefined}
-        error={typeof query.error === "string" ? query.error : undefined}
-      />
-    );
+    return <EvaluationResults event={{ name: event.name, slug: event.slug }} workspace={workspace} />;
   } catch (error) {
     if (error instanceof Error && error.name === "RepositoryError") notFound();
     throw error;

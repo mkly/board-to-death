@@ -17,23 +17,35 @@ import { portalHref, requirePortalContent } from "../../../_lib/portal-session";
 const MAX_RESPONSE_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_RESPONSE_FILE_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "text/plain"]);
 
+export interface FileCommentActionState {
+  readonly status: "idle" | "success" | "error";
+  readonly message?: string;
+}
+
 export async function commentOnSpeakerTaskFile(
   eventSlug: string,
   assignmentId: string,
   submissionId: string,
+  _previousState: FileCommentActionState,
   formData: FormData,
-): Promise<void> {
+): Promise<FileCommentActionState> {
   const { viewer } = await requirePortalContent(eventSlug, "tasks");
   const value = formData.get("comment");
-  await addSpeakerTaskFileComment(
-    getDatabaseClient(),
-    viewer.eventId,
-    submissionId,
-    { role: "SPEAKER", speakerId: viewer.speakerId },
-    typeof value === "string" ? value : "",
-  );
+  try {
+    await addSpeakerTaskFileComment(
+      getDatabaseClient(),
+      viewer.eventId,
+      submissionId,
+      { role: "SPEAKER", speakerId: viewer.speakerId },
+      typeof value === "string" ? value : "",
+    );
+  } catch (error) {
+    if (error instanceof RepositoryError) return { status: "error", message: error.message };
+    throw error;
+  }
   revalidatePath(portalHref(eventSlug, `/tasks/${assignmentId}`));
   revalidatePath(`/dashboard/events/${eventSlug}/onboarding`);
+  return { status: "success", message: "Comment added." };
 }
 
 export interface TaskSubmissionState {

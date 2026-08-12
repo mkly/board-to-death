@@ -1,22 +1,35 @@
+"use client";
+
+import { useActionState, useTransition } from "react";
+
+import { MailPlus } from "lucide-react";
+
 import { FormSelect } from "@/components/form-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EventInvitationStatus, EventMembershipRole, MembershipStatus } from "@/generated/prisma/client";
+import { actionResultToast, useActionToast } from "@/hooks/use-action-toast";
 import type { EventTeamSnapshot } from "@/server/event-memberships";
 
-import { inviteEventMember, resendEventInvitation, revokeEventInvitation, setEventMembershipActive } from "../actions";
+import {
+  type EventTeamActionState,
+  inviteEventMember,
+  resendEventInvitation,
+  revokeEventInvitation,
+  setEventMembershipActive,
+} from "../actions";
 
 interface EventTeamWorkspaceProps {
   readonly event: { readonly name: string; readonly slug: string };
   readonly snapshot: EventTeamSnapshot;
-  readonly notice?: string;
-  readonly error?: string;
 }
+
+const INITIAL_STATE: EventTeamActionState = { status: "idle" };
 
 const roleLabels: Record<EventMembershipRole, string> = {
   [EventMembershipRole.ORGANIZER_ADMIN]: "Organizer staff",
@@ -33,8 +46,90 @@ function rolesLabel(roles: readonly EventMembershipRole[]): string {
   return roles.map(roleLabel).join(", ");
 }
 
-export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeamWorkspaceProps) {
-  const inviteAction = inviteEventMember.bind(null, event.slug);
+function InviteCollaboratorForm({ eventSlug }: { readonly eventSlug: string }) {
+  const [state, action, pending] = useActionState(inviteEventMember.bind(null, eventSlug), INITIAL_STATE);
+  useActionToast(state);
+  return (
+    <form action={action}>
+      <FieldGroup className="md:grid md:grid-cols-[1fr_1fr_12rem_auto] md:items-end">
+        <Field>
+          <FieldLabel htmlFor="invite-email">Email</FieldLabel>
+          <Input id="invite-email" name="email" type="email" required autoComplete="email" />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="invite-name">Display name</FieldLabel>
+          <Input id="invite-name" name="displayName" autoComplete="name" />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="invite-role">Role</FieldLabel>
+          <FormSelect
+            defaultValue={EventMembershipRole.REVIEWER}
+            id="invite-role"
+            name="role"
+            options={[
+              { value: EventMembershipRole.REVIEWER, label: "Reviewer" },
+              { value: EventMembershipRole.ORGANIZER_ADMIN, label: "Organizer staff" },
+            ]}
+          />
+        </Field>
+        <Button disabled={pending} type="submit">
+          {pending ? <Spinner data-icon="inline-start" /> : <MailPlus data-icon="inline-start" />}
+          Send invitation
+        </Button>
+      </FieldGroup>
+    </form>
+  );
+}
+
+function MembershipToggleButton({
+  eventSlug,
+  membershipId,
+  active,
+}: {
+  readonly eventSlug: string;
+  readonly membershipId: string;
+  readonly active: boolean;
+}) {
+  const [pending, startTransition] = useTransition();
+  const toggle = () => {
+    startTransition(async () => {
+      actionResultToast(await setEventMembershipActive(eventSlug, membershipId, !active));
+    });
+  };
+  return (
+    <Button disabled={pending} onClick={toggle} type="button" size="sm" variant="outline">
+      {pending ? <Spinner data-icon="inline-start" /> : null}
+      {active ? "Set inactive" : "Restore access"}
+    </Button>
+  );
+}
+
+function InvitationActions({ eventSlug, invitationId }: { readonly eventSlug: string; readonly invitationId: string }) {
+  const [pending, startTransition] = useTransition();
+  const resend = () => {
+    startTransition(async () => {
+      actionResultToast(await resendEventInvitation(eventSlug, invitationId));
+    });
+  };
+  const revoke = () => {
+    startTransition(async () => {
+      actionResultToast(await revokeEventInvitation(eventSlug, invitationId));
+    });
+  };
+  return (
+    <div className="flex justify-end gap-2">
+      <Button disabled={pending} onClick={resend} type="button" size="sm" variant="outline">
+        {pending ? <Spinner data-icon="inline-start" /> : null}
+        Resend
+      </Button>
+      <Button disabled={pending} onClick={revoke} type="button" size="sm" variant="destructive">
+        Revoke
+      </Button>
+    </div>
+  );
+}
+
+export function EventTeamWorkspace({ event, snapshot }: EventTeamWorkspaceProps) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
@@ -47,19 +142,6 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
         </div>
       </header>
 
-      {notice ? (
-        <Alert>
-          <AlertTitle>Event team updated</AlertTitle>
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Event team not updated</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <Card>
         <CardHeader>
           <CardTitle>Invite a collaborator</CardTitle>
@@ -68,31 +150,7 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={inviteAction}>
-            <FieldGroup className="md:grid md:grid-cols-[1fr_1fr_12rem_auto] md:items-end">
-              <Field>
-                <FieldLabel htmlFor="invite-email">Email</FieldLabel>
-                <Input id="invite-email" name="email" type="email" required autoComplete="email" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="invite-name">Display name</FieldLabel>
-                <Input id="invite-name" name="displayName" autoComplete="name" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="invite-role">Role</FieldLabel>
-                <FormSelect
-                  defaultValue={EventMembershipRole.REVIEWER}
-                  id="invite-role"
-                  name="role"
-                  options={[
-                    { value: EventMembershipRole.REVIEWER, label: "Reviewer" },
-                    { value: EventMembershipRole.ORGANIZER_ADMIN, label: "Organizer staff" },
-                  ]}
-                />
-              </Field>
-              <Button type="submit">Send invitation</Button>
-            </FieldGroup>
-          </form>
+          <InviteCollaboratorForm eventSlug={event.slug} />
         </CardContent>
       </Card>
 
@@ -117,7 +175,6 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
               <TableBody>
                 {snapshot.memberships.map((membership) => {
                   const active = membership.status === MembershipStatus.ACTIVE;
-                  const action = setEventMembershipActive.bind(null, event.slug, membership.id, !active);
                   return (
                     <TableRow key={membership.id}>
                       <TableCell>
@@ -131,11 +188,7 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
                         <Badge variant={active ? "secondary" : "outline"}>{active ? "Active" : "Inactive"}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <form action={action}>
-                          <Button type="submit" size="sm" variant="outline">
-                            {active ? "Set inactive" : "Restore access"}
-                          </Button>
-                        </form>
+                        <MembershipToggleButton active={active} eventSlug={event.slug} membershipId={membership.id} />
                       </TableCell>
                     </TableRow>
                   );
@@ -182,20 +235,7 @@ export function EventTeamWorkspace({ event, snapshot, notice, error }: EventTeam
                         <Badge variant={pending ? "secondary" : "outline"}>{invitation.status.toLowerCase()}</Badge>
                       </TableCell>
                       <TableCell>
-                        {pending ? (
-                          <div className="flex justify-end gap-2">
-                            <form action={resendEventInvitation.bind(null, event.slug, invitation.id)}>
-                              <Button type="submit" size="sm" variant="outline">
-                                Resend
-                              </Button>
-                            </form>
-                            <form action={revokeEventInvitation.bind(null, event.slug, invitation.id)}>
-                              <Button type="submit" size="sm" variant="destructive">
-                                Revoke
-                              </Button>
-                            </form>
-                          </div>
-                        ) : null}
+                        {pending ? <InvitationActions eventSlug={event.slug} invitationId={invitation.id} /> : null}
                       </TableCell>
                     </TableRow>
                   );

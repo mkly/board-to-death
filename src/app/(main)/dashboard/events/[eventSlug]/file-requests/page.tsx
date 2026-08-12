@@ -13,7 +13,7 @@ export default async function FileRequestsPage({
   searchParams,
 }: {
   readonly params: Promise<{ eventSlug: string }>;
-  readonly searchParams: Promise<{ tab?: string; notice?: string; error?: string }>;
+  readonly searchParams: Promise<{ tab?: string }>;
 }) {
   const [{ eventSlug }, messages, shell] = await Promise.all([params, searchParams, getDashboardShellData()]);
   const event = findAuthorizedEvent(shell.events, eventSlug);
@@ -33,14 +33,5 @@ export default async function FileRequestsPage({
     createPrismaFileRequestStore(client).listEventFileLibrary(event.id),
   ]);
 
-  return (
-    <FileRequestsIndex
-      activeTab={messages.tab ?? "all"}
-      error={messages.error}
-      event={event}
-      files={files}
-      notice={messages.notice}
-      requests={requests}
-    />
-  );
+  return <FileRequestsIndex activeTab={messages.tab ?? "all"} event={event} files={files} requests={requests} />;
 }

@@ -215,6 +215,7 @@ export class EvaluationResultsRepository {
       ).length;
       const calculatedCriteria = criteria.map((criterion) => {
         const scores = activeAssignments.flatMap(({ evaluation }) => {
+          if (evaluation?.status !== EvaluationStatus.FINAL) return [];
           const score = evaluation?.results.find(({ criterionId }) => criterionId === criterion.id)?.score;
           return score === null || score === undefined ? [] : [score.toNumber()];
         });

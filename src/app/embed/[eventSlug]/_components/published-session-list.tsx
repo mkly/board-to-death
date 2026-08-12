@@ -2,15 +2,15 @@
 
 import { useMemo, useState } from "react";
 
-import { Clock3, LayoutList, MapPin, Search } from "lucide-react";
+import { LayoutList, MapPin, Search } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import type { EmbedDensity, EmbedFilter } from "@/lib/published-embeds/configuration";
+import { cn } from "@/lib/utils";
+
+import { EmbedHeader, TrackChip } from "./embed-kit";
 
 interface PublishedSessionSpeaker {
   readonly id: string;
@@ -24,7 +24,7 @@ export interface PublishedSessionListItem {
   readonly durationMinutes: number;
   readonly format: string | null;
   readonly location: { readonly id: string; readonly name: string } | null;
-  readonly track: { readonly id: string; readonly name: string } | null;
+  readonly track: { readonly id: string; readonly name: string; readonly color?: string | null } | null;
   readonly speakers: readonly PublishedSessionSpeaker[];
 }
 
@@ -51,6 +51,8 @@ function matchesSearch(session: PublishedSessionListItem, search: string): boole
   return text.includes(search.toLocaleLowerCase());
 }
 
+const FILTER_LABEL_CLASS = "font-medium text-[11px] text-muted-foreground uppercase tracking-wide";
+
 export function PublishedSessionList({ density, enabledFilters, eventName, sessions }: PublishedSessionListProps) {
   const [search, setSearch] = useState("");
   const [trackId, setTrackId] = useState("");
@@ -60,6 +62,7 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
   const showTrack = enabledFilters.includes("track");
   const showFormat = enabledFilters.includes("format");
   const showLocation = enabledFilters.includes("room");
+  const compact = density === "compact";
   const tracks = useMemo(
     () =>
       [
@@ -94,77 +97,86 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
   );
 
   return (
-    <section aria-labelledby="session-list-title" className="mx-auto flex w-full max-w-4xl flex-col gap-5">
-      <header className="flex flex-col gap-1">
-        <p className="text-muted-foreground text-sm">{eventName}</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-tight" id="session-list-title">
-          Sessions
-        </h1>
-        <p className="text-muted-foreground text-sm">Explore the sessions and speakers in the published program.</p>
-      </header>
+    <section aria-labelledby="session-list-title" className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+      <EmbedHeader
+        eyebrow="Sessions"
+        title={eventName}
+        titleId="session-list-title"
+        description="Every session in the published program."
+      />
 
       {showSearch || showTrack || showFormat || showLocation ? (
-        <FieldGroup className="rounded-xl border bg-card p-3 sm:grid sm:grid-cols-2 sm:items-end lg:grid-cols-4">
-          {showSearch ? (
-            <Field>
-              <FieldLabel htmlFor="session-search">Search sessions</FieldLabel>
-              <InputGroup>
-                <InputGroupInput
-                  id="session-search"
-                  onChange={(event) => setSearch(event.currentTarget.value)}
-                  placeholder="Title, speaker, track, format, or location"
-                  type="search"
-                  value={search}
+        <search>
+          <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-y py-3">
+            {showSearch ? (
+              <div className="flex min-w-48 flex-1 flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="session-search">
+                  Search sessions
+                </label>
+                <InputGroup>
+                  <InputGroupInput
+                    id="session-search"
+                    onChange={(event) => setSearch(event.currentTarget.value)}
+                    placeholder="Title, speaker, track, format, or location"
+                    type="search"
+                    value={search}
+                  />
+                  <InputGroupAddon align="inline-start">
+                    <Search aria-hidden="true" />
+                  </InputGroupAddon>
+                </InputGroup>
+              </div>
+            ) : null}
+            {showTrack ? (
+              <div className="flex flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="session-track">
+                  Track
+                </label>
+                <FormSelect
+                  className="min-w-36"
+                  id="session-track"
+                  onValueChange={setTrackId}
+                  value={trackId}
+                  options={[
+                    { value: "", label: "All tracks" },
+                    ...tracks.map((track) => ({ value: track.id, label: track.name })),
+                  ]}
                 />
-                <InputGroupAddon align="inline-start">
-                  <Search aria-hidden="true" />
-                </InputGroupAddon>
-              </InputGroup>
-            </Field>
-          ) : null}
-          {showTrack ? (
-            <Field className="sm:max-w-64">
-              <FieldLabel htmlFor="session-track">Track</FieldLabel>
-              <FormSelect
-                className="w-full"
-                id="session-track"
-                onValueChange={setTrackId}
-                value={trackId}
-                options={[
-                  { value: "", label: "All tracks" },
-                  ...tracks.map((track) => ({ value: track.id, label: track.name })),
-                ]}
-              />
-            </Field>
-          ) : null}
-          {showFormat ? (
-            <Field>
-              <FieldLabel htmlFor="session-format">Format</FieldLabel>
-              <FormSelect
-                className="w-full"
-                id="session-format"
-                onValueChange={setFormat}
-                value={format}
-                options={[{ value: "", label: "All formats" }, ...formats.map((value) => ({ value, label: value }))]}
-              />
-            </Field>
-          ) : null}
-          {showLocation ? (
-            <Field>
-              <FieldLabel htmlFor="session-location">Location</FieldLabel>
-              <FormSelect
-                className="w-full"
-                id="session-location"
-                onValueChange={setLocationId}
-                value={locationId}
-                options={[
-                  { value: "", label: "All locations" },
-                  ...locations.map((location) => ({ value: location.id, label: location.name })),
-                ]}
-              />
-            </Field>
-          ) : null}
-        </FieldGroup>
+              </div>
+            ) : null}
+            {showFormat ? (
+              <div className="flex flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="session-format">
+                  Format
+                </label>
+                <FormSelect
+                  className="min-w-32"
+                  id="session-format"
+                  onValueChange={setFormat}
+                  value={format}
+                  options={[{ value: "", label: "All formats" }, ...formats.map((value) => ({ value, label: value }))]}
+                />
+              </div>
+            ) : null}
+            {showLocation ? (
+              <div className="flex flex-col gap-1.5">
+                <label className={FILTER_LABEL_CLASS} htmlFor="session-location">
+                  Location
+                </label>
+                <FormSelect
+                  className="min-w-32"
+                  id="session-location"
+                  onValueChange={setLocationId}
+                  value={locationId}
+                  options={[
+                    { value: "", label: "All locations" },
+                    ...locations.map((location) => ({ value: location.id, label: location.name })),
+                  ]}
+                />
+              </div>
+            ) : null}
+          </div>
+        </search>
       ) : null}
 
       <p aria-live="polite" className="sr-only" role="status">
@@ -172,61 +184,58 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
       </p>
 
       {visibleSessions.length > 0 ? (
-        <ul className="flex flex-col gap-3">
+        <ul className="overflow-hidden rounded-xl border bg-card text-card-foreground">
           {visibleSessions.map((session) => (
-            <li id={`session-${session.id}`} key={session.id}>
-              <Card size={density === "compact" ? "sm" : "default"}>
-                <CardHeader>
-                  <CardTitle className="min-w-0 break-words">
-                    <h2>
-                      <a
-                        className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        href={`#session-${session.id}`}
-                      >
-                        {session.title}
-                      </a>
-                    </h2>
-                  </CardTitle>
-                  <CardDescription className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock3 aria-hidden="true" className="size-3.5" />
-                      {session.durationMinutes} minutes
+            <li
+              className={cn(
+                "flex scroll-mt-4 flex-col gap-1.5 border-b last:border-b-0",
+                compact ? "p-3.5" : "p-4 sm:p-5",
+              )}
+              id={`session-${session.id}`}
+              key={session.id}
+            >
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-muted-foreground text-xs tabular-nums">
+                <span className="font-semibold text-foreground">{session.durationMinutes} min</span>
+                {session.format ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{session.format}</span>
+                  </>
+                ) : null}
+                {session.location ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="inline-flex items-center gap-1 font-sans">
+                      <MapPin aria-hidden="true" className="size-3.5" />
+                      {session.location.name}
                     </span>
-                    {session.track ? <Badge variant="outline">{session.track.name}</Badge> : null}
-                    {session.format ? <Badge variant="secondary">{session.format}</Badge> : null}
-                    {session.location ? (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin aria-hidden="true" className="size-3.5" />
-                        {session.location.name}
-                      </span>
-                    ) : null}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  {session.description ? (
-                    <p className="break-words text-sm leading-relaxed">{session.description}</p>
-                  ) : null}
-                  <div className="flex flex-col gap-2">
-                    <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">Speakers</h3>
-                    {session.speakers.length > 0 ? (
-                      <ul className="flex flex-wrap gap-2">
-                        {session.speakers.map((speaker) => (
-                          <li key={speaker.id}>
-                            <Badge variant="secondary">{speaker.name}</Badge>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">No public speaker profiles are linked.</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </>
+                ) : null}
+              </p>
+              <h2 className="min-w-0 break-words font-heading font-semibold text-base leading-snug">
+                <a
+                  className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  href={`#session-${session.id}`}
+                >
+                  {session.title}
+                </a>
+              </h2>
+              {session.description ? (
+                <p className="break-words text-muted-foreground text-sm leading-relaxed">{session.description}</p>
+              ) : null}
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-muted-foreground text-sm">
+                {session.track ? <TrackChip color={session.track.color} name={session.track.name} /> : null}
+                {session.speakers.length > 0 ? (
+                  <span>With {session.speakers.map(({ name }) => name).join(", ")}</span>
+                ) : (
+                  <span>No public speaker profiles are linked.</span>
+                )}
+              </p>
             </li>
           ))}
         </ul>
       ) : (
-        <Empty className="border">
+        <Empty className="border border-dashed">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <LayoutList aria-hidden="true" />
