@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import {
   CFP_BUILT_IN_QUESTION_TYPES,
   type CfpFormDefinition,
@@ -243,6 +244,7 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
     },
     INITIAL_SAVE_STATE,
   );
+  useActionToast(state);
   const draftDefinition = useMemo(() => buildDefinition(definition, sections), [definition, sections]);
   const localValidation = useMemo(() => parseCfpDefinition(draftDefinition), [draftDefinition]);
   const sourceQuestions = useMemo(
@@ -303,7 +305,7 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
   };
 
   return (
-    <form action={formAction} className="flex flex-col gap-6">
+    <form noValidate action={formAction} className="flex flex-col gap-6">
       <input type="hidden" name="eventSlug" value={eventSlug} />
       <input type="hidden" name="formId" value={formId} />
       <input type="hidden" name="definition" value={JSON.stringify(draftDefinition)} />
@@ -334,29 +336,6 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
               ))}
             </ul>
           </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {state.status === "error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>Questions were not saved</AlertTitle>
-          <AlertDescription>
-            <p>{state.message}</p>
-            {state.errors ? (
-              <ul className="ml-4 flex list-disc flex-col gap-1">
-                {state.errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            ) : null}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {state.status === "success" ? (
-        <Alert>
-          <AlertTitle>Saved</AlertTitle>
-          <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -648,7 +627,7 @@ export function CfpQuestionEditor({ eventSlug, formId, versionNumber, definition
       })}
 
       <p aria-live="polite" className="text-muted-foreground text-sm">
-        {state.status === "idle" ? "Changes are saved as a new immutable form version." : state.message}
+        Changes are saved as a new immutable form version.
       </p>
     </form>
   );

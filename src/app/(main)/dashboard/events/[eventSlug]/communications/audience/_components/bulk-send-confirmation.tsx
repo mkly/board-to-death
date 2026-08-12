@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { type ReactNode, useActionState } from "react";
 
 import Link from "next/link";
 
@@ -74,6 +74,51 @@ export function BulkSendConfirmation({
   templates,
 }: BulkSendConfirmationProps) {
   const [state, formAction, pending] = useActionState(confirmBulkCommunication, initialState);
+  let confirmationAction: ReactNode;
+  if (state.status === "success") {
+    confirmationAction = (
+      <Button type="button" variant="outline" disabled>
+        <MailCheck data-icon="inline-start" />
+        Recipients queued
+      </Button>
+    );
+  } else if (templates.length === 0) {
+    confirmationAction = (
+      <Button asChild variant="outline">
+        <Link href={`/dashboard/events/${encodeURIComponent(eventSlug)}/communications/templates`}>
+          Create an email template
+        </Link>
+      </Button>
+    );
+  } else {
+    confirmationAction = (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button type="button" disabled={pending}>
+            {pending ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
+            {pending ? "Queuing..." : `Confirm ${recipientCount.toString()} recipients`}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Send />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Queue this bulk send?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Current eligibility will be checked again. Later template edits cannot change the queued snapshots.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction type="submit" form="bulk-send-confirmation">
+              Queue recipient deliveries
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  }
 
   return (
     <Card>
@@ -83,7 +128,7 @@ export function BulkSendConfirmation({
           Confirmation rechecks eligibility and stores the exact template and recipient content before queuing.
         </CardDescription>
       </CardHeader>
-      <form id="bulk-send-confirmation" action={formAction}>
+      <form noValidate id="bulk-send-confirmation" action={formAction}>
         <CardContent>
           <input type="hidden" name="eventSlug" value={eventSlug} />
           <input type="hidden" name="confirmationToken" value={confirmationToken} />
@@ -126,46 +171,7 @@ export function BulkSendConfirmation({
             </Alert>
           )}
         </CardContent>
-        <CardFooter>
-          {state.status === "success" ? (
-            <Button type="button" variant="outline" disabled>
-              <MailCheck data-icon="inline-start" />
-              Recipients queued
-            </Button>
-          ) : templates.length === 0 ? (
-            <Button asChild variant="outline">
-              <Link href={`/dashboard/events/${encodeURIComponent(eventSlug)}/communications/templates`}>
-                Create an email template
-              </Link>
-            </Button>
-          ) : (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button type="button" disabled={pending}>
-                  {pending ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
-                  {pending ? "Queuing..." : `Confirm ${recipientCount.toString()} recipients`}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogMedia>
-                    <Send />
-                  </AlertDialogMedia>
-                  <AlertDialogTitle>Queue this bulk send?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Current eligibility will be checked again. Later template edits cannot change the queued snapshots.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Go back</AlertDialogCancel>
-                  <AlertDialogAction type="submit" form="bulk-send-confirmation">
-                    Queue recipient deliveries
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </CardFooter>
+        <CardFooter>{confirmationAction}</CardFooter>
       </form>
     </Card>
   );

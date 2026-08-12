@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 
+import { FormSubmitValidator } from "@/components/form-submit-validator";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { APP_CONFIG } from "@/config/app-config";
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body className={`${fontVars} min-h-screen antialiased`}>
         <TooltipProvider>
           <PreferencesStoreProvider initialValues={PREFERENCE_DEFAULTS}>
+            <FormSubmitValidator />
             {children}
             <Toaster />
           </PreferencesStoreProvider>

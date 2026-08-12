@@ -204,7 +204,7 @@ function CriterionCard({
           </CardAction>
         ) : null}
       </CardHeader>
-      <form action={saveAction}>
+      <form noValidate action={saveAction}>
         <CardContent>
           <CriterionFields criterion={criterion} idPrefix={criterion.id} disabled={!mutable} />
         </CardContent>
@@ -252,7 +252,7 @@ function AddCriterionForm({ eventSlug, roundId }: { readonly eventSlug: string; 
 
   return (
     <Card size="sm">
-      <form action={action} key={formKey}>
+      <form noValidate action={action} key={formKey}>
         <CardHeader>
           <CardTitle>Add criterion</CardTitle>
           <CardDescription>Create a scoring dimension for this draft round.</CardDescription>

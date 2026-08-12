@@ -50,7 +50,7 @@ function InviteCollaboratorForm({ eventSlug }: { readonly eventSlug: string }) {
   const [state, action, pending] = useActionState(inviteEventMember.bind(null, eventSlug), INITIAL_STATE);
   useActionToast(state);
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <FieldGroup className="md:grid md:grid-cols-[1fr_1fr_12rem_auto] md:items-end">
         <Field>
           <FieldLabel htmlFor="invite-email">Email</FieldLabel>

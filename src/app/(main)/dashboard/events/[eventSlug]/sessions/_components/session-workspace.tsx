@@ -34,6 +34,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import {
   Field,
@@ -144,6 +152,7 @@ function SessionForm({
   customFieldDefinitions,
   sessions,
   onSaved,
+  framed = true,
 }: {
   readonly eventSlug: string;
   readonly session: SessionWorkspaceSession | null;
@@ -152,6 +161,7 @@ function SessionForm({
   readonly customFieldDefinitions: SessionWorkspaceProps["customFieldDefinitions"];
   readonly sessions: SessionWorkspaceProps["sessions"];
   readonly onSaved: (sessionId: string) => void;
+  readonly framed?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     async (previousState: SessionMutationState, formData: FormData) => {
@@ -165,9 +175,203 @@ function SessionForm({
   const parentOptions = sessions.filter(
     (candidate) => !candidate.archived && candidate.parentSessionId === null && candidate.id !== session?.id,
   );
+  const formFields = (
+    <FieldGroup>
+      <Field data-invalid={Boolean(fieldError(state, "title")) || undefined}>
+        <FieldLabel htmlFor="session-title">Title</FieldLabel>
+        <Input
+          id="session-title"
+          name="title"
+          defaultValue={session?.title ?? ""}
+          aria-invalid={Boolean(fieldError(state, "title")) || undefined}
+          disabled={session?.archived}
+          required
+        />
+        <FieldError>{fieldError(state, "title")}</FieldError>
+      </Field>
+      <Field data-invalid={Boolean(fieldError(state, "description")) || undefined}>
+        <FieldLabel htmlFor="session-description">Description</FieldLabel>
+        <Textarea
+          id="session-description"
+          name="description"
+          defaultValue={session?.description ?? ""}
+          aria-invalid={Boolean(fieldError(state, "description")) || undefined}
+          disabled={session?.archived}
+          className="min-h-28"
+        />
+        <FieldError>{fieldError(state, "description")}</FieldError>
+      </Field>
+      <Field data-invalid={Boolean(fieldError(state, "contentApprovalStatus")) || undefined}>
+        <FieldLabel htmlFor="session-content-approval">Content approval</FieldLabel>
+        <Select
+          name="contentApprovalStatus"
+          defaultValue={session?.contentApprovalStatus ?? "DRAFT"}
+          disabled={session?.archived}
+        >
+          <SelectTrigger
+            id="session-content-approval"
+            className="w-full"
+            aria-invalid={Boolean(fieldError(state, "contentApprovalStatus")) || undefined}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              {contentApprovalStatuses.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {contentApprovalLabels[status]}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <FieldDescription>Only approved sessions are included the next time the program is published.</FieldDescription>
+        <FieldError>{fieldError(state, "contentApprovalStatus")}</FieldError>
+      </Field>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field data-invalid={Boolean(fieldError(state, "durationMinutes")) || undefined}>
+          <FieldLabel htmlFor="session-duration">Duration (minutes)</FieldLabel>
+          <Input
+            id="session-duration"
+            name="durationMinutes"
+            type="number"
+            min={1}
+            max={1440}
+            step={1}
+            defaultValue={session?.durationMinutes ?? 45}
+            aria-invalid={Boolean(fieldError(state, "durationMinutes")) || undefined}
+            disabled={session?.archived}
+            required
+          />
+          <FieldError>{fieldError(state, "durationMinutes")}</FieldError>
+        </Field>
+        <Field data-invalid={Boolean(fieldError(state, "trackId")) || undefined}>
+          <FieldLabel htmlFor="session-track">Track</FieldLabel>
+          <Select name="trackId" defaultValue={session?.trackId ?? "unassigned"} disabled={session?.archived}>
+            <SelectTrigger id="session-track" aria-invalid={Boolean(fieldError(state, "trackId")) || undefined}>
+              <SelectValue placeholder="No track" />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                <SelectItem value="unassigned">No track</SelectItem>
+                {tracks.map((track) => (
+                  <SelectItem key={track.id} value={track.id}>
+                    {track.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <FieldDescription>Optional until the program is organized.</FieldDescription>
+          <FieldError>{fieldError(state, "trackId")}</FieldError>
+        </Field>
+      </div>
+      <Field data-invalid={Boolean(fieldError(state, "parentSessionId")) || undefined}>
+        <FieldLabel htmlFor="session-parent">Program structure</FieldLabel>
+        <Select
+          name="parentSessionId"
+          defaultValue={session?.parentSessionId ?? "standalone"}
+          disabled={session?.archived}
+        >
+          <SelectTrigger
+            id="session-parent"
+            className="w-full"
+            aria-invalid={Boolean(fieldError(state, "parentSessionId")) || undefined}
+          >
+            <SelectValue placeholder="Standalone session" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              <SelectItem value="standalone">Standalone session</SelectItem>
+              {parentOptions.map((candidate) => (
+                <SelectItem key={candidate.id} value={candidate.id}>
+                  Subsession of {candidate.title}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          Subsessions must fit inside their parent’s agenda placement. Their participants are also added to the parent.
+        </FieldDescription>
+        <FieldError>{fieldError(state, "parentSessionId")}</FieldError>
+      </Field>
+      <FieldSet data-invalid={Boolean(fieldError(state, "participants")) || undefined}>
+        <FieldLegend variant="label">Participants</FieldLegend>
+        <FieldDescription>
+          Assign each participant a program role. Leave the role unassigned to omit them.
+        </FieldDescription>
+        {speakers.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No event speakers are available yet.</p>
+        ) : (
+          <FieldGroup className="gap-3">
+            {speakers.map((speaker) => {
+              const participant = session?.participants.find(({ speakerId }) => speakerId === speaker.id);
+              const controlId = `session-participant-${speaker.id}`;
+              return (
+                <Field key={speaker.id} orientation="horizontal" data-disabled={session?.archived ? true : undefined}>
+                  <FieldLabel htmlFor={controlId} className="min-w-0 flex-1 font-normal">
+                    <span className="truncate">{speaker.name}</span>
+                    <span className="truncate text-muted-foreground">{speaker.email}</span>
+                  </FieldLabel>
+                  <Select
+                    name={`participantRole:${speaker.id}`}
+                    defaultValue={participant?.role ?? "NONE"}
+                    disabled={session?.archived}
+                  >
+                    <SelectTrigger id={controlId} className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectItem value="NONE">Not participating</SelectItem>
+                        {Object.entries(participantRoleLabels).map(([role, label]) => (
+                          <SelectItem key={role} value={role}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              );
+            })}
+          </FieldGroup>
+        )}
+        <FieldError>{fieldError(state, "participants")}</FieldError>
+      </FieldSet>
+      <CustomFieldInputs
+        definitions={customFieldDefinitions}
+        values={session?.customFieldValues}
+        disabled={session?.archived}
+        fileDownloadBasePath={`/dashboard/events/${encodeURIComponent(eventSlug)}/custom-fields/files`}
+      />
+    </FieldGroup>
+  );
+
+  if (!framed) {
+    return (
+      <form noValidate action={formAction} className="flex flex-col gap-5">
+        <input type="hidden" name="eventSlug" value={eventSlug} />
+        <input type="hidden" name="sessionId" value={session?.id ?? ""} />
+        {formFields}
+        <p aria-live="polite" className="text-muted-foreground text-sm">
+          {state.message}
+        </p>
+        {!session?.archived ? (
+          <div className="flex justify-end">
+            <Button type="submit" disabled={pending}>
+              {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
+              {saveButtonLabel(pending, isNew)}
+            </Button>
+          </div>
+        ) : null}
+      </form>
+    );
+  }
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input type="hidden" name="eventSlug" value={eventSlug} />
       <input type="hidden" name="sessionId" value={session?.id ?? ""} />
       <Card>
@@ -186,186 +390,7 @@ function SessionForm({
             </CardAction>
           ) : null}
         </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field data-invalid={Boolean(fieldError(state, "title")) || undefined}>
-              <FieldLabel htmlFor="session-title">Title</FieldLabel>
-              <Input
-                id="session-title"
-                name="title"
-                defaultValue={session?.title ?? ""}
-                aria-invalid={Boolean(fieldError(state, "title")) || undefined}
-                disabled={session?.archived}
-                required
-              />
-              <FieldError>{fieldError(state, "title")}</FieldError>
-            </Field>
-            <Field data-invalid={Boolean(fieldError(state, "description")) || undefined}>
-              <FieldLabel htmlFor="session-description">Description</FieldLabel>
-              <Textarea
-                id="session-description"
-                name="description"
-                defaultValue={session?.description ?? ""}
-                aria-invalid={Boolean(fieldError(state, "description")) || undefined}
-                disabled={session?.archived}
-                className="min-h-28"
-              />
-              <FieldError>{fieldError(state, "description")}</FieldError>
-            </Field>
-            <Field data-invalid={Boolean(fieldError(state, "contentApprovalStatus")) || undefined}>
-              <FieldLabel htmlFor="session-content-approval">Content approval</FieldLabel>
-              <Select
-                name="contentApprovalStatus"
-                defaultValue={session?.contentApprovalStatus ?? "DRAFT"}
-                disabled={session?.archived}
-              >
-                <SelectTrigger
-                  id="session-content-approval"
-                  className="w-full"
-                  aria-invalid={Boolean(fieldError(state, "contentApprovalStatus")) || undefined}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectGroup>
-                    {contentApprovalStatuses.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {contentApprovalLabels[status]}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Only approved sessions are included the next time the program is published.
-              </FieldDescription>
-              <FieldError>{fieldError(state, "contentApprovalStatus")}</FieldError>
-            </Field>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field data-invalid={Boolean(fieldError(state, "durationMinutes")) || undefined}>
-                <FieldLabel htmlFor="session-duration">Duration (minutes)</FieldLabel>
-                <Input
-                  id="session-duration"
-                  name="durationMinutes"
-                  type="number"
-                  min={1}
-                  max={1440}
-                  step={1}
-                  defaultValue={session?.durationMinutes ?? 45}
-                  aria-invalid={Boolean(fieldError(state, "durationMinutes")) || undefined}
-                  disabled={session?.archived}
-                  required
-                />
-                <FieldError>{fieldError(state, "durationMinutes")}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(fieldError(state, "trackId")) || undefined}>
-                <FieldLabel htmlFor="session-track">Track</FieldLabel>
-                <Select name="trackId" defaultValue={session?.trackId ?? "unassigned"} disabled={session?.archived}>
-                  <SelectTrigger id="session-track" aria-invalid={Boolean(fieldError(state, "trackId")) || undefined}>
-                    <SelectValue placeholder="No track" />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectGroup>
-                      <SelectItem value="unassigned">No track</SelectItem>
-                      {tracks.map((track) => (
-                        <SelectItem key={track.id} value={track.id}>
-                          {track.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FieldDescription>Optional until the program is organized.</FieldDescription>
-                <FieldError>{fieldError(state, "trackId")}</FieldError>
-              </Field>
-            </div>
-            <Field data-invalid={Boolean(fieldError(state, "parentSessionId")) || undefined}>
-              <FieldLabel htmlFor="session-parent">Program structure</FieldLabel>
-              <Select
-                name="parentSessionId"
-                defaultValue={session?.parentSessionId ?? "standalone"}
-                disabled={session?.archived}
-              >
-                <SelectTrigger
-                  id="session-parent"
-                  className="w-full"
-                  aria-invalid={Boolean(fieldError(state, "parentSessionId")) || undefined}
-                >
-                  <SelectValue placeholder="Standalone session" />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectGroup>
-                    <SelectItem value="standalone">Standalone session</SelectItem>
-                    {parentOptions.map((candidate) => (
-                      <SelectItem key={candidate.id} value={candidate.id}>
-                        Subsession of {candidate.title}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Subsessions must fit inside their parent’s agenda placement. Their participants are also added to the
-                parent.
-              </FieldDescription>
-              <FieldError>{fieldError(state, "parentSessionId")}</FieldError>
-            </Field>
-            <FieldSet data-invalid={Boolean(fieldError(state, "participants")) || undefined}>
-              <FieldLegend variant="label">Participants</FieldLegend>
-              <FieldDescription>
-                Assign each participant a program role. Leave the role unassigned to omit them.
-              </FieldDescription>
-              {speakers.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No event speakers are available yet.</p>
-              ) : (
-                <FieldGroup className="gap-3">
-                  {speakers.map((speaker) => {
-                    const participant = session?.participants.find(({ speakerId }) => speakerId === speaker.id);
-                    const controlId = `session-participant-${speaker.id}`;
-                    return (
-                      <Field
-                        key={speaker.id}
-                        orientation="horizontal"
-                        data-disabled={session?.archived ? true : undefined}
-                      >
-                        <FieldLabel htmlFor={controlId} className="min-w-0 flex-1 font-normal">
-                          <span className="truncate">{speaker.name}</span>
-                          <span className="truncate text-muted-foreground">{speaker.email}</span>
-                        </FieldLabel>
-                        <Select
-                          name={`participantRole:${speaker.id}`}
-                          defaultValue={participant?.role ?? "NONE"}
-                          disabled={session?.archived}
-                        >
-                          <SelectTrigger id={controlId} className="w-40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper">
-                            <SelectGroup>
-                              <SelectItem value="NONE">Not participating</SelectItem>
-                              {Object.entries(participantRoleLabels).map(([role, label]) => (
-                                <SelectItem key={role} value={role}>
-                                  {label}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                    );
-                  })}
-                </FieldGroup>
-              )}
-              <FieldError>{fieldError(state, "participants")}</FieldError>
-            </FieldSet>
-            <CustomFieldInputs
-              definitions={customFieldDefinitions}
-              values={session?.customFieldValues}
-              disabled={session?.archived}
-              fileDownloadBasePath={`/dashboard/events/${encodeURIComponent(eventSlug)}/custom-fields/files`}
-            />
-          </FieldGroup>
-        </CardContent>
+        <CardContent>{formFields}</CardContent>
         <CardFooter className="justify-between gap-3">
           <p aria-live="polite" className="text-muted-foreground text-sm">
             {state.message}
@@ -395,7 +420,7 @@ export function SessionWorkspace({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     sessions.some(({ id }) => id === initialSessionId) ? (initialSessionId ?? null) : null,
   );
-  const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [archiveMessage, setArchiveMessage] = useState("");
   const [archivePending, startArchiveTransition] = useTransition();
   const [clonePending, startCloneTransition] = useTransition();
@@ -407,13 +432,7 @@ export function SessionWorkspace({
 
   const inspect = (sessionId: string) => {
     setSelectedSessionId(sessionId);
-    setCreating(false);
-    setArchiveMessage("");
-  };
-
-  const startCreating = () => {
-    setSelectedSessionId(null);
-    setCreating(true);
+    setCreateOpen(false);
     setArchiveMessage("");
   };
 
@@ -433,7 +452,7 @@ export function SessionWorkspace({
       setArchiveMessage(result.message ?? "");
       if (result.status === "success" && result.sessionId) {
         setSelectedSessionId(result.sessionId);
-        setCreating(false);
+        setCreateOpen(false);
       }
     });
   };
@@ -455,10 +474,45 @@ export function SessionWorkspace({
               Add or import records
             </Link>
           </Button>
-          <Button type="button" onClick={startCreating}>
-            <FilePlus2 data-icon="inline-start" />
-            New manual session
-          </Button>
+          <Dialog
+            open={createOpen}
+            onOpenChange={(open) => {
+              setCreateOpen(open);
+              if (open) {
+                setSelectedSessionId(null);
+                setArchiveMessage("");
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">
+                <FilePlus2 data-icon="inline-start" />
+                New manual session
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>New Manual Session</DialogTitle>
+                <DialogDescription>
+                  Add a session without a CFP submission. Scheduling can be completed later in Agenda.
+                </DialogDescription>
+              </DialogHeader>
+              <SessionForm
+                key="new"
+                eventSlug={event.slug}
+                session={null}
+                speakers={speakers}
+                tracks={tracks}
+                customFieldDefinitions={customFieldDefinitions}
+                sessions={sessions}
+                framed={false}
+                onSaved={(sessionId) => {
+                  setSelectedSessionId(sessionId);
+                  setCreateOpen(false);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 
@@ -533,7 +587,20 @@ export function SessionWorkspace({
                 </TableHeader>
                 <TableBody>
                   {filteredSessions.map((session) => (
-                    <TableRow key={session.id} data-state={selectedSessionId === session.id ? "selected" : undefined}>
+                    <TableRow
+                      key={session.id}
+                      data-state={selectedSessionId === session.id ? "selected" : undefined}
+                      tabIndex={0}
+                      role="button"
+                      onClick={() => inspect(session.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          inspect(session.id);
+                        }
+                      }}
+                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
                       <TableCell>
                         <div className="flex min-w-48 flex-col gap-1 whitespace-normal">
                           <span className="font-medium">{session.title}</span>
@@ -583,7 +650,7 @@ export function SessionWorkspace({
         </Card>
 
         <div className="flex min-w-0 flex-col gap-3">
-          {creating || selectedSession ? (
+          {selectedSession ? (
             <>
               <SessionForm
                 key={selectedSession?.id ?? "new"}
@@ -595,7 +662,6 @@ export function SessionWorkspace({
                 sessions={sessions}
                 onSaved={(sessionId) => {
                   setSelectedSessionId(sessionId);
-                  setCreating(false);
                 }}
               />
               {selectedSession ? (
@@ -609,7 +675,7 @@ export function SessionWorkspace({
               ) : null}
             </>
           ) : null}
-          {!creating && !selectedSession && filteredSessions.length > 0 ? (
+          {!selectedSession && filteredSessions.length > 0 ? (
             <Empty className="min-h-80 border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">

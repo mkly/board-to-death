@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 
 import Link from "next/link";
 
@@ -98,7 +98,7 @@ function ProspectCard({
           </div>
         </dl>
 
-        <form action={moveAction}>
+        <form noValidate action={moveAction}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`prospect-stage-${prospect.id}`}>Move card</FieldLabel>
@@ -116,7 +116,7 @@ function ProspectCard({
           </FieldGroup>
         </form>
 
-        <form action={noteAction}>
+        <form noValidate action={noteAction}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`prospect-note-${prospect.id}`}>Internal note</FieldLabel>
@@ -189,6 +189,23 @@ export function SpeakerSourcingWorkspace({ availablePeople, event, forms, stages
     INITIAL_STATE,
   );
   useActionToast(stagesState);
+  const [stageOrder, setStageOrder] = useState<readonly string[]>(() => stages.map(({ id }) => id));
+  useEffect(() => setStageOrder(stages.map(({ id }) => id)), [stages]);
+  const orderedStages = stageOrder.flatMap((id) => {
+    const stage = stages.find((candidate) => candidate.id === id);
+    return stage ? [stage] : [];
+  });
+
+  const moveStage = (stageId: string, nextPosition: number) => {
+    setStageOrder((current) => {
+      const currentPosition = current.indexOf(stageId);
+      if (currentPosition < 0 || currentPosition === nextPosition) return current;
+      const next = [...current];
+      next.splice(currentPosition, 1);
+      next.splice(nextPosition, 0, stageId);
+      return next;
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -209,7 +226,7 @@ export function SpeakerSourcingWorkspace({ availablePeople, event, forms, stages
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={interestFormAction}>
+            <form noValidate action={interestFormAction}>
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="interest-form-title">Title</FieldLabel>
@@ -269,7 +286,7 @@ export function SpeakerSourcingWorkspace({ availablePeople, event, forms, stages
                 </EmptyHeader>
               </Empty>
             ) : (
-              <form action={enrollAction}>
+              <form noValidate action={enrollAction}>
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="manual-prospect-person">Directory person</FieldLabel>
@@ -303,17 +320,18 @@ export function SpeakerSourcingWorkspace({ availablePeople, event, forms, stages
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={stagesAction}>
+          <form noValidate action={stagesAction}>
             <FieldGroup>
-              {stages.map((stage, index) => (
+              {orderedStages.map((stage, index) => (
                 <Field key={stage.id} orientation="responsive">
                   <input name="stageId" type="hidden" value={stage.id} />
+                  <input name="stagePosition" type="hidden" value={index} />
                   <FieldLabel htmlFor={`stage-name-${stage.id}`}>{behaviorLabel(stage.behavior)}</FieldLabel>
                   <Input defaultValue={stage.name} id={`stage-name-${stage.id}`} name="stageName" required />
                   <FormSelect
                     aria-label={`${stage.name} position`}
-                    defaultValue={String(index)}
-                    name="stagePosition"
+                    value={String(index)}
+                    onValueChange={(value) => moveStage(stage.id, Number(value))}
                     options={stages.map((_positionStage, position) => ({
                       value: String(position),
                       label: `Position ${position + 1}`,

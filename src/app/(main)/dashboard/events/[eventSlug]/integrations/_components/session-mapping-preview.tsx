@@ -227,7 +227,7 @@ export function SessionMappingPreview({
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_1fr]">
-        <form action={formAction}>
+        <form noValidate action={formAction}>
           <input type="hidden" name="eventSlug" value={event.slug} />
           <Card>
             <CardHeader>

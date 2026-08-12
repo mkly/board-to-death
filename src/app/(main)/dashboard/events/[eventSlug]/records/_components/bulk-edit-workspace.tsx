@@ -283,7 +283,7 @@ export function BulkEditWorkspace({
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {customFieldDefinitions.length > 0 ? (
-              <form method="get">
+              <form noValidate method="get">
                 <FieldGroup className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
                   <Field>
                     <FieldLabel htmlFor="record-custom-field-filter">Custom field</FieldLabel>

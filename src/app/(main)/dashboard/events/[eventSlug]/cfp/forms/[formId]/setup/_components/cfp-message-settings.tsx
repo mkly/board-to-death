@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import { CFP_MESSAGE_VARIABLE_KEYS, CFP_MESSAGE_VARIABLES } from "@/lib/cfp/messages";
 import { EMAIL_TEMPLATE_PREVIEW_VALUES, renderEmailTemplate } from "@/lib/communications/email-templates";
 
@@ -89,12 +90,13 @@ export function CfpMessageSettings({ event, eventSlug, formId, initialSettings, 
     }),
     [event],
   );
+  useActionToast(state);
   const confirmationPreview = preview(submissionConfirmation, previewValues);
   const thankYouPreview = preview(thankYou, previewValues);
 
   return (
     <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <form action={formAction}>
+      <form noValidate action={formAction}>
         <input type="hidden" name="portalAutoRedirect" value={String(portalAutoRedirect)} />
         {!portalAutoRedirect ? (
           <input type="hidden" name="portalRedirectDelaySeconds" value={portalRedirectDelaySeconds} />
@@ -233,12 +235,7 @@ export function CfpMessageSettings({ event, eventSlug, formId, initialSettings, 
             </FieldGroup>
           </CardContent>
           <CardFooter className="justify-between gap-3">
-            <p
-              aria-live="polite"
-              className={state.status === "error" ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
-            >
-              {state.message}
-            </p>
+            <p className="text-muted-foreground text-sm">Saving changes updates your message templates.</p>
             <Button type="submit" disabled={pending}>
               {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
               {pending ? "Saving..." : "Save messages"}

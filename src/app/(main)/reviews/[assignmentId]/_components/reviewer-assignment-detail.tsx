@@ -260,7 +260,7 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
               </Card>
             </>
           ) : (
-            <form key={assignment.evaluation.version} className="flex flex-col gap-4">
+            <form noValidate key={assignment.evaluation.version} className="flex flex-col gap-4">
               <input type="hidden" name="assignmentId" value={assignment.id} />
               <input type="hidden" name="expectedVersion" value={assignment.evaluation.version} />
 
@@ -355,7 +355,7 @@ export function ReviewerAssignmentDetailView({ assignment }: ReviewerAssignmentD
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form id={recusalFormId} action={recusalAction}>
+              <form noValidate id={recusalFormId} action={recusalAction}>
                 <input type="hidden" name="assignmentId" value={assignment.id} />
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

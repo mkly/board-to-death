@@ -10,6 +10,7 @@ import { EventType } from "@/generated/prisma/client";
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
 import { getRequestAuthorization } from "@/server/authorization/request-context";
+import { readBrandingUpload, storeBrandingUpload } from "@/server/branding-images";
 import { getDatabaseClient } from "@/server/database";
 import {
   EventRepository,
@@ -18,12 +19,8 @@ import {
   TrackRepository,
   type UpdateEventInput,
 } from "@/server/events";
-import { isJpeg, isPng, isWebp } from "@/server/files/content-signatures";
-import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
-import { contentDisposition, safeFileName } from "@/server/infrastructure/file-names";
 
 import type { EventSettingsSnapshot, MutationResult } from "./types";
-import { randomUUID } from "node:crypto";
 
 const eventSchema = z
   .object({
@@ -108,58 +105,6 @@ function parseEventForm(formData: FormData) {
     exhibitorsEnabled: formData.get("exhibitorsEnabled") === "on",
     sponsorsEnabled: formData.get("sponsorsEnabled") === "on",
   });
-}
-
-const BRANDING_IMAGE_SIGNATURES: Readonly<Record<string, (bytes: Uint8Array) => boolean>> = {
-  "image/jpeg": isJpeg,
-  "image/png": isPng,
-  "image/webp": isWebp,
-};
-
-interface BrandingUpload {
-  readonly bytes: Uint8Array;
-  readonly contentType: string;
-  readonly fileName?: string;
-}
-
-type BrandingUploadRead = { readonly upload: BrandingUpload | null } | { readonly error: string };
-
-async function readBrandingUpload(
-  formData: FormData,
-  field: string,
-  maxMegabytes: number,
-): Promise<BrandingUploadRead> {
-  const file = formData.get(field);
-  if (!(file instanceof File) || file.size === 0) {
-    return { upload: null };
-  }
-  if (file.size > maxMegabytes * 1024 * 1024) {
-    return { error: `The image exceeds the ${maxMegabytes} MB limit.` };
-  }
-  const matchesSignature = BRANDING_IMAGE_SIGNATURES[file.type];
-  if (!matchesSignature) {
-    return { error: "Upload a PNG, JPEG, or WebP image." };
-  }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!matchesSignature(bytes)) {
-    return { error: "The image's contents do not match its declared type." };
-  }
-  return { upload: { bytes, contentType: file.type, fileName: safeFileName(file.name) } };
-}
-
-async function storeBrandingUpload(
-  eventId: string,
-  purpose: "logo" | "background",
-  upload: BrandingUpload,
-): Promise<string | null> {
-  const key = `events/${eventId}/branding/${purpose}-${randomUUID()}`;
-  const stored = await getConfiguredFileStorage().put({
-    key,
-    bytes: upload.bytes,
-    contentType: upload.contentType,
-    contentDisposition: upload.fileName ? contentDisposition(upload.fileName) : undefined,
-  });
-  return stored.ok ? key : null;
 }
 
 function uploadInvalid(field: string, message: string): MutationResult {

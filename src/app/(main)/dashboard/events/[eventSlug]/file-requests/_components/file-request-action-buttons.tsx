@@ -152,7 +152,7 @@ export function AssignRequestForm({
   );
   useActionToast(state);
   return (
-    <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+    <form noValidate action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
       <input name="targetKind" type="hidden" value={targetKind} />
       <Field className="sm:max-w-sm">
         <FieldLabel htmlFor="assign-target">Target</FieldLabel>

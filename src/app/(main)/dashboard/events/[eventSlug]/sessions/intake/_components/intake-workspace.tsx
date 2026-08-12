@@ -207,7 +207,7 @@ function ManualIntake({ forms, speakers, tracks, categories, event }: IntakeWork
   );
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input name="eventSlug" type="hidden" value={event.slug} />
       <input name="kind" type="hidden" value={kind} />
       <Card>
@@ -484,7 +484,7 @@ function CsvIntake({ event }: Pick<IntakeWorkspaceProps, "event">) {
             answers_json object. Guaranteed sessions require title and duration_minutes; track is optional.
           </AlertDescription>
         </Alert>
-        <form action={previewAction} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <form noValidate action={previewAction} className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <input name="eventSlug" type="hidden" value={event.slug} />
           <Field className="flex-1">
             <FieldLabel htmlFor="intake-csv-file">CSV file</FieldLabel>
@@ -530,7 +530,7 @@ function CsvIntake({ event }: Pick<IntakeWorkspaceProps, "event">) {
       </CardContent>
       {previewState.status === "preview" ? (
         <CardFooter className="justify-end">
-          <form action={applyAction}>
+          <form noValidate action={applyAction}>
             <input name="eventSlug" type="hidden" value={event.slug} />
             <input name="previewPayload" type="hidden" value={JSON.stringify(acceptedPayload)} />
             <Button disabled={applyPending || acceptedPayload.length === 0} type="submit">

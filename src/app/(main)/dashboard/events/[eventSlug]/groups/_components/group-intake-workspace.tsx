@@ -71,7 +71,7 @@ function IntakeFormCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <form action={action}>
+        <form noValidate action={action}>
           <FieldGroup>
             <Field data-disabled={!enabled}>
               <FieldLabel htmlFor={`${kind}-intake-title`}>Form title</FieldLabel>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
-import { CalendarClock, Check, Sparkles, TriangleAlert, X } from "lucide-react";
+import { CalendarClock, Check, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -60,6 +61,11 @@ export function AssistedSchedulingCard({
   const unplaced = state.unplaced ?? [];
   const acceptLabel = proposals.length === 1 ? "Accept proposed placement" : "Accept proposed placements";
 
+  useEffect(() => {
+    if (state.status === "success" && state.message) toast.success(state.message);
+    if (state.status === "error" && state.message) toast.error(state.message);
+  }, [state]);
+
   const preview = () => {
     startTransition(async () => setState(await previewAssistedSchedule(eventSlug)));
   };
@@ -81,20 +87,6 @@ export function AssistedSchedulingCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {state.status === "error" ? (
-          <Alert variant="destructive">
-            <TriangleAlert />
-            <AlertTitle>Assisted schedule not available</AlertTitle>
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {state.status === "success" ? (
-          <Alert>
-            <Check />
-            <AlertTitle>Schedule accepted</AlertTitle>
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
-        ) : null}
         {state.status === "preview" ? (
           <div className="flex flex-col gap-3" aria-live="polite">
             <p className="text-muted-foreground text-sm">{state.message}</p>

@@ -8,8 +8,15 @@ const actionMocks = vi.hoisted(() => ({
   removeAgendaPlacement: vi.fn(),
   saveAgendaPlacement: vi.fn(),
 }));
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+}));
 
 vi.mock("../actions", () => actionMocks);
+vi.mock("sonner", () => ({
+  toast: toastMocks,
+}));
 
 import { AgendaWorkspace, type AgendaWorkspaceSession } from "./agenda-workspace";
 
@@ -151,7 +158,7 @@ describe("AgendaWorkspace", () => {
     fireEvent.click(within(confirmation).getByRole("button", { name: "Accept proposed placement" }));
 
     await waitFor(() => expect(actionMocks.acceptAssistedSchedule).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("1 placement was added to the agenda.")).toBeTruthy();
+    await waitFor(() => expect(toastMocks.success).toHaveBeenCalledWith("1 placement was added to the agenda."));
   });
   afterEach(cleanup);
 
@@ -185,7 +192,7 @@ describe("AgendaWorkspace", () => {
     expect(formData.get("placementId")).toBe(LAB_PLACEMENT_ID);
     expect(formData.get("durationMinutes")).toBe("75");
     expect(formData.get("expectedVersion")).toBe("2");
-    expect(await screen.findByText("Schedule updated")).toBeTruthy();
+    await waitFor(() => expect(toastMocks.success).toHaveBeenCalledWith("Agenda placement saved."));
 
     fireEvent.pointerDown(resizeHandle, { clientY: 100, pointerId: 2 });
     fireEvent.pointerMove(resizeHandle, { clientY: 118, pointerId: 2 });
@@ -211,8 +218,11 @@ describe("AgendaWorkspace", () => {
       fireEvent.pointerUp(resizeHandle, { clientY: 136, pointerId: 1 });
     });
 
-    expect(await screen.findByText("Schedule change not saved")).toBeTruthy();
-    expect(screen.getByText(/Change reverted/)).toBeTruthy();
+    await waitFor(() =>
+      expect(toastMocks.error).toHaveBeenCalledWith(
+        "The agenda placement changed; reload it before saving again. Change reverted.",
+      ),
+    );
     const card = container.querySelector(`[data-agenda-session="${LAB_ID}"]`);
     expect(card?.textContent).toContain("60 min");
   });

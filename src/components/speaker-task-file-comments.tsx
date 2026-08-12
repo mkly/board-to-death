@@ -74,7 +74,7 @@ export function SpeakerTaskFileComments({
           ))}
         </ol>
       )}
-      <form action={submitAction}>
+      <form noValidate action={submitAction}>
         <FieldGroup>
           <Field>
             <FieldLabel className="sr-only" htmlFor={inputId}>

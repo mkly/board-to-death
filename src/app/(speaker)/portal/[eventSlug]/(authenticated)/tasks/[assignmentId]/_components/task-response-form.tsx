@@ -57,7 +57,7 @@ function PlainTaskResponseForm({ action, defaultText, kind }: PlainTaskResponseF
   else if (kind === "FILE") submitIcon = <UploadIcon data-icon="inline-start" />;
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form noValidate action={formAction} className="flex flex-col gap-5">
       <FieldGroup>
         {kind === "TEXT" ? (
           <Field data-invalid={inputInvalid}>
@@ -130,7 +130,7 @@ function PortalFormResponse({ action, definition, initialAnswers }: PortalFormRe
   if (state.ok) alertTitle = submitted ? definition.confirmation.subject : "Saved";
 
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form noValidate action={formAction} className="flex flex-col gap-5">
       {state.message ? (
         <Alert variant={state.ok ? "default" : "destructive"}>
           {state.ok ? <CheckCircle2Icon aria-hidden="true" /> : null}

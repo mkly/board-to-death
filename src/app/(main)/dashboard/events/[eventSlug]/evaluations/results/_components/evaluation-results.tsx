@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
 import { ChartNoAxesCombinedIcon, CircleCheckIcon, MoveRightIcon, SendIcon } from "lucide-react";
 
 import { FormSelect } from "@/components/form-select";
@@ -228,6 +230,15 @@ export function EvaluationResults({ event, workspace }: EvaluationResultsProps) 
     0,
   );
   const scoredSubmissions = workspace.submissions.filter(({ weightedAverage }) => weightedAverage !== null).length;
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const updateRound = (roundId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("round", roundId);
+    router.replace(`${pathname}?${next.toString()}`);
+  };
 
   return (
     <main className="flex flex-col gap-6">
@@ -240,23 +251,20 @@ export function EvaluationResults({ event, workspace }: EvaluationResultsProps) 
           </p>
         </div>
         {workspace.rounds.length > 0 ? (
-          <form className="flex w-full items-end gap-2 lg:w-auto" method="get">
+          <div className="flex w-full items-end gap-2 lg:w-auto">
             <Field className="min-w-0 flex-1 lg:w-80">
               <FieldLabel htmlFor="results-round">Activated round</FieldLabel>
               <FormSelect
                 id="results-round"
-                name="round"
                 defaultValue={workspace.selectedRoundId ?? ""}
+                onValueChange={updateRound}
                 options={workspace.rounds.map((round) => ({
                   value: round.id,
                   label: `${round.planTitle} v${round.planVersionNumber} · ${round.title}`,
                 }))}
               />
             </Field>
-            <Button type="submit" variant="outline">
-              View
-            </Button>
-          </form>
+          </div>
         ) : null}
       </header>
 

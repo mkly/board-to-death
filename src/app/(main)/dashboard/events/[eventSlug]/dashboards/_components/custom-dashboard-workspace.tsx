@@ -163,7 +163,7 @@ function CreateDashboardDialog({
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form action={action}>
+        <form noValidate action={action}>
           <input type="hidden" name="intent" value="create" />
           <input type="hidden" name="eventSlug" value={eventSlug} />
           <DialogHeader>
@@ -237,7 +237,7 @@ function DashboardSettingsDialog({
           <DialogDescription>Update the name and persistent event filters.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-6">
-          <form action={action}>
+          <form noValidate action={action}>
             <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboard.id} intent="rename" />
             <FieldGroup>
               <Field data-invalid={Boolean(fieldError(state, "name")) || undefined}>
@@ -251,7 +251,7 @@ function DashboardSettingsDialog({
               </Button>
             </FieldGroup>
           </form>
-          <form action={action}>
+          <form noValidate action={action}>
             <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboard.id} intent="filter" />
             <FieldGroup>
               <Field>
@@ -316,7 +316,7 @@ function AddWidgetDialog({
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form action={action}>
+        <form noValidate action={action}>
           <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboardId} intent="add-widget" />
           <DialogHeader>
             <DialogTitle>Add widget</DialogTitle>
@@ -376,7 +376,7 @@ function WidgetSettingsDialog({
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form action={action}>
+        <form noValidate action={action}>
           <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboardId} intent="configure-widget" />
           <input type="hidden" name="widgetId" value={widget.id} />
           <DialogHeader>
@@ -434,7 +434,7 @@ function WidgetActions({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <form action={action}>
+      <form noValidate action={action}>
         <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboardId} intent="move-widget" />
         <input type="hidden" name="widgetId" value={widget.id} />
         <input type="hidden" name="direction" value="up" />
@@ -448,7 +448,7 @@ function WidgetActions({
           <ArrowUp />
         </Button>
       </form>
-      <form action={action}>
+      <form noValidate action={action}>
         <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboardId} intent="move-widget" />
         <input type="hidden" name="widgetId" value={widget.id} />
         <input type="hidden" name="direction" value="down" />
@@ -469,7 +469,7 @@ function WidgetActions({
         action={action}
         pending={pending}
       />
-      <form action={action}>
+      <form noValidate action={action}>
         <HiddenMutationFields eventSlug={eventSlug} dashboardId={dashboardId} intent="remove-widget" />
         <input type="hidden" name="widgetId" value={widget.id} />
         <Button type="submit" variant="ghost" size="icon-sm" disabled={pending} aria-label={`Remove ${widget.title}`}>
@@ -798,7 +798,7 @@ export function CustomDashboardWorkspace({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <form action={action}>
+                      <form noValidate action={action}>
                         <HiddenMutationFields eventSlug={event.slug} dashboardId={activeDashboard.id} intent="delete" />
                         <AlertDialogAction type="submit" disabled={pending}>
                           Delete dashboard

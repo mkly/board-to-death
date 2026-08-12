@@ -168,7 +168,7 @@ function ReportEditor({
         )}
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <form action={action} className="flex flex-col gap-5">
+        <form noValidate action={action} className="flex flex-col gap-5">
           <input type="hidden" name="intent" value={report ? "update" : "create"} />
           <input type="hidden" name="eventSlug" value={eventSlug} />
           {report ? <input type="hidden" name="reportId" value={report.id} /> : null}
@@ -402,7 +402,7 @@ export function ReportWorkspace({
                   <CardDescription>{template.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form action={action}>
+                  <form noValidate action={action}>
                     <input type="hidden" name="intent" value="template" />
                     <input type="hidden" name="eventSlug" value={event.slug} />
                     <input type="hidden" name="templateId" value={template.id} />
@@ -449,7 +449,7 @@ export function ReportWorkspace({
                     pending={pending}
                     state={state}
                   />
-                  <form action={action}>
+                  <form noValidate action={action}>
                     <input type="hidden" name="intent" value="duplicate" />
                     <input type="hidden" name="eventSlug" value={event.slug} />
                     <input type="hidden" name="reportId" value={selected.id} />
@@ -458,7 +458,7 @@ export function ReportWorkspace({
                       Duplicate
                     </Button>
                   </form>
-                  <form action={action}>
+                  <form noValidate action={action}>
                     <input type="hidden" name="intent" value="delete" />
                     <input type="hidden" name="eventSlug" value={event.slug} />
                     <input type="hidden" name="reportId" value={selected.id} />

@@ -49,6 +49,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import {
+  type BrandingImagePick,
+  BrandingImagePicker,
+  brandingImageError,
+} from "../../_components/branding-image-picker";
+import {
   archiveEvent,
   cloneEvent,
   createEvent,
@@ -64,7 +69,6 @@ import {
   updateTrack,
 } from "../actions";
 import type { EventOption, EventSettingsEvent, EventSettingsSnapshot, MutationResult } from "../types";
-import { type BrandingImagePick, BrandingImagePicker, brandingImageError } from "./branding-image-picker";
 import { CreateEventWizard } from "./create-event-wizard";
 import { EventLifecycleActions } from "./event-lifecycle-actions";
 
@@ -177,6 +181,7 @@ function EventForm({
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-6"
       onSubmit={(formEvent) => {
         formEvent.preventDefault();
@@ -618,6 +623,7 @@ export function EventSettingsWorkspace({
               <CardContent className="flex flex-col gap-3">
                 {snapshot.rooms.map((room, index) => (
                   <form
+                    noValidate
                     key={room.id}
                     className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center"
                     onSubmit={(formEvent) => {
@@ -654,6 +660,7 @@ export function EventSettingsWorkspace({
               </CardContent>
               <CardFooter>
                 <form
+                  noValidate
                   className="flex w-full gap-2"
                   onSubmit={(formEvent) => {
                     formEvent.preventDefault();
@@ -684,6 +691,7 @@ export function EventSettingsWorkspace({
               <CardContent className="flex flex-col gap-3">
                 {snapshot.tracks.map((track, index) => (
                   <form
+                    noValidate
                     key={track.id}
                     className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center"
                     onSubmit={(formEvent) => {
@@ -742,6 +750,7 @@ export function EventSettingsWorkspace({
               </CardContent>
               <CardFooter>
                 <form
+                  noValidate
                   className="flex w-full flex-col gap-2 sm:flex-row"
                   onSubmit={(formEvent) => {
                     formEvent.preventDefault();

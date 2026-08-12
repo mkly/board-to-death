@@ -34,7 +34,7 @@ function ResultAlert({ state }: { readonly state: DeveloperAccessActionState }) 
 export function ApiTokenForm({ eventSlug }: { readonly eventSlug: string }) {
   const [state, action, pending] = useActionState(issueApiToken, initialState);
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form noValidate action={action} className="flex flex-col gap-4">
       <input type="hidden" name="eventSlug" value={eventSlug} />
       <FieldGroup>
         <Field>
@@ -67,7 +67,7 @@ export function ApiTokenForm({ eventSlug }: { readonly eventSlug: string }) {
 export function WebhookEndpointForm({ eventSlug }: { readonly eventSlug: string }) {
   const [state, action, pending] = useActionState(createWebhookEndpoint, initialState);
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form noValidate action={action} className="flex flex-col gap-4">
       <input type="hidden" name="eventSlug" value={eventSlug} />
       <FieldGroup>
         <Field>

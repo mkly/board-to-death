@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { readBrandingUpload, storeBrandingUpload } from "@/server/branding-images";
 import { getDatabaseClient } from "@/server/database/client";
 import {
   PORTAL_ACCENT_COLORS,
@@ -36,8 +37,6 @@ const portalSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and single hyphens."),
   welcomeMessage: z.string().trim().max(1_000),
   accentColor: z.enum(PORTAL_ACCENT_COLORS),
-  logoObjectKey: z.string().trim().max(500),
-  backgroundObjectKey: z.string().trim().max(500),
   isDefault: z.boolean(),
   roles: z.array(z.enum(PORTAL_PARTICIPANT_ROLES)),
   submissionStatuses: z.array(z.enum(PORTAL_SUBMISSION_STATUSES)),
@@ -79,6 +78,10 @@ function portalPath(eventSlug: string): string {
   return `/dashboard/events/${encodeURIComponent(eventSlug)}/portals`;
 }
 
+function uploadError(field: string, message: string): PortalMutationState {
+  return { status: "error", message: "Review the highlighted fields.", errors: { [field]: [message] } };
+}
+
 export async function saveParticipantPortal(
   _previousState: PortalMutationState,
   formData: FormData,
@@ -90,8 +93,6 @@ export async function saveParticipantPortal(
     slug: stringValue(formData, "slug"),
     welcomeMessage: stringValue(formData, "welcomeMessage"),
     accentColor: stringValue(formData, "accentColor"),
-    logoObjectKey: stringValue(formData, "logoObjectKey"),
-    backgroundObjectKey: stringValue(formData, "backgroundObjectKey"),
     isDefault: formData.get("isDefault") === "on",
     roles: selectedValues(formData, "roles"),
     submissionStatuses: selectedValues(formData, "submissionStatuses"),
@@ -109,6 +110,28 @@ export async function saveParticipantPortal(
   const event = await authorizedEvent(parsed.data.eventSlug);
   if (!event) return { status: "error", message: "This event is not available." };
 
+  const logo = await readBrandingUpload(formData, "logoFile", 5);
+  if ("error" in logo) return uploadError("logoFile", logo.error);
+  const background = await readBrandingUpload(formData, "backgroundFile", 10);
+  if ("error" in background) return uploadError("backgroundFile", background.error);
+
+  let logoObjectKey: string | null | undefined;
+  let backgroundObjectKey: string | null | undefined;
+  if (logo.upload) {
+    const key = await storeBrandingUpload(event.id, "portal-logo", logo.upload);
+    if (!key) return uploadError("logoFile", "The logo could not be stored. Try again.");
+    logoObjectKey = key;
+  } else if (formData.get("removeLogo") === "true") {
+    logoObjectKey = null;
+  }
+  if (background.upload) {
+    const key = await storeBrandingUpload(event.id, "portal-background", background.upload);
+    if (!key) return uploadError("backgroundFile", "The background image could not be stored. Try again.");
+    backgroundObjectKey = key;
+  } else if (formData.get("removeBackground") === "true") {
+    backgroundObjectKey = null;
+  }
+
   const contentVisibility = Object.fromEntries(
     PORTAL_CONTENT_KEYS.map((key) => [key, formData.get(`content-${key}`) === "on"]),
   );
@@ -123,8 +146,8 @@ export async function saveParticipantPortal(
     slug: parsed.data.slug,
     welcomeMessage: parsed.data.welcomeMessage || null,
     accentColor: parsed.data.accentColor,
-    logoObjectKey: parsed.data.logoObjectKey || null,
-    backgroundObjectKey: parsed.data.backgroundObjectKey || null,
+    ...(logoObjectKey !== undefined ? { logoObjectKey } : {}),
+    ...(backgroundObjectKey !== undefined ? { backgroundObjectKey } : {}),
     sectionTitles: parsed.data.sectionTitles,
     audienceRules: {
       roles: parsed.data.roles,

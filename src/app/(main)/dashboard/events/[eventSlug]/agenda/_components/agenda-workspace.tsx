@@ -44,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import {
   type AgendaConflictState,
@@ -167,6 +168,7 @@ function PlacementForm({
   const [policy, setPolicy] = useState<ConflictPolicy>("prevent");
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
   const [state, formAction, pending] = useActionState(saveAgendaPlacement, INITIAL_MUTATION_STATE);
+  useActionToast(state);
   const formId = `agenda-placement-${session.id}`;
 
   useEffect(() => {
@@ -183,7 +185,7 @@ function PlacementForm({
   const conflicts = state.conflicts ?? [];
 
   return (
-    <form id={formId} action={formAction}>
+    <form noValidate id={formId} action={formAction}>
       <input type="hidden" name="eventSlug" value={event.slug} />
       <input type="hidden" name="sessionId" value={session.id} />
       <input type="hidden" name="placementId" value={placement?.id ?? ""} />
@@ -200,13 +202,6 @@ function PlacementForm({
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          {state.status === "error" ? (
-            <Alert variant="destructive">
-              <TriangleAlert />
-              <AlertTitle>Placement not saved</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : null}
           {state.status === "conflict" && !state.confirmationRequired ? (
             <Alert variant="destructive">
               <TriangleAlert />
@@ -324,9 +319,6 @@ function PlacementForm({
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {state.status === "success" ? state.message : null}
-          </p>
           <Button type="submit" disabled={pending || rooms.length === 0}>
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
             {saveButtonLabel(pending, placement !== null)}
@@ -368,16 +360,17 @@ function PlacementForm({
 export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorkspaceProps) {
   const [filter, setFilter] = useState<AgendaFilter>("all");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [removeMessage, setRemoveMessage] = useState("");
+  const [removeState, setRemoveState] = useState<AgendaMutationState>(INITIAL_MUTATION_STATE);
   const [removePending, startRemoveTransition] = useTransition();
   const selectedSession = sessions.find(({ id }) => id === selectedSessionId) ?? null;
+  useActionToast(removeState);
 
   const removeSelected = () => {
     const placement = selectedSession?.placement;
     if (!placement) return;
     startRemoveTransition(async () => {
       const result = await removeAgendaPlacement(event.slug, placement.id, placement.version);
-      setRemoveMessage(result.message ?? "");
+      setRemoveState(result);
       if (result.status === "success") setSelectedSessionId(null);
     });
   };
@@ -481,9 +474,6 @@ export function AgendaWorkspace({ event, sessions, rooms, tracks }: AgendaWorksp
               </AlertDialog>
             </div>
           ) : null}
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {removeMessage}
-          </p>
         </div>
       </div>
     </div>

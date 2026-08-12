@@ -322,7 +322,7 @@ export function ResourcePageWorkspace({ event, pages }: ResourcePageWorkspacePro
         </Card>
 
         <div className="grid min-w-0 gap-6 2xl:grid-cols-2">
-          <form action={saveAction}>
+          <form noValidate action={saveAction}>
             <input type="hidden" name="eventSlug" value={event.slug} />
             <input type="hidden" name="pageId" value={selected?.id ?? ""} />
             <Card>

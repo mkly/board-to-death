@@ -33,6 +33,16 @@ const accentBorders = {
   violet: "border-l-violet-500",
 } as const;
 
+function getPortalImageUrl(
+  objectKey: string | null | undefined,
+  fallbackPath: string,
+  eventSlug: string,
+): string | null {
+  if (!objectKey) return null;
+  if (objectKey.startsWith("/")) return objectKey;
+  return portalHref(eventSlug, fallbackPath);
+}
+
 export default async function SpeakerPortalLayout({ children, params }: SpeakerPortalLayoutProps) {
   const { eventSlug } = await params;
   const [viewer, portal] = await Promise.all([getPortalViewer(eventSlug), getPortalConfiguration(eventSlug)]);
@@ -50,6 +60,8 @@ export default async function SpeakerPortalLayout({ children, params }: SpeakerP
   const profile = speaker?.profileVersions[0];
   if (!speaker || !profile) return null;
   const home = portalHref(eventSlug);
+  const logoUrl = getPortalImageUrl(portal.logoObjectKey, "/branding/logo", eventSlug);
+  const backgroundUrl = getPortalImageUrl(portal.backgroundObjectKey, "/branding/background", eventSlug);
 
   const navigation = [
     { href: home, label: "Home", icon: HomeIcon },
@@ -72,15 +84,15 @@ export default async function SpeakerPortalLayout({ children, params }: SpeakerP
       <header
         className={cn("relative overflow-hidden border-b border-l-4 bg-background", accentBorders[portal.accentColor])}
       >
-        {portal.backgroundObjectKey.startsWith("/") ? (
-          <Image src={portal.backgroundObjectKey} alt="" fill unoptimized className="object-cover opacity-10" />
+        {backgroundUrl ? (
+          <Image src={backgroundUrl} alt="" fill unoptimized className="object-cover opacity-10" />
         ) : null}
         <div className="relative mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="min-w-0">
             <Link href={home} className="font-heading font-semibold text-base">
-              {portal.logoObjectKey.startsWith("/") ? (
+              {logoUrl ? (
                 <Image
-                  src={portal.logoObjectKey}
+                  src={logoUrl}
                   alt=""
                   width={28}
                   height={28}

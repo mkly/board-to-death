@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -39,6 +39,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
+  type BrandingImagePick,
+  BrandingImagePicker,
+  brandingImageError,
+} from "../../../../_components/branding-image-picker";
+import {
   deleteParticipantPortal,
   moveParticipantPortal,
   type PortalMutationState,
@@ -59,6 +64,16 @@ const PROFILE_FIELDS = [
   "websiteUrl",
   "accessibilityNeeds",
 ] as const;
+
+function getPortalImageUrl(
+  objectKey: string | null | undefined,
+  isRemoved: boolean,
+  fallbackUrl: string,
+): string | undefined {
+  if (!objectKey || isRemoved) return undefined;
+  if (objectKey.startsWith("/")) return objectKey;
+  return fallbackUrl;
+}
 const LABELS: Record<string, string> = {
   submissions: "Submissions",
   profile: "Profile",
@@ -185,15 +200,90 @@ export function ParticipantPortalWorkspace({
   const [feedback, setFeedback] = useState("");
   const [mutationPending, startMutation] = useTransition();
   const [saveState, saveAction, savePending] = useActionState(saveParticipantPortal, INITIAL_STATE);
+  const [logo, setLogo] = useState<BrandingImagePick | null>(null);
+  const [background, setBackground] = useState<BrandingImagePick | null>(null);
+  const [logoRemoved, setLogoRemoved] = useState(false);
+  const [backgroundRemoved, setBackgroundRemoved] = useState(false);
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  const picksRef = useRef({ logo, background });
+  picksRef.current = { logo, background };
+
+  const resetBranding = useCallback(() => {
+    for (const pick of [picksRef.current.logo, picksRef.current.background]) {
+      if (pick) URL.revokeObjectURL(pick.previewUrl);
+    }
+    setLogo(null);
+    setBackground(null);
+    setLogoRemoved(false);
+    setBackgroundRemoved(false);
+    setClientErrors({});
+  }, []);
+
+  const choosePortal = (portalId: string | null) => {
+    resetBranding();
+    setSelectedId(portalId);
+  };
+
+  const selectImage =
+    (
+      target: "logo" | "background",
+      label: string,
+      maxMegabytes: number,
+      setPick: (pick: BrandingImagePick | null) => void,
+      setRemoved: (removed: boolean) => void,
+    ) =>
+    (file: File) => {
+      const error = brandingImageError(file, label, maxMegabytes);
+      if (error) {
+        setClientErrors((current) => ({ ...current, [`${target}File`]: error }));
+        return;
+      }
+      setClientErrors((current) => {
+        const next = { ...current };
+        delete next[`${target}File`];
+        return next;
+      });
+      const previous = picksRef.current[target];
+      if (previous) URL.revokeObjectURL(previous.previewUrl);
+      setPick({ file, previewUrl: URL.createObjectURL(file) });
+      setRemoved(false);
+    };
+
+  const clearImage =
+    (
+      target: "logo" | "background",
+      setPick: (pick: BrandingImagePick | null) => void,
+      setRemoved: (removed: boolean) => void,
+    ) =>
+    () => {
+      const previous = picksRef.current[target];
+      if (previous) URL.revokeObjectURL(previous.previewUrl);
+      setPick(null);
+      setRemoved(true);
+      setClientErrors((current) => {
+        const next = { ...current };
+        delete next[`${target}File`];
+        return next;
+      });
+    };
+
+  useEffect(() => {
+    return () => {
+      for (const pick of [picksRef.current.logo, picksRef.current.background]) {
+        if (pick) URL.revokeObjectURL(pick.previewUrl);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!saveState.message) return;
     setFeedback(saveState.message);
     if (saveState.status === "success") {
+      resetBranding();
       if (saveState.portalId) setSelectedId(saveState.portalId);
       router.refresh();
     }
-  }, [router, saveState]);
+  }, [router, saveState, resetBranding]);
 
   const mutate = (operation: () => Promise<PortalMutationState>) => {
     startMutation(async () => {
@@ -213,7 +303,7 @@ export function ParticipantPortalWorkspace({
             Create branded participant experiences. The first matching audience wins; the default catches everyone else.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={() => setSelectedId(null)}>
+        <Button type="button" variant="outline" onClick={() => choosePortal(null)}>
           <Plus data-icon="inline-start" />
           New portal
         </Button>
@@ -250,7 +340,7 @@ export function ParticipantPortalWorkspace({
                       type="button"
                       variant={selectedId === portal.id ? "secondary" : "ghost"}
                       className="h-auto min-w-0 flex-1 justify-start py-2 text-left"
-                      onClick={() => setSelectedId(portal.id)}
+                      onClick={() => choosePortal(portal.id)}
                     >
                       <span className="min-w-0 flex-1 truncate">{portal.name}</span>
                       {portal.isDefault ? <Badge variant="outline">Default</Badge> : null}
@@ -286,7 +376,17 @@ export function ParticipantPortalWorkspace({
           </CardContent>
         </Card>
 
-        <form key={selected.id ?? "new"} action={saveAction}>
+        <form
+          noValidate
+          key={selected.id ?? "new"}
+          action={(formData) => {
+            if (logo) formData.set("logoFile", logo.file);
+            if (background) formData.set("backgroundFile", background.file);
+            if (logoRemoved) formData.set("removeLogo", "true");
+            if (backgroundRemoved) formData.set("removeBackground", "true");
+            saveAction(formData);
+          }}
+        >
           <input type="hidden" name="eventSlug" value={event.slug} />
           <input type="hidden" name="portalId" value={selected.id ?? ""} />
           <Card>
@@ -360,7 +460,7 @@ export function ParticipantPortalWorkspace({
                         rows={3}
                       />
                     </Field>
-                    <div className="grid gap-5 md:grid-cols-3">
+                    <div className="grid gap-5 md:grid-cols-2">
                       <Field>
                         <FieldLabel htmlFor="portal-accent">Accent</FieldLabel>
                         <Select name="accentColor" defaultValue={selected.accentColor}>
@@ -378,24 +478,46 @@ export function ParticipantPortalWorkspace({
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field>
-                        <FieldLabel htmlFor="portal-logo">Logo asset key</FieldLabel>
-                        <Input
-                          id="portal-logo"
-                          name="logoObjectKey"
-                          defaultValue={selected.logoObjectKey}
-                          placeholder="events/portal-logo.svg"
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="portal-background">Background asset key</FieldLabel>
-                        <Input
-                          id="portal-background"
-                          name="backgroundObjectKey"
-                          defaultValue={selected.backgroundObjectKey}
-                          placeholder="events/portal-background.webp"
-                        />
-                      </Field>
+                    </div>
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <BrandingImagePicker
+                        id="portal-logo"
+                        label="Logo"
+                        description="Shown next to the event name. PNG, JPEG, or WebP, up to 5 MB."
+                        pick={logo}
+                        currentImageUrl={getPortalImageUrl(
+                          selected.logoObjectKey,
+                          logoRemoved,
+                          `/dashboard/events/${encodeURIComponent(event.slug)}/portals/branding/${encodeURIComponent(selected.id ?? "")}/logo`,
+                        )}
+                        error={clientErrors.logoFile ?? firstError(saveState, "logoFile")}
+                        previewClassName="size-12 object-contain p-1"
+                        disabled={savePending}
+                        onSelect={selectImage("logo", "logo", 5, setLogo, setLogoRemoved)}
+                        onClear={clearImage("logo", setLogo, setLogoRemoved)}
+                      />
+                      <BrandingImagePicker
+                        id="portal-background"
+                        label="Background image"
+                        description="Used as a subtle portal-header backdrop. PNG, JPEG, or WebP, up to 10 MB."
+                        pick={background}
+                        currentImageUrl={getPortalImageUrl(
+                          selected.backgroundObjectKey,
+                          backgroundRemoved,
+                          `/dashboard/events/${encodeURIComponent(event.slug)}/portals/branding/${encodeURIComponent(selected.id ?? "")}/background`,
+                        )}
+                        error={clientErrors.backgroundFile ?? firstError(saveState, "backgroundFile")}
+                        previewClassName="h-12 w-20 object-cover"
+                        disabled={savePending}
+                        onSelect={selectImage(
+                          "background",
+                          "background image",
+                          10,
+                          setBackground,
+                          setBackgroundRemoved,
+                        )}
+                        onClear={clearImage("background", setBackground, setBackgroundRemoved)}
+                      />
                     </div>
                     <Field orientation="horizontal">
                       <FieldLabel htmlFor="portal-default">

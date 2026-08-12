@@ -106,7 +106,7 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
       />
 
       {showSearch || showTrack || showFormat || showLocation ? (
-        <search>
+        <div>
           <div className="flex flex-wrap items-end gap-x-4 gap-y-3 border-y py-3">
             {showSearch ? (
               <div className="flex min-w-48 flex-1 flex-col gap-1.5">
@@ -176,7 +176,7 @@ export function PublishedSessionList({ density, enabledFilters, eventName, sessi
               </div>
             ) : null}
           </div>
-        </search>
+        </div>
       ) : null}
 
       <p aria-live="polite" className="sr-only" role="status">

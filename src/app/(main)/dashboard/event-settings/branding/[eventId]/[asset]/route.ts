@@ -2,8 +2,8 @@ import { headers } from "next/headers";
 
 import { isAuthorizedAdminSession } from "@/server/auth/admin-access";
 import { auth } from "@/server/auth/auth";
+import { getBrandingImageResponse } from "@/server/branding-images";
 import { getDatabaseClient } from "@/server/database/client";
-import { getConfiguredFileStorage } from "@/server/infrastructure/configured-file-storage";
 
 interface BrandingRouteContext {
   readonly params: Promise<{ readonly eventId: string; readonly asset: string }>;
@@ -29,17 +29,5 @@ export async function GET(_request: Request, context: BrandingRouteContext): Pro
   if (asset === "background") key = event?.backgroundObjectKey;
   if (!key) return notFound();
 
-  const stored = await getConfiguredFileStorage().get(key);
-  if (!stored.ok || !stored.value.metadata.contentType.startsWith("image/")) return notFound();
-
-  const body = new ArrayBuffer(stored.value.bytes.byteLength);
-  new Uint8Array(body).set(stored.value.bytes);
-  return new Response(body, {
-    headers: {
-      "Cache-Control": "private, no-store",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-      "Content-Type": stored.value.metadata.contentType,
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  return (await getBrandingImageResponse(key)) ?? notFound();
 }

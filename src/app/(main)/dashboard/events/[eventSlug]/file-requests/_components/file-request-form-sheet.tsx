@@ -5,19 +5,19 @@ import { useActionState, useEffect, useId, useState } from "react";
 import { FileText, FileUp, Info, Pencil, Plus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { FileRequestReplacementPolicy, FileRequestTargetKind } from "@/generated/prisma/client";
@@ -71,7 +71,7 @@ function TargetKindCards({ selected }: { readonly selected: FileRequestTargetKin
 }
 
 /**
- * One sheet serves creating and editing. Editing appends a new request version rather than
+ * One dialog serves creating and editing. Editing appends a new request version rather than
  * rewriting the old one, so the target kind stays fixed once assignments exist against it.
  */
 export function FileRequestFormSheet({
@@ -99,24 +99,24 @@ export function FileRequestFormSheet({
   const submitLabel = editing ? "Save file request" : "Create file request";
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button variant={editing ? "outline" : "default"}>
           {editing ? <Pencil data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
           {triggerLabel}
         </Button>
-      </SheetTrigger>
-      <SheetContent className="overflow-y-auto" side="right">
-        <SheetHeader>
-          <SheetTitle>{editing ? "Edit file request" : "Add file request"}</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit file request" : "Add file request"}</DialogTitle>
+          <DialogDescription>
             {editing
               ? "Changes apply to assignments created from here on; existing assignments keep the rules they were shown."
               : "Create a new file request for participants"}
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        <form action={formAction} className="flex min-h-0 flex-1 flex-col">
+        <form noValidate action={formAction} className="flex min-h-0 flex-1 flex-col">
           <div className="flex flex-col gap-4 px-4">
             <div className="flex gap-2.5 rounded-lg border bg-muted/50 p-3">
               <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -236,19 +236,19 @@ export function FileRequestFormSheet({
             </fieldset>
           </div>
 
-          <SheetFooter className="flex-row justify-end gap-2">
-            <SheetClose asChild>
+          <DialogFooter className="flex-row justify-end gap-2">
+            <DialogClose asChild>
               <Button type="button" variant="outline">
                 Cancel
               </Button>
-            </SheetClose>
+            </DialogClose>
             <Button type="submit" disabled={pending}>
               {pending ? <Spinner data-icon="inline-start" /> : null}
               {pending ? "Saving…" : submitLabel}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -18,10 +18,10 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { GripVertical, MoveVertical, TriangleAlert } from "lucide-react";
+import { GripVertical, MoveVertical } from "lucide-react";
+import { toast } from "sonner";
 import { Temporal } from "temporal-polyfill";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -220,7 +220,7 @@ function ScheduledCard({
       }}
       className={cn(
         "absolute right-2 left-2 flex touch-none flex-col overflow-hidden rounded-lg border bg-card shadow-sm",
-        isDragging && "opacity-30",
+        isDragging && "opacity-0",
       )}
     >
       <button
@@ -330,7 +330,6 @@ function TimelineLane({
 export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaScheduleBoardProps) {
   const [displayedSessions, setDisplayedSessions] = useState(sessions);
   const [policy, setPolicy] = useState<ConflictPolicy>("prevent");
-  const [message, setMessage] = useState<{ status: "success" | "error"; text: string } | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<PlacementChange | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
@@ -386,7 +385,6 @@ export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaSc
     const session = originalSessions.find(({ id }) => id === change.sessionId);
     if (!session?.placement) return;
     setDisplayedSessions(applyChange(originalSessions, change, event.timezone));
-    setMessage(null);
     startTransition(async () => {
       const result = await saveAgendaPlacement(
         INITIAL_MUTATION_STATE,
@@ -396,20 +394,17 @@ export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaSc
         setDisplayedSessions((current) =>
           applyChange(current, change, event.timezone, session.placement ? session.placement.version + 1 : undefined),
         );
-        setMessage({ status: "success", text: "Agenda placement saved." });
+        toast.success("Agenda placement saved.");
         setPendingConfirmation(null);
         return;
       }
       setDisplayedSessions(originalSessions);
       if (result.status === "conflict" && result.confirmationRequired && result.conflicts) {
         setPendingConfirmation({ change, conflicts: result.conflicts });
-        setMessage({ status: "error", text: "The preview was reverted until you confirm these conflicts." });
+        toast.error("The preview was reverted until you confirm these conflicts.");
         return;
       }
-      setMessage({
-        status: "error",
-        text: `${result.message ?? "The agenda placement was not saved."} Change reverted.`,
-      });
+      toast.error(`${result.message ?? "The agenda placement was not saved."} Change reverted.`);
     });
   };
 
@@ -468,14 +463,6 @@ export function AgendaScheduleBoard({ event, sessions, rooms, tracks }: AgendaSc
             {scheduleStatusLabel(dragPreview, previewLane, pending, event.timezone)}
           </p>
         </div>
-
-        {message ? (
-          <Alert variant={message.status === "error" ? "destructive" : "default"}>
-            {message.status === "error" ? <TriangleAlert /> : null}
-            <AlertTitle>{message.status === "error" ? "Schedule change not saved" : "Schedule updated"}</AlertTitle>
-            <AlertDescription>{message.text}</AlertDescription>
-          </Alert>
-        ) : null}
 
         <DndContext
           id="agenda-schedule-board"

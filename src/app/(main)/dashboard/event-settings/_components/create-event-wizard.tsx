@@ -23,8 +23,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
+import {
+  type BrandingImagePick,
+  BrandingImagePicker,
+  brandingImageError,
+} from "../../_components/branding-image-picker";
 import type { MutationResult } from "../types";
-import { type BrandingImagePick, BrandingImagePicker, brandingImageError } from "./branding-image-picker";
 
 type FieldErrors = MutationResult["fieldErrors"];
 

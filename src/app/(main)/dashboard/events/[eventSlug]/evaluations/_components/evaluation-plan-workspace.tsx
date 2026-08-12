@@ -190,7 +190,7 @@ function RoundCard({
           </Badge>
         </CardAction>
       </CardHeader>
-      <form action={saveAction}>
+      <form noValidate action={saveAction}>
         <CardContent className="flex flex-col gap-5">
           <RoundFields idPrefix={round.id} round={round} disabled={!editable} />
           <div className="flex flex-col gap-2">
@@ -286,7 +286,7 @@ function AddRoundForm({ eventSlug, planVersionId }: { readonly eventSlug: string
 
   return (
     <Card size="sm">
-      <form action={action} key={formKey}>
+      <form noValidate action={action} key={formKey}>
         <CardHeader>
           <CardTitle>Add planned round</CardTitle>
           <CardDescription>Configure every round and rubric before opening the first one.</CardDescription>
@@ -310,7 +310,7 @@ function CreatePlanForm({ eventSlug }: { readonly eventSlug: string }) {
   useActionToast(state);
   return (
     <Card>
-      <form action={action}>
+      <form noValidate action={action}>
         <CardHeader>
           <CardTitle>Create evaluation plan</CardTitle>
           <CardDescription>The first draft version is created with the plan.</CardDescription>

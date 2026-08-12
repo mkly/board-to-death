@@ -84,7 +84,7 @@ export function SpeakerProfileForm({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <form action={formAction}>
+      <form noValidate action={formAction}>
         <Card>
           <CardHeader>
             <CardTitle>Profile details</CardTitle>

@@ -34,7 +34,7 @@ export function FulfillmentForm({
   }
 
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <FieldGroup>
         {state.status === "error" ? (
           <Alert variant="destructive">

@@ -170,7 +170,7 @@ export function ApplicantSubmissionEditor({
   }
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <Card>
         <CardHeader>
           <CardTitle>Edit proposal</CardTitle>

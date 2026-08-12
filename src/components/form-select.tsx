@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   Select,
@@ -79,6 +79,22 @@ export function FormSelect({
   const isControlled = value !== undefined;
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
   const currentValue = isControlled ? value : internalValue;
+  const hiddenSelectRef = useRef<HTMLSelectElement | null>(null);
+
+  const notifyHiddenSelect = useCallback((nextValue: string) => {
+    const hiddenSelect = hiddenSelectRef.current;
+    if (!hiddenSelect) {
+      return;
+    }
+
+    hiddenSelect.value = nextValue;
+    hiddenSelect.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    hiddenSelect.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }, []);
+
+  useEffect(() => {
+    notifyHiddenSelect(currentValue);
+  }, [currentValue, notifyHiddenSelect]);
 
   return (
     <>
@@ -86,13 +102,13 @@ export function FormSelect({
         // Native select mirror so plain form posts submit the exact value (including "")
         // and `required` keeps browser constraint validation.
         <select
+          ref={hiddenSelectRef}
           aria-hidden
           className="sr-only"
+          defaultValue={currentValue}
           name={name}
-          onChange={() => undefined}
           required={required}
           tabIndex={-1}
-          value={currentValue}
         >
           <option value="" />
           {currentValue ? <option value={currentValue} /> : null}
@@ -103,6 +119,7 @@ export function FormSelect({
         onValueChange={(next) => {
           const mapped = next === EMPTY_VALUE ? "" : next;
           if (!isControlled) setInternalValue(mapped);
+          notifyHiddenSelect(mapped);
           onValueChange?.(mapped);
         }}
         value={currentValue === "" ? EMPTY_VALUE : currentValue}

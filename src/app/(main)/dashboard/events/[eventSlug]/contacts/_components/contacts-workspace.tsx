@@ -194,7 +194,7 @@ function DuplicateMergeCard({
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent className="sm:max-w-2xl">
-            <form action={mergeAction} className="flex flex-col gap-4">
+            <form noValidate action={mergeAction} className="flex flex-col gap-4">
               <input name="firstPersonId" type="hidden" value={first.id} />
               <input name="secondPersonId" type="hidden" value={second.id} />
               <AlertDialogHeader>
@@ -294,7 +294,7 @@ function ContactEditor({
   const [state, action, pending] = useActionState(saveContactRecord, INITIAL_STATE);
 
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <input type="hidden" name="eventSlug" value={eventSlug} />
       <input type="hidden" name="contactId" value={contact.id} />
       <Card>
@@ -410,7 +410,7 @@ function SaveSegmentDialog({
         </Button>
       </DialogTrigger>
       <DialogContent>
-        <form action={formAction} className="flex flex-col gap-4">
+        <form noValidate action={formAction} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>Save dynamic segment</DialogTitle>
             <DialogDescription>
@@ -478,7 +478,7 @@ function DirectoryFilters({
 
   return (
     <div className="flex flex-col gap-4">
-      <form method="get">
+      <form noValidate method="get">
         <FieldGroup>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Field>

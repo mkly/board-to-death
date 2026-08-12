@@ -37,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useActionToast } from "@/hooks/use-action-toast";
 import type { CfpFormDefinition } from "@/lib/cfp";
 
 import { type SaveCfpSetupState, saveCfpSetupStep } from "../actions";
@@ -50,18 +51,6 @@ const INITIAL_STATE: SaveCfpSetupState = { status: "idle" };
 
 function firstError(state: SaveCfpSetupState, field: string): string | undefined {
   return state.errors?.[field]?.[0];
-}
-
-function SaveMessage({ state }: { readonly state: SaveCfpSetupState }) {
-  if (state.status === "idle") return <span />;
-  return (
-    <p
-      aria-live="polite"
-      className={state.status === "error" ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
-    >
-      {state.message}
-    </p>
-  );
 }
 
 function SetupForm({
@@ -82,9 +71,10 @@ function SetupForm({
     if (result.status === "success") onSaved();
     return result;
   }, INITIAL_STATE);
+  useActionToast(state);
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input type="hidden" name="step" value="setup" />
       <Card>
         <CardHeader>
@@ -170,7 +160,7 @@ function SetupForm({
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <SaveMessage state={state} />
+          <p className="text-muted-foreground text-sm">Saving creates a new draft version.</p>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <ArrowRight data-icon="inline-end" />}
             {pending ? "Saving..." : "Save and continue"}
@@ -199,9 +189,10 @@ function WelcomeForm({
     if (result.status === "success") onSaved();
     return result;
   }, INITIAL_STATE);
+  useActionToast(state);
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input type="hidden" name="step" value="welcome" />
       <Card>
         <CardHeader>
@@ -258,7 +249,7 @@ function WelcomeForm({
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <SaveMessage state={state} />
+          <p className="text-muted-foreground text-sm">Saving creates a new draft version.</p>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <ArrowRight data-icon="inline-end" />}
             {pending ? "Saving..." : "Save and continue"}
@@ -293,9 +284,10 @@ function SpeakerRequirementsForm({
     if (result.status === "success") onSaved();
     return result;
   }, INITIAL_STATE);
+  useActionToast(state);
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input type="hidden" name="step" value="speakers" />
       <input type="hidden" name="biographyRequired" value={String(biographyRequired)} />
       <input type="hidden" name="contactRequired" value={String(contactRequired)} />
@@ -384,7 +376,7 @@ function SpeakerRequirementsForm({
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <SaveMessage state={state} />
+          <p className="text-muted-foreground text-sm">Saving creates a new draft version.</p>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <ArrowRight data-icon="inline-end" />}
             {pending ? "Saving..." : "Save and continue"}
@@ -414,9 +406,10 @@ function TermsForm({
     if (result.status === "success") onSaved();
     return result;
   }, INITIAL_STATE);
+  useActionToast(state);
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input type="hidden" name="step" value="terms" />
       <input type="hidden" name="consentRequired" value={String(consentRequired)} />
       <Card>
@@ -453,7 +446,7 @@ function TermsForm({
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <SaveMessage state={state} />
+          <p className="text-muted-foreground text-sm">Saving creates a new draft version.</p>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
             {pending ? "Saving..." : "Save terms"}

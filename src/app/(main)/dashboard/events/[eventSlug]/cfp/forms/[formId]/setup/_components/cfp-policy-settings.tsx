@@ -6,7 +6,6 @@ import { Save } from "lucide-react";
 import { Temporal } from "temporal-polyfill";
 
 import { DateTimePicker } from "@/components/date-time-picker";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type SaveCfpPolicySettingsState, saveCfpPolicySettings } from "../actions";
 import type { CfpDraftPolicyValue, CfpPolicySettingsFields } from "../schema";
@@ -50,12 +50,13 @@ export function CfpPolicySettings({ eventSlug, formId, timezone, initialSettings
   const [settings, setSettings] = useState(initialSettings);
   const [state, formAction, pending] = useActionState(saveCfpPolicySettings, INITIAL_STATE);
   const minimumClose = useMemo(() => minimumClosingTime(settings.submissionOpensAt), [settings.submissionOpensAt]);
+  useActionToast(state);
 
   const updateSetting = <Key extends keyof CfpPolicySettingsFields>(field: Key, value: CfpPolicySettingsFields[Key]) =>
     setSettings((current) => ({ ...current, [field]: value }));
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <input type="hidden" name="eventSlug" value={eventSlug} />
       <input type="hidden" name="formId" value={formId} />
       <input type="hidden" name="draftPolicy" value={settings.draftPolicy} />
@@ -158,16 +159,7 @@ export function CfpPolicySettings({ eventSlug, formId, timezone, initialSettings
           </FieldGroup>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <div aria-live="polite">
-            {state.message ? (
-              <Alert variant={state.status === "error" ? "destructive" : "default"}>
-                <AlertTitle>{state.status === "error" ? "Settings not saved" : "Settings saved"}</AlertTitle>
-                <AlertDescription>{state.message}</AlertDescription>
-              </Alert>
-            ) : (
-              <p className="text-muted-foreground text-sm">Saving creates a new policy version.</p>
-            )}
-          </div>
+          <p className="text-muted-foreground text-sm">Saving creates a new policy version.</p>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
             {pending ? "Saving..." : "Save settings"}

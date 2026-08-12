@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { addYears, format, parse, subYears } from "date-fns";
 import { CalendarIcon } from "lucide-react";
@@ -12,12 +12,138 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 
 const VALUE_FORMAT = "yyyy-MM-dd'T'HH:mm";
+const DATE_VALUE_FORMAT = "yyyy-MM-dd";
 const DEFAULT_TIME = "09:00";
 
 function parseValue(value: string | undefined): Date | null {
   if (!value) return null;
   const parsed = parse(value, VALUE_FORMAT, new Date());
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseDateValue(value: string | undefined): Date | null {
+  if (!value) return null;
+  const parsed = parse(value, DATE_VALUE_FORMAT, new Date());
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Themed replacement for `<input type="date">`. Produces and accepts the same
+ * `yyyy-MM-dd` value strings and posts through a hidden input when `name` is given.
+ */
+export function DatePicker({
+  id,
+  name,
+  value,
+  defaultValue,
+  onChange,
+  min,
+  disabled,
+  required,
+  "aria-invalid": ariaInvalid,
+}: {
+  readonly id: string;
+  readonly name?: string;
+  readonly value?: string;
+  readonly defaultValue?: string;
+  readonly onChange?: (value: string) => void;
+  readonly min?: string;
+  readonly disabled?: boolean;
+  readonly required?: boolean;
+  readonly "aria-invalid"?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [internalValue, setInternalValue] = useState(defaultValue ?? "");
+  const currentValue = value ?? internalValue;
+  const selected = parseDateValue(currentValue);
+  const minDate = parseDateValue(min);
+  const [month, setMonth] = useState(() => selected ?? minDate ?? new Date());
+  const today = new Date();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const dispatchInputEvents = useCallback((next: string) => {
+    const input = inputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.value = next;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }, []);
+
+  const setValue = (next: string) => {
+    setInternalValue(next);
+    dispatchInputEvents(next);
+    onChange?.(next);
+  };
+
+  useEffect(() => {
+    dispatchInputEvents(currentValue);
+  }, [currentValue, dispatchInputEvents]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setMonth(selected ?? minDate ?? new Date());
+        setOpen(nextOpen);
+      }}
+    >
+      {name ? (
+        <input
+          ref={inputRef}
+          type="date"
+          className="sr-only"
+          name={name}
+          defaultValue={currentValue}
+          required={required}
+          min={min}
+          disabled={disabled}
+          readOnly
+          tabIndex={-1}
+          aria-hidden
+        />
+      ) : null}
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          aria-invalid={ariaInvalid}
+          className={cn("w-full justify-start font-normal", !selected && "text-muted-foreground")}
+        >
+          <CalendarIcon data-icon="inline-start" />
+          {selected ? format(selected, "PP") : "Select date"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected ?? undefined}
+          month={month}
+          onMonthChange={setMonth}
+          startMonth={minDate ?? subYears(today, 100)}
+          endMonth={addYears(today, 100)}
+          disabled={minDate ? { before: minDate } : undefined}
+          captionLayout="dropdown"
+          onSelect={(date) => {
+            if (!date) return;
+            setValue(format(date, DATE_VALUE_FORMAT));
+            setOpen(false);
+          }}
+        />
+        {selected ? (
+          <div className="flex justify-end border-t p-3">
+            <Button type="button" size="sm" variant="outline" onClick={() => setValue("")}>
+              Clear date
+            </Button>
+          </div>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /**
@@ -34,6 +160,7 @@ export function DateTimePicker({
   onChange,
   min,
   disabled,
+  required,
   "aria-invalid": ariaInvalid,
 }: {
   readonly id: string;
@@ -43,6 +170,7 @@ export function DateTimePicker({
   readonly onChange?: (value: string) => void;
   readonly min?: string;
   readonly disabled?: boolean;
+  readonly required?: boolean;
   readonly "aria-invalid"?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,11 +181,28 @@ export function DateTimePicker({
   const minDate = parseValue(min);
   const [month, setMonth] = useState(() => selected ?? minDate ?? new Date());
   const today = new Date();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const dispatchInputEvents = useCallback((next: string) => {
+    const input = inputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.value = next;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }, []);
 
   const setValue = (next: string) => {
     setInternalValue(next);
+    dispatchInputEvents(next);
     onChange?.(next);
   };
+
+  useEffect(() => {
+    dispatchInputEvents(currentValue);
+  }, [currentValue, dispatchInputEvents]);
 
   const handleSelect = (date: Date | undefined) => {
     if (!date) return;
@@ -78,7 +223,21 @@ export function DateTimePicker({
         setOpen(nextOpen);
       }}
     >
-      {name ? <input type="hidden" name={name} value={currentValue} /> : null}
+      {name ? (
+        <input
+          ref={inputRef}
+          type="datetime-local"
+          className="sr-only"
+          name={name}
+          defaultValue={currentValue}
+          required={required}
+          min={min}
+          disabled={disabled}
+          readOnly
+          tabIndex={-1}
+          aria-hidden
+        />
+      ) : null}
       <PopoverTrigger asChild>
         <Button
           id={id}

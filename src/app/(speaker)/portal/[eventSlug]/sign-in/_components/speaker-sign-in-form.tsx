@@ -20,7 +20,7 @@ export function SpeakerSignInForm({ eventSlug }: { readonly eventSlug: string })
   const invalid = state.status === "error";
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <CardContent>
         <FieldGroup>
           {state.status === "success" ? (

@@ -174,7 +174,7 @@ function NewTierForm({
   useActionToast(state);
   const enabled = kindEnabled(event, kind);
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <input name="kind" type="hidden" value={kind} />
       <FieldGroup className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <Field data-disabled={!enabled}>
@@ -218,7 +218,7 @@ function TierRow({
     });
   };
   return (
-    <form action={action} className="flex flex-wrap gap-2">
+    <form noValidate action={action} className="flex flex-wrap gap-2">
       <Field className="min-w-48 flex-1">
         <FieldLabel className="sr-only" htmlFor={`tier-${tier.id}`}>
           Tier name
@@ -304,7 +304,7 @@ function NewGroupForm({
   const [state, action, pending] = useActionState(createGroupAction.bind(null, event.slug), INITIAL_STATE);
   useActionToast(state);
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <FieldGroup className="grid gap-3 md:grid-cols-4">
         <Field>
           <FieldLabel htmlFor="new-group-name">Group name</FieldLabel>
@@ -353,6 +353,7 @@ function GroupRow({
   useActionToast(state);
   return (
     <form
+      noValidate
       action={action}
       className="grid items-end gap-3 md:grid-cols-[minmax(12rem,1fr)_auto_minmax(10rem,1fr)_minmax(14rem,1fr)_auto]"
     >
@@ -430,7 +431,7 @@ export function GroupWorkspace({
           <CardDescription>Filter and sort groups by their configured tier.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <form className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
+          <form noValidate className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
             <div className="grid flex-1 gap-3 sm:grid-cols-3">
               <Field>
                 <FieldLabel htmlFor="group-kind-filter">Kind</FieldLabel>

@@ -64,7 +64,7 @@ export function EmbedHeader({
           <span aria-hidden="true" className="h-px w-5 bg-primary/60" />
           {eyebrow}
         </p>
-        <h1 className="font-heading font-bold text-2xl tracking-tight sm:text-3xl" id={titleId}>
+        <h1 className="font-bold font-heading text-2xl tracking-tight sm:text-3xl" id={titleId}>
           {title}
         </h1>
         {description ? (

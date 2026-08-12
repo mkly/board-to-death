@@ -187,7 +187,7 @@ export function EmailTemplateWorkspace({ event, templates }: EmailTemplateWorksp
         </Card>
 
         <div className="grid min-w-0 gap-6 2xl:grid-cols-2">
-          <form action={formAction}>
+          <form noValidate action={formAction}>
             <input type="hidden" name="eventSlug" value={event.slug} />
             <input type="hidden" name="templateId" value={draft.id} />
             <Card>

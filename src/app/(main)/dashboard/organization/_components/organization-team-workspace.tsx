@@ -64,7 +64,7 @@ function InviteMemberForm({ organizationId }: { readonly organizationId: string 
   const [state, action, pending] = useActionState(inviteOrganizationMember.bind(null, organizationId), INITIAL_STATE);
   useActionToast(state);
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <FieldGroup className="md:grid md:grid-cols-[minmax(0,1fr)_12rem_auto] md:items-end">
         <Field>
           <FieldLabel htmlFor="organization-invite-email">Email</FieldLabel>

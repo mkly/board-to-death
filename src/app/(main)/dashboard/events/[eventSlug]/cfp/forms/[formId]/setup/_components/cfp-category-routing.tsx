@@ -30,6 +30,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 import { type CfpFormDefinition, type CfpVisibilityRule, validateCfpPolicyCategoryRouting } from "@/lib/cfp";
 
 import { type SaveCfpCategoryRoutingState, saveCfpCategoryRouting } from "../actions";
@@ -88,6 +89,7 @@ export function CfpCategoryRouting({
   );
   const nextEditorId = useRef(1);
   const [state, formAction, pending] = useActionState(saveCfpCategoryRouting, INITIAL_STATE);
+  useActionToast(state);
   const sources = useMemo(() => sourceQuestions(definition), [definition]);
   const categoryIds = useMemo(() => new Set(categories.map((category) => category.id)), [categories]);
   const draftRouting = useMemo<CfpPolicyCategoryRoute[]>(
@@ -246,29 +248,6 @@ export function CfpCategoryRouting({
                   ))}
                 </ul>
               </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {state.status === "error" ? (
-            <Alert variant="destructive" className="mt-4">
-              <AlertTitle>Category routing was not saved</AlertTitle>
-              <AlertDescription>
-                <p>{state.message}</p>
-                {state.errors ? (
-                  <ul className="ml-4 flex list-disc flex-col gap-1">
-                    {state.errors.map((error) => (
-                      <li key={error}>{error}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {state.status === "success" ? (
-            <Alert className="mt-4">
-              <AlertTitle>Saved</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
             </Alert>
           ) : null}
         </CardContent>

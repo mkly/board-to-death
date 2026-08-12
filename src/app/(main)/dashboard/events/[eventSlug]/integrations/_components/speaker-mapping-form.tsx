@@ -36,7 +36,7 @@ export function SpeakerMappingForm({
   useActionToast(state);
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <Card>
         <CardHeader>
           <CardTitle>Public speaker field mapping</CardTitle>

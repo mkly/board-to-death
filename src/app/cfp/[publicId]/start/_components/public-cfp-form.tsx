@@ -212,7 +212,7 @@ export function PublicCfpForm({
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4" onSubmit={submitForm}>
+    <form noValidate action={formAction} className="flex flex-col gap-4" onSubmit={submitForm}>
       <input name="submissionKey" type="hidden" value={submissionKey} />
       <input name="draftToken" readOnly type="hidden" value={currentDraftToken ?? ""} />
 

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { mutateProgramPublication, type ProgramPublicationMutationState } from "../actions";
 
@@ -36,6 +37,7 @@ export function ProgramPublicationCard({ eventSlug, publication }: ProgramPublic
     },
     INITIAL_STATE,
   );
+  useActionToast(state);
   const published = publication?.state === "PUBLISHED";
   const expectedVersion = publication?.versionNumber ?? 0;
   let statusDescription =
@@ -69,9 +71,6 @@ export function ProgramPublicationCard({ eventSlug, publication }: ProgramPublic
           <p className="text-muted-foreground text-sm">{statusDescription}</p>
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <p aria-live="polite" className="text-muted-foreground text-sm">
-            {state.message}
-          </p>
           <div className="flex gap-2">
             {published ? (
               <>

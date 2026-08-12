@@ -44,6 +44,7 @@ export function TimezoneSelect({
   defaultValue,
   onChange,
   disabled,
+  required,
   "aria-invalid": ariaInvalid,
 }: {
   readonly id: string;
@@ -52,6 +53,7 @@ export function TimezoneSelect({
   readonly defaultValue?: string;
   readonly onChange?: (value: string) => void;
   readonly disabled?: boolean;
+  readonly required?: boolean;
   readonly "aria-invalid"?: boolean;
 }) {
   const zones = useMemo(timezoneList, []);
@@ -64,6 +66,7 @@ export function TimezoneSelect({
       onValueChange={(next) => onChange?.(next ?? "")}
       name={name}
       disabled={disabled}
+      required={required}
     >
       <ComboboxInput id={id} className="w-full" placeholder="Search time zone" aria-invalid={ariaInvalid} />
       <ComboboxContent>

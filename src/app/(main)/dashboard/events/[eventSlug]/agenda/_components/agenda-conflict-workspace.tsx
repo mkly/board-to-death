@@ -35,6 +35,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet 
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import {
   type AgendaConflictState,
@@ -149,6 +150,8 @@ function PlacementEditor({
   const [policy, setPolicy] = useState<ConflictPolicy>("prevent");
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const formId = `conflict-placement-form-${placement.id}`;
+  useActionToast(state);
+  useActionToast(removeState);
 
   useEffect(() => {
     setStartsAt(placement.startsAtLocal);
@@ -195,13 +198,6 @@ function PlacementEditor({
             </Badge>
           ))}
         </div>
-        {state.status === "error" ? (
-          <Alert variant="destructive">
-            <AlertTriangle />
-            <AlertTitle>Placement not saved</AlertTitle>
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
-        ) : null}
         {state.status === "conflict" && !state.confirmationRequired ? (
           <Alert variant="destructive">
             <AlertTriangle />
@@ -217,7 +213,7 @@ function PlacementEditor({
             </AlertDescription>
           </Alert>
         ) : null}
-        <form id={formId} action={formAction} className="flex flex-col gap-4">
+        <form noValidate id={formId} action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="eventSlug" value={event.slug} />
           <input type="hidden" name="sessionId" value={placement.sessionId} />
           <input type="hidden" name="placementId" value={placement.id} />
@@ -277,9 +273,6 @@ function PlacementEditor({
         </form>
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p aria-live="polite" className="text-muted-foreground text-sm">
-          {state.status === "success" ? state.message : removeState.message}
-        </p>
         <div className="flex flex-wrap gap-2">
           <AlertDialog>
             <AlertDialogTrigger asChild>

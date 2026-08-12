@@ -2,10 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 
-import { Check, Clipboard, ExternalLink, Eye, LockKeyhole, LockKeyholeOpen, Send } from "lucide-react";
+import { ExternalLink, Eye, LockKeyhole, LockKeyholeOpen, Send } from "lucide-react";
 import { useFormStatus } from "react-dom";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -37,7 +36,8 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import type { CfpPolicyStatus } from "@/generated/prisma/client";
-import { type CfpFormDefinition, publicCfpHref } from "@/lib/cfp";
+import { useActionToast } from "@/hooks/use-action-toast";
+import { type CfpFormDefinition, publicCfpHref, validateCfpDefinitionForPublication } from "@/lib/cfp";
 
 import { type UpdateCfpPublicationState, updateCfpPublication } from "../actions";
 import { CfpFormPreview } from "./cfp-form-preview";
@@ -53,17 +53,19 @@ function SubmitPublicationAction({
   intent,
   label,
   pendingLabel,
+  disabled,
   variant = "default",
 }: {
   readonly icon: typeof Send;
   readonly intent: "publish" | "close" | "reopen";
   readonly label: string;
   readonly pendingLabel: string;
+  readonly disabled?: boolean;
   readonly variant?: "default" | "destructive";
 }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" name="intent" value={intent} variant={variant} disabled={pending}>
+    <Button type="submit" name="intent" value={intent} variant={variant} disabled={pending || disabled}>
       {pending ? <Spinner data-icon="inline-start" /> : <Icon data-icon="inline-start" />}
       {pending ? pendingLabel : label}
     </Button>
@@ -85,27 +87,19 @@ export function CfpPublicationControls({
   readonly policy: { readonly publicId: string; readonly status: CfpPolicyStatus } | null;
   readonly versionNumber: number;
 }) {
-  const [copyMessage, setCopyMessage] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [state, formAction] = useActionState(
     updateCfpPublication.bind(null, eventSlug, formId, versionNumber),
     INITIAL_STATE,
   );
+  useActionToast(state);
   const publicPath = policy ? publicCfpHref(policy.publicId) : null;
+  const publicationIssues = validateCfpDefinitionForPublication(definition);
+  const canPublish = publicationIssues.length === 0;
 
   useEffect(() => {
     if (state.status === "success") setConfirming(false);
-  }, [state]);
-
-  const copyLink = async () => {
-    if (!publicPath) return;
-    try {
-      await navigator.clipboard.writeText(new URL(publicPath, window.location.origin).toString());
-      setCopyMessage("Public form link copied to clipboard.");
-    } catch {
-      setCopyMessage("The link could not be copied. Open the public form and copy it from the address bar.");
-    }
-  };
+  }, [state.status]);
 
   return (
     <Card>
@@ -121,34 +115,11 @@ export function CfpPublicationControls({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {state.status !== "idle" ? (
-          <Alert variant={state.status === "error" ? "destructive" : "default"}>
-            {state.status === "success" ? <Check /> : null}
-            <AlertTitle>
-              {state.status === "error" ? "Publication could not be updated" : "Publication updated"}
-            </AlertTitle>
-            <AlertDescription>
-              <p>{state.message}</p>
-              {state.errors ? (
-                <ul className="mt-2 list-disc pl-4">
-                  {state.errors.map((error) => (
-                    <li key={error}>{error}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
         {publicPath && policy?.status !== "DRAFT" ? (
           <div className="flex flex-col gap-2">
             <p className="font-medium text-sm">Stable public URL</p>
             <code className="break-all rounded-md bg-muted px-3 py-2 text-sm">{publicPath}</code>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={copyLink}>
-                <Clipboard data-icon="inline-start" />
-                Copy link
-              </Button>
               <Button variant="outline" size="sm" asChild>
                 <a href={publicPath} target="_blank" rel="noreferrer">
                   <ExternalLink data-icon="inline-start" />
@@ -156,9 +127,6 @@ export function CfpPublicationControls({
                 </a>
               </Button>
             </div>
-            <p className="sr-only" role="status" aria-live="polite">
-              {copyMessage}
-            </p>
           </div>
         ) : null}
       </CardContent>
@@ -183,7 +151,23 @@ export function CfpPublicationControls({
 
         {policy?.status === "DRAFT" ? (
           <form action={formAction}>
-            <SubmitPublicationAction icon={Send} intent="publish" label="Publish form" pendingLabel="Publishing…" />
+            {!canPublish ? (
+              <div className="mb-2">
+                <p className="mb-1 text-destructive text-sm">Complete required setup fields before publishing:</p>
+                <ul className="list-disc pl-5 text-destructive text-xs">
+                  {publicationIssues.map(({ path, message }) => (
+                    <li key={`${path}-${message}`}>{message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <SubmitPublicationAction
+              icon={Send}
+              intent="publish"
+              label="Publish form"
+              pendingLabel="Publishing…"
+              disabled={!canPublish}
+            />
           </form>
         ) : null}
 

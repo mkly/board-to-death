@@ -44,7 +44,7 @@ export function SpeakerInterestForm({ publicId }: { readonly publicId: string })
         <CardDescription>Required fields help the program team identify and contact you.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={action}>
+        <form noValidate action={action}>
           <FieldGroup>
             {state.status === "error" && state.message ? (
               <Alert variant="destructive">

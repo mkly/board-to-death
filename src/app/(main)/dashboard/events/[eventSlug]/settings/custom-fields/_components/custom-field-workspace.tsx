@@ -220,7 +220,7 @@ function ExistingField({
     });
   };
   return (
-    <form action={action}>
+    <form noValidate action={action}>
       <Card>
         <CardHeader>
           <CardTitle>{definition.label}</CardTitle>
@@ -321,7 +321,7 @@ function EntityFields({
           />
         ))
       )}
-      <form action={action}>
+      <form noValidate action={action}>
         <input type="hidden" name="entityType" value={entityType} />
         <Card>
           <CardHeader>

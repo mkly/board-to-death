@@ -42,7 +42,7 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <form action={previewAction} className="flex flex-col gap-2">
+        <form noValidate action={previewAction} className="flex flex-col gap-2">
           <input name="eventSlug" type="hidden" value={eventSlug} />
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <Field className="flex-1">
@@ -131,7 +131,7 @@ export function SpeakerCsvImport({ eventSlug }: { readonly eventSlug: string }) 
       </CardContent>
       {showPreview ? (
         <CardFooter className="justify-end">
-          <form action={applyAction}>
+          <form noValidate action={applyAction}>
             <input name="eventSlug" type="hidden" value={eventSlug} />
             <input name="previewPayload" type="hidden" value={JSON.stringify(acceptedPayload)} />
             <Button disabled={applyPending || acceptedPayload.length === 0} type="submit">

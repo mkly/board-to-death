@@ -212,6 +212,16 @@ describe("SessionWorkspace", () => {
     expect(formData.get("participantRole:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")).toBe("MODERATOR");
   });
 
+  test("selects a session by clicking the row", () => {
+    renderWorkspace();
+
+    const row = screen.getByText("Designing cooperative tension").closest("tr");
+    expect(row).toBeTruthy();
+    fireEvent.click(row as HTMLTableRowElement);
+
+    expect(screen.getAllByText("Designing cooperative tension")).toHaveLength(3);
+  });
+
   test("shows attributed title and abstract history and restores an older version", async () => {
     renderWorkspace();
 

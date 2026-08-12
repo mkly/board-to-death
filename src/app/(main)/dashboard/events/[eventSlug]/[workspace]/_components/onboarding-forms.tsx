@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { BellRing, CalendarClock, Check, RotateCcw, UserPlus, UserX } from "lucide-react";
 
+import { DatePicker } from "@/components/date-time-picker";
 import { FormSelect, type FormSelectOption } from "@/components/form-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,7 +49,7 @@ export function AssignTasksForm({
   const nothingToAssign = definitionOptions.length === 0 || speakers.length === 0;
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <Card>
         <CardHeader>
           <CardTitle>Assign a task</CardTitle>
@@ -85,7 +86,7 @@ export function AssignTasksForm({
               </Field>
               <Field>
                 <FieldLabel htmlFor="assignmentDueAt">Due date</FieldLabel>
-                <Input id="assignmentDueAt" name="dueAt" type="date" />
+                <DatePicker id="assignmentDueAt" name="dueAt" />
                 <FieldDescription>Leave blank to use the task definition&apos;s default deadline.</FieldDescription>
               </Field>
               <FieldSet>
@@ -130,7 +131,7 @@ export function ReminderRuleCreateForm({
   useActionToast(state);
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       <FieldGroup className="grid gap-4 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_10rem_10rem_auto] lg:items-end">
         <Field>
           <FieldLabel htmlFor="new-reminder-name">Rule name</FieldLabel>
@@ -181,6 +182,7 @@ export function ReminderRuleEditForm({
 
   return (
     <form
+      noValidate
       action={formAction}
       className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_8rem_8rem_auto] lg:items-end"
     >
@@ -314,12 +316,12 @@ export function AssignmentDueDateForm({
   useActionToast(state);
 
   return (
-    <form action={formAction} className="flex items-center gap-2">
+    <form noValidate action={formAction} className="flex items-center gap-2">
       <Field>
         <FieldLabel htmlFor={`due-${assignmentId}`} className="sr-only">
           Due date for {speakerName}
         </FieldLabel>
-        <Input id={`due-${assignmentId}`} name="dueAt" type="date" defaultValue={defaultValue} />
+        <DatePicker id={`due-${assignmentId}`} name="dueAt" defaultValue={defaultValue} />
       </Field>
       <Button
         type="submit"
@@ -376,7 +378,7 @@ export function RevisionRequestForm({
   useActionToast(state);
 
   return (
-    <form action={formAction} className="flex min-w-64 flex-col gap-2">
+    <form noValidate action={formAction} className="flex min-w-64 flex-col gap-2">
       <Field>
         <FieldLabel htmlFor={`feedback-${assignmentId}`} className="sr-only">
           Revision feedback for {speakerName}

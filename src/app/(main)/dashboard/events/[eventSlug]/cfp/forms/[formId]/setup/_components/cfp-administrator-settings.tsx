@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { useActionToast } from "@/hooks/use-action-toast";
 
 import { type SaveCfpAdministratorsState, saveCfpAdministrators } from "../actions";
 
@@ -59,6 +60,7 @@ export function CfpAdministratorSettings({
     saveCfpAdministrators.bind(null, eventSlug, formId),
     INITIAL_STATE,
   );
+  useActionToast(state);
 
   const setAssigned = (administratorId: string, assigned: boolean) => {
     setAssignedIds((current) => {
@@ -91,7 +93,7 @@ export function CfpAdministratorSettings({
   };
 
   return (
-    <form action={formAction}>
+    <form noValidate action={formAction}>
       {[...assignedIds].map((administratorId) => (
         <input key={administratorId} type="hidden" name="administratorIds" value={administratorId} />
       ))}
@@ -210,9 +212,7 @@ export function CfpAdministratorSettings({
           ) : null}
         </CardContent>
         <CardFooter className="justify-between gap-3">
-          <p className="text-muted-foreground text-sm" aria-live="polite">
-            {state.message}
-          </p>
+          <p className="text-muted-foreground text-sm">Save administrator assignments and alert preferences.</p>
           <Button type="submit" disabled={pending || !canManage || administrators.length === 0}>
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
             {pending ? "Saving..." : "Save administrators"}
