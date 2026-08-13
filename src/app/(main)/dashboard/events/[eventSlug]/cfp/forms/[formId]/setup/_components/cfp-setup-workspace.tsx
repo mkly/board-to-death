@@ -449,7 +449,7 @@ function TermsForm({
           <p className="text-muted-foreground text-sm">Saving creates a new draft version.</p>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-            {pending ? "Saving..." : "Save terms"}
+            {pending ? "Saving..." : "Save and continue"}
           </Button>
         </CardFooter>
       </Card>

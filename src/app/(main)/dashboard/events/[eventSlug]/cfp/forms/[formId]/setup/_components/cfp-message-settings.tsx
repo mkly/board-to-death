@@ -238,7 +238,7 @@ export function CfpMessageSettings({ event, eventSlug, formId, initialSettings, 
             <p className="text-muted-foreground text-sm">Saving changes updates your message templates.</p>
             <Button type="submit" disabled={pending}>
               {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-              {pending ? "Saving..." : "Save messages"}
+              {pending ? "Saving..." : "Save and continue"}
             </Button>
           </CardFooter>
         </Card>

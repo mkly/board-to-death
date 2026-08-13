@@ -215,7 +215,7 @@ export function CfpAdministratorSettings({
           <p className="text-muted-foreground text-sm">Save administrator assignments and alert preferences.</p>
           <Button type="submit" disabled={pending || !canManage || administrators.length === 0}>
             {pending ? <Spinner data-icon="inline-start" /> : <Save data-icon="inline-start" />}
-            {pending ? "Saving..." : "Save administrators"}
+            {pending ? "Saving..." : "Save and continue"}
           </Button>
         </CardFooter>
       </Card>

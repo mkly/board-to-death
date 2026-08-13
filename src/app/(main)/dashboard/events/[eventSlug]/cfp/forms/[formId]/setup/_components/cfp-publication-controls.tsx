@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 
-import { ExternalLink, Eye, LockKeyhole, LockKeyholeOpen, Send } from "lucide-react";
+import { CircleCheck, CircleDashed, ExternalLink, Eye, LockKeyhole, LockKeyholeOpen, Send } from "lucide-react";
 import { useFormStatus } from "react-dom";
 
 import {
@@ -43,6 +43,18 @@ import { type UpdateCfpPublicationState, updateCfpPublication } from "../actions
 import { CfpFormPreview } from "./cfp-form-preview";
 
 const INITIAL_STATE: UpdateCfpPublicationState = { status: "idle" };
+
+/** Maps a publication issue path to the setup step where it is fixed. */
+const ISSUE_STEP_LABELS: Readonly<Record<string, string>> = {
+  title: "Setup",
+  submissionKind: "Setup",
+  accessPolicy: "Setup",
+  welcomeTitle: "Welcome",
+  welcomeContent: "Welcome",
+  instructions: "Welcome",
+  speakers: "Speakers",
+  termsContent: "Terms",
+};
 
 function statusLabel(status: CfpPolicyStatus): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
@@ -129,6 +141,33 @@ export function CfpPublicationControls({
             </div>
           </div>
         ) : null}
+        {policy?.status === "DRAFT" && !canPublish ? (
+          <div className="rounded-lg border border-dashed p-4">
+            <div className="flex flex-col gap-1">
+              <p className="font-medium text-sm">Finish setup to publish</p>
+              <p className="text-muted-foreground text-sm">
+                Complete these steps below; publishing unlocks once everything is in place.
+              </p>
+            </div>
+            <ul className="mt-3 flex flex-col gap-2">
+              {publicationIssues.map(({ path, message }) => (
+                <li key={`${path}-${message}`} className="flex items-start gap-2 text-sm">
+                  <CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span>
+                    <span className="font-medium">{ISSUE_STEP_LABELS[path] ?? "Setup"}</span>
+                    <span className="text-muted-foreground"> — {message}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {policy?.status === "DRAFT" && canPublish ? (
+          <p className="flex items-center gap-2 text-sm">
+            <CircleCheck className="size-4 shrink-0 text-primary" aria-hidden />
+            All setup steps are complete. This form is ready to publish.
+          </p>
+        ) : null}
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-2">
         <Dialog>
@@ -151,16 +190,6 @@ export function CfpPublicationControls({
 
         {policy?.status === "DRAFT" ? (
           <form action={formAction}>
-            {!canPublish ? (
-              <div className="mb-2">
-                <p className="mb-1 text-destructive text-sm">Complete required setup fields before publishing:</p>
-                <ul className="list-disc pl-5 text-destructive text-xs">
-                  {publicationIssues.map(({ path, message }) => (
-                    <li key={`${path}-${message}`}>{message}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
             <SubmitPublicationAction
               icon={Send}
               intent="publish"
